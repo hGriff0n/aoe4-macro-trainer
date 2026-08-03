@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "aoe4-mcp": {
+      "type": "stdio",
+      "command": "python",
+      "args": [
+        "-m",
+        "aoe4_mcp.server"
+      ],
+      "env": {}
+    }
+  }
+}

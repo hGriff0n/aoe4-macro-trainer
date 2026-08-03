@@ -1,0 +1,17 @@
+# Local/private runtime state. Do not publish derived official data.
+data/
+cache/
+sessions/
+private/
+training/
+tools_private/
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.sqlite3-*
+*.aoe4mcpdb
+
+# Local user configuration may contain private paths.
+aoe4-mcp.toml
+*.local.*
