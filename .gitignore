@@ -2,6 +2,7 @@
 data/
 cache/
 sessions/
+archives/
 private/
 training/
 tools_private/
@@ -15,3 +16,4 @@ tools_private/
 # Local user configuration may contain private paths.
 aoe4-mcp.toml
 *.local.*
+.aoe4/Macro Trainer/Layout.xml
