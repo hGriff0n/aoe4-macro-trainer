@@ -29,6 +29,11 @@ _mod = {
 	module = "Mod",
 }
 
+NORMAL_SIM_RATE = 8.0
+SLOW_SIM_RATE = 0.0
+NORMAL_SPEED_DURATION_SECONDS = 45
+SLOW_SPEED_DURATION_SECONDS = 15
+
 -- Register the win condition (Some functions can be prepended with "Mod_" to be called automatically as part of the scripting framework)
 Core_RegisterModule(_mod.module)
 
@@ -60,9 +65,21 @@ end
 
 -- Called after initialization is done when game is fading up from black
 function Mod_Start()
-	
-	
-	
+	setsimrate(NORMAL_SIM_RATE)
+	TimerDel("Mod_EnterSlowSpeed")
+	TimerAddOnce("Mod_EnterSlowSpeed", NORMAL_SPEED_DURATION_SECONDS)
+end
+
+function Mod_EnterSlowSpeed()
+	setsimrate(SLOW_SIM_RATE)
+	TimerDel("Mod_EnterNormalSpeed")
+	TimerAddOnce("Mod_EnterNormalSpeed", SLOW_SPEED_DURATION_SECONDS)
+end
+
+function Mod_EnterNormalSpeed()
+	setsimrate(NORMAL_SIM_RATE)
+	TimerDel("Mod_EnterSlowSpeed")
+	TimerAddOnce("Mod_EnterSlowSpeed", NORMAL_SPEED_DURATION_SECONDS)
 end
 
 -- Called when Core_SetPlayerDefeated() is invoked. Signals that a player has been eliminated from play due to defeat.
@@ -74,7 +91,7 @@ end
 
 -- When a victory condition is met, a module must call Core_OnGameOver() in order to invoke this delegate and notify all modules that the match is about to end. Generally used for clean up (removal of rules, objectives, and UI elements specific to the module).
 function Mod_OnGameOver()
-	
-	
-	
+	TimerDel("Mod_EnterSlowSpeed")
+	TimerDel("Mod_EnterNormalSpeed")
+	setsimrate(NORMAL_SIM_RATE)
 end

@@ -17,3 +17,5 @@ tools_private/
 aoe4-mcp.toml
 *.local.*
 .aoe4/Macro Trainer/Layout.xml
+.worktrees/
+.superpowers/
