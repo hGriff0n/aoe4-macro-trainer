@@ -3,3 +3,12 @@ command = "python"
 args = ["-m", "aoe4_mcp.server"]
 enabled = true
 cwd = "E:\\Docs\\github\\aoemod\\aoe4-mcp"
+
+[mcp_servers.aoe4_mcp.tools.scan_project]
+approval_mode = "approve"
+
+[mcp_servers.aoe4_mcp.tools.api_context]
+approval_mode = "approve"
+
+[mcp_servers.aoe4_mcp.tools.check_code]
+approval_mode = "approve"

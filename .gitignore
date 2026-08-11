@@ -12,8 +12,12 @@ tools_private/
 *.sqlite3
 *.sqlite3-*
 *.aoe4mcpdb
+cache/
 
 # Local user configuration may contain private paths.
 aoe4-mcp.toml
 *.local.*
 .aoe4/Macro Trainer/Layout.xml
+
+# Project-local isolated workspaces.
+.worktrees/
