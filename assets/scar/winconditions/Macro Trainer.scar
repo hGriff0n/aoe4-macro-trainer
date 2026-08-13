@@ -65,19 +65,19 @@ end
 
 -- Called after initialization is done when game is fading up from black
 function Mod_Start()
-	setsimrate(NORMAL_SIM_RATE)
+	Misc_SetSimRate(NORMAL_SIM_RATE)
 	TimerDel("Mod_EnterSlowSpeed")
 	TimerAddOnce("Mod_EnterSlowSpeed", NORMAL_SPEED_DURATION_SECONDS)
 end
 
 function Mod_EnterSlowSpeed()
-	setsimrate(SLOW_SIM_RATE)
+	Misc_SetSimRate(SLOW_SIM_RATE)
 	TimerDel("Mod_EnterNormalSpeed")
 	TimerAddOnce("Mod_EnterNormalSpeed", SLOW_SPEED_DURATION_SECONDS)
 end
 
 function Mod_EnterNormalSpeed()
-	setsimrate(NORMAL_SIM_RATE)
+	Misc_SetSimRate(NORMAL_SIM_RATE)
 	TimerDel("Mod_EnterSlowSpeed")
 	TimerAddOnce("Mod_EnterSlowSpeed", NORMAL_SPEED_DURATION_SECONDS)
 end
@@ -93,5 +93,5 @@ end
 function Mod_OnGameOver()
 	TimerDel("Mod_EnterSlowSpeed")
 	TimerDel("Mod_EnterNormalSpeed")
-	setsimrate(NORMAL_SIM_RATE)
+	Misc_SetSimRate(NORMAL_SIM_RATE)
 end
