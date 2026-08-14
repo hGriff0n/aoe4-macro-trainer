@@ -44,11 +44,13 @@ class SimspeedCycleContractTests(unittest.TestCase):
         )
         self.assertNotIn("setsimpause", self.source.lower())
         self.assertNotRegex(self.source, r"(?<![A-Za-z0-9_])setsimrate\s*\(")
+        self.assertNotIn("TimerAddOnce", self.source)
+        self.assertNotIn("TimerDel", self.source)
 
         start = function_body(self.source, "Mod_Start")
         self.assertIn("Misc_SetSimRate(NORMAL_SIM_RATE)", start)
         self.assertIn(
-            'TimerAddOnce("Mod_EnterSlowSpeed", NORMAL_SPEED_DURATION_SECONDS)',
+            "Rule_AddOneShot(Mod_EnterSlowSpeed, NORMAL_SPEED_DURATION_SECONDS)",
             start,
         )
 
@@ -56,21 +58,21 @@ class SimspeedCycleContractTests(unittest.TestCase):
         self.assertIn("Misc_SetSimRate(SLOW_SIM_RATE)", slow)
         self.assert_call_order(
             slow,
-            'TimerDel("Mod_EnterNormalSpeed")',
-            'TimerAddOnce("Mod_EnterNormalSpeed", SLOW_SPEED_DURATION_SECONDS)',
+            "Rule_Remove(Mod_EnterNormalSpeed)",
+            "Rule_AddOneShot(Mod_EnterNormalSpeed, SLOW_SPEED_DURATION_SECONDS)",
         )
 
         normal = function_body(self.source, "Mod_EnterNormalSpeed")
         self.assertIn("Misc_SetSimRate(NORMAL_SIM_RATE)", normal)
         self.assert_call_order(
             normal,
-            'TimerDel("Mod_EnterSlowSpeed")',
-            'TimerAddOnce("Mod_EnterSlowSpeed", NORMAL_SPEED_DURATION_SECONDS)',
+            "Rule_Remove(Mod_EnterSlowSpeed)",
+            "Rule_AddOneShot(Mod_EnterSlowSpeed, NORMAL_SPEED_DURATION_SECONDS)",
         )
 
         game_over = function_body(self.source, "Mod_OnGameOver")
-        self.assertIn('TimerDel("Mod_EnterSlowSpeed")', game_over)
-        self.assertIn('TimerDel("Mod_EnterNormalSpeed")', game_over)
+        self.assertIn("Rule_Remove(Mod_EnterSlowSpeed)", game_over)
+        self.assertIn("Rule_Remove(Mod_EnterNormalSpeed)", game_over)
         self.assertIn("Misc_SetSimRate(NORMAL_SIM_RATE)", game_over)
 
 

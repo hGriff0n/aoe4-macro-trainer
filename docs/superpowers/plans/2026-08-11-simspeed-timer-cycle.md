@@ -14,9 +14,9 @@
 - Slow simulation rate is exactly `0.0`.
 - Normal duration is exactly `45` seconds.
 - Slow duration is exactly `15` seconds.
-- Use `setsimrate`, not `setsimpause`.
-- Use `TimerAddOnce` with invocable command strings; each transition schedules the other.
-- Delete a matching timer before adding it to prevent duplicates.
+- Use `Misc_SetSimRate`, not `setsimpause`.
+- Use `Rule_AddOneShot` with function references; each transition schedules the other.
+- Remove a matching rule before adding it to prevent duplicates.
 - On game over, delete both timers and restore normal simulation rate.
 - Preserve the user's existing `.codex/config.toml` modification.
 
@@ -29,12 +29,12 @@
 - Modify: `assets/scar/winconditions/Macro Trainer.scar`
 
 **Interfaces:**
-- Consumes: AoE4 APIs `setsimrate(Real rate)`, `TimerAddOnce(String command, Real timeInSec)`, and `TimerDel(String command)`.
+- Consumes: AoE4 APIs `Misc_SetSimRate(Real rate)`, `Rule_AddOneShot(FunctionName, Real delay)`, and `Rule_Remove(FunctionName)`.
 - Produces: SCAR callbacks `Mod_EnterSlowSpeed()` and `Mod_EnterNormalSpeed()`, initialized by `Mod_Start()` and cleaned up by `Mod_OnGameOver()`.
 
 - [ ] **Step 1: Write the failing source-contract test**
 
-Create a Python `unittest` that reads the production SCAR file and verifies the externally meaningful callback contract: the four exact test values exist; `Mod_Start()` sets normal speed and schedules slow mode; entering slow mode sets rate zero and schedules normal mode after 15 seconds; entering normal mode restores rate 8 and schedules slow mode after 45 seconds; both scheduling paths delete their matching timer first; game-over cleanup deletes both timers and restores normal speed; and `setsimpause` is absent.
+Create a Python `unittest` that reads the production SCAR file and verifies the externally meaningful callback contract: the four exact test values exist; `Mod_Start()` sets normal speed and schedules slow mode; entering slow mode sets rate zero and schedules normal mode after 15 seconds; entering normal mode restores rate 8 and schedules slow mode after 45 seconds; both scheduling paths remove their matching rule first; game-over cleanup removes both rules and restores normal speed; and `setsimpause` is absent.
 
 - [ ] **Step 2: Run the test to verify it fails for the missing cycle**
 
@@ -44,7 +44,7 @@ Expected: FAIL because the constants and transition callback functions do not ex
 
 - [ ] **Step 3: Implement the minimal SCAR cycle**
 
-In the data section, add constants named `NORMAL_SIM_RATE`, `SLOW_SIM_RATE`, `NORMAL_SPEED_DURATION_SECONDS`, and `SLOW_SPEED_DURATION_SECONDS` with the exact global values. Add `Mod_EnterSlowSpeed()` and `Mod_EnterNormalSpeed()` functions. Each function sets its rate, deletes the timer command it is about to register, then registers the opposite callback with `TimerAddOnce`. Initialize normal speed and the first timer from `Mod_Start()`. Delete both command timers and restore `NORMAL_SIM_RATE` in `Mod_OnGameOver()`.
+In the data section, add constants named `NORMAL_SIM_RATE`, `SLOW_SIM_RATE`, `NORMAL_SPEED_DURATION_SECONDS`, and `SLOW_SPEED_DURATION_SECONDS` with the exact global values. Add `Mod_EnterSlowSpeed()` and `Mod_EnterNormalSpeed()` functions. Each function sets its rate, removes the rule it is about to register, then registers the opposite callback with `Rule_AddOneShot`. Initialize normal speed and the first rule from `Mod_Start()`. Remove both transition rules and restore `NORMAL_SIM_RATE` in `Mod_OnGameOver()`.
 
 - [ ] **Step 4: Run the focused test to verify it passes**
 
@@ -54,7 +54,7 @@ Expected: PASS with no failures or errors.
 
 - [ ] **Step 5: Validate the full SCAR source with the AoE4 MCP**
 
-Pass the complete modified `Macro Trainer.scar` source and its target path to `check_code`. Review every unknown or low-confidence call. `TimerAddOnce`, `TimerDel`, and `setsimrate` may be reported as low-confidence documented APIs because the MCP's official index has signatures but no usage samples; unknown-call findings are not acceptable.
+Pass the complete modified `Macro Trainer.scar` source and its target path to `check_code`. Review every unknown or low-confidence call. `Rule_AddOneShot`, `Rule_Remove`, and `Misc_SetSimRate` must resolve as documented APIs; unknown-call findings are not acceptable.
 
 - [ ] **Step 6: Run repository checks and inspect the diff**
 
@@ -99,4 +99,4 @@ Execute only the displayed command. Record the launcher exit code and relevant o
 
 - [ ] **Step 4: Report mandatory in-game checks**
 
-Playtest that the match begins at normal rate, pauses after 45 seconds, resumes after 15 seconds, repeats, and accepts UI input while paused. Specifically validate that `TimerAddOnce` accepts the invocable command strings and advances while simulation rate is zero.
+Playtest that the match begins at normal rate, pauses after 45 seconds, resumes after 15 seconds, repeats, and accepts UI input while paused. Specifically validate that the `Rule_AddOneShot` callback advances while simulation rate is zero.

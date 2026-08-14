@@ -20,19 +20,19 @@ Add two named transition callbacks to `assets/scar/winconditions/Macro Trainer.s
 - `Mod_EnterSlowSpeed()` sets the simulation rate to `0.0` and schedules `Mod_EnterNormalSpeed()` after 15 seconds.
 - `Mod_EnterNormalSpeed()` sets the simulation rate to `8.0` and schedules `Mod_EnterSlowSpeed()` after 45 seconds.
 
-`Mod_Start()` initializes the cycle by explicitly setting the normal rate and scheduling the first slow-speed transition. Each transition uses `TimerAddOnce`, so callbacks schedule one another rather than relying on a fixed repeating interval.
+`Mod_Start()` initializes the cycle by explicitly setting the normal rate and scheduling the first slow-speed transition. Each transition uses `Rule_AddOneShot`, so callbacks schedule one another rather than relying on a fixed repeating interval.
 
-Timer command strings use invocable expressions such as `"Mod_EnterSlowSpeed()"`. The AoE4 MCP confirms that `TimerAddOnce` accepts `String command, Real timeInSec`, but its indexed sources contain no call-site samples. The exact command-string form therefore requires an in-game smoke test.
+Rule registrations pass callback function references such as `Mod_EnterSlowSpeed`, matching the official AoE IV scripting guide's `Rule_AddOneShot(FunctionName, Delay in seconds)` signature.
 
 ## Safety and Cleanup
 
-Before registering a transition timer, remove any timer with the same command using `TimerDel` to prevent duplicate callbacks if initialization or scheduling is invoked more than once.
+Before registering a transition rule, remove any matching rule with `Rule_Remove` to prevent duplicate callbacks if initialization or scheduling is invoked more than once.
 
-`Mod_OnGameOver()` removes both possible pending transition timers and restores the normal simulation rate. The implementation uses `setsimrate`, not `setsimpause`, so UI input remains available according to GRI-32's findings.
+`Mod_OnGameOver()` removes both possible pending transition rules and restores the normal simulation rate. The implementation uses `Misc_SetSimRate`, not `setsimpause`, so UI input remains available according to GRI-32's findings.
 
 ## Known Risk
 
-The requested slow rate is `0.0`. If AoE4's `TimerAddOnce` timers advance in simulation time rather than wall-clock time, entering rate zero may prevent the scheduled normal-speed callback from firing. GRI-34 and GRI-36 explicitly prescribe the zero-rate/timer combination, so the implementation will follow it and treat recovery from zero as an in-game validation point.
+The requested slow rate is `0.0`. If AoE4's one-shot rules advance in simulation time rather than wall-clock time, entering rate zero may prevent the scheduled normal-speed callback from firing. GRI-34 and GRI-36 explicitly prescribe the zero-rate/timer combination, so the implementation will follow it and treat recovery from zero as an in-game validation point.
 
 ## Verification
 
