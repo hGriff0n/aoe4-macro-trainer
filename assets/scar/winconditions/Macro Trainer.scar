@@ -30,6 +30,8 @@ _mod = {
 	phaseObjective = nil,
 	phaseStartTime = nil,
 	phaseDeadline = nil,
+	normalPhaseDuration = nil,
+	slowPhaseDuration = nil,
 }
 
 NORMAL_SIM_RATE = 8
@@ -70,19 +72,17 @@ end
 
 -- Called after initialization is done when game is fading up from black
 function Mod_Start()
-	Mod_StartPhase(NORMAL_PHASE_OBJECTIVE_TITLE, NORMAL_SPEED_DURATION_SECONDS, NORMAL_SIM_RATE, Mod_EnterSlowSpeed)
+	_mod.normalPhaseDuration = math.ceil(NORMAL_SPEED_DURATION_SECONDS * NORMAL_SIM_RATE / NORMAL_SIM_RATE)
+	_mod.slowPhaseDuration = math.ceil(SLOW_SPEED_DURATION_SECONDS * SLOW_SIM_RATE / NORMAL_SIM_RATE)
+	Mod_StartPhase(NORMAL_PHASE_OBJECTIVE_TITLE, _mod.normalPhaseDuration, NORMAL_SIM_RATE, Mod_EnterSlowSpeed)
 end
 
 function Mod_EnterSlowSpeed()
-	Mod_StartPhase(SLOW_PHASE_OBJECTIVE_TITLE, SLOW_SPEED_DURATION_SECONDS, SLOW_SIM_RATE, Mod_EnterNormalSpeed)
+	Mod_StartPhase(SLOW_PHASE_OBJECTIVE_TITLE, _mod.slowPhaseDuration, SLOW_SIM_RATE, Mod_EnterNormalSpeed)
 end
 
 function Mod_EnterNormalSpeed()
-	Mod_StartPhase(NORMAL_PHASE_OBJECTIVE_TITLE, NORMAL_SPEED_DURATION_SECONDS, NORMAL_SIM_RATE, Mod_EnterSlowSpeed)
-end
-
-function Mod_GetCompensatedRuleDelay(realDuration, simRate)
-	return realDuration * simRate / NORMAL_SIM_RATE
+	Mod_StartPhase(NORMAL_PHASE_OBJECTIVE_TITLE, _mod.normalPhaseDuration, NORMAL_SIM_RATE, Mod_EnterSlowSpeed)
 end
 
 function Mod_ClearPhaseObjective()
@@ -93,11 +93,10 @@ function Mod_ClearPhaseObjective()
 	end
 end
 
-function Mod_StartPhase(title, realDuration, simRate, nextRule)
+function Mod_StartPhase(title, phaseDuration, simRate, nextRule)
 	Mod_ClearPhaseObjective()
-	local ruleDelay = Mod_GetCompensatedRuleDelay(realDuration, simRate)
 	_mod.phaseStartTime = World_GetGameTime()
-	_mod.phaseDeadline = _mod.phaseStartTime + ruleDelay
+	_mod.phaseDeadline = _mod.phaseStartTime + phaseDuration
 
 	local objective = {
 		Title = title,
@@ -107,12 +106,12 @@ function Mod_StartPhase(title, realDuration, simRate, nextRule)
 
 	Objective_Register(objective)
 	Objective_Start(objective, false, false)
-	Objective_StartTimer(objective, COUNT_DOWN, realDuration, 0)
+	Objective_StartTimer(objective, COUNT_DOWN, phaseDuration, 0)
 	_mod.phaseObjective = objective
 
 	Misc_SetSimRate(simRate)
 	Rule_Remove(nextRule)
-	Rule_AddOneShot(nextRule, ruleDelay)
+	Rule_AddOneShot(nextRule, phaseDuration)
 end
 
 -- Called when Core_SetPlayerDefeated() is invoked. Signals that a player has been eliminated from play due to defeat.

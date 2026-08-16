@@ -40,7 +40,7 @@ class SimspeedCycleContractTests(unittest.TestCase):
         second_index = body.index(second)
         self.assertLess(first_index, second_index)
 
-    def test_phase_rates_and_rule_delays_preserve_real_time(self) -> None:
+    def test_phase_rates_and_delays_use_precomputed_sim_time(self) -> None:
         self.assertRegex(self.source, r"\bNORMAL_SIM_RATE\s*=\s*8\b")
         self.assertRegex(self.source, r"\bSLOW_SIM_RATE\s*=\s*1\b")
         self.assertRegex(
@@ -54,40 +54,44 @@ class SimspeedCycleContractTests(unittest.TestCase):
         self.assertNotIn("TimerAddOnce", self.source)
         self.assertNotIn("TimerDel", self.source)
 
-        compensation = function_body(
-            self.source, "Mod_GetCompensatedRuleDelay"
-        )
-        self.assertIn(
-            "return realDuration * simRate / NORMAL_SIM_RATE", compensation
-        )
-
-        phase = function_body(self.source, "Mod_StartPhase")
-        self.assertIn(
-            "Mod_GetCompensatedRuleDelay(realDuration, simRate)", phase
-        )
-        self.assertIn("_mod.phaseStartTime = World_GetGameTime()", phase)
-        self.assertIn(
-            "_mod.phaseDeadline = _mod.phaseStartTime + ruleDelay", phase
-        )
-        self.assertIn("Objective_StartTimer(objective, COUNT_DOWN, realDuration, 0)", phase)
-        self.assert_call_order(phase, "Misc_SetSimRate(simRate)", "Rule_AddOneShot(")
-
         start = function_body(self.source, "Mod_Start")
         self.assertIn(
-            "Mod_StartPhase(NORMAL_PHASE_OBJECTIVE_TITLE, NORMAL_SPEED_DURATION_SECONDS, NORMAL_SIM_RATE, Mod_EnterSlowSpeed)",
+            "_mod.normalPhaseDuration = math.ceil(NORMAL_SPEED_DURATION_SECONDS * NORMAL_SIM_RATE / NORMAL_SIM_RATE)",
+            start,
+        )
+        self.assertIn(
+            "_mod.slowPhaseDuration = math.ceil(SLOW_SPEED_DURATION_SECONDS * SLOW_SIM_RATE / NORMAL_SIM_RATE)",
+            start,
+        )
+        self.assertIn(
+            "Mod_StartPhase(NORMAL_PHASE_OBJECTIVE_TITLE, _mod.normalPhaseDuration, NORMAL_SIM_RATE, Mod_EnterSlowSpeed)",
             start,
         )
 
         slow = function_body(self.source, "Mod_EnterSlowSpeed")
         self.assertIn(
-            "Mod_StartPhase(SLOW_PHASE_OBJECTIVE_TITLE, SLOW_SPEED_DURATION_SECONDS, SLOW_SIM_RATE, Mod_EnterNormalSpeed)",
+            "Mod_StartPhase(SLOW_PHASE_OBJECTIVE_TITLE, _mod.slowPhaseDuration, SLOW_SIM_RATE, Mod_EnterNormalSpeed)",
             slow,
         )
 
         normal = function_body(self.source, "Mod_EnterNormalSpeed")
         self.assertIn(
-            "Mod_StartPhase(NORMAL_PHASE_OBJECTIVE_TITLE, NORMAL_SPEED_DURATION_SECONDS, NORMAL_SIM_RATE, Mod_EnterSlowSpeed)",
+            "Mod_StartPhase(NORMAL_PHASE_OBJECTIVE_TITLE, _mod.normalPhaseDuration, NORMAL_SIM_RATE, Mod_EnterSlowSpeed)",
             normal,
+        )
+
+        phase = function_body(self.source, "Mod_StartPhase")
+        self.assertIn("_mod.phaseStartTime = World_GetGameTime()", phase)
+        self.assertIn(
+            "_mod.phaseDeadline = _mod.phaseStartTime + phaseDuration", phase
+        )
+        self.assertIn(
+            "Objective_StartTimer(objective, COUNT_DOWN, phaseDuration, 0)",
+            phase,
+        )
+        self.assertIn("Rule_AddOneShot(nextRule, phaseDuration)", phase)
+        self.assert_call_order(
+            phase, "Misc_SetSimRate(simRate)", "Rule_AddOneShot("
         )
 
     def test_phase_titles_use_fully_qualified_mod_localization_keys(self) -> None:
@@ -119,7 +123,8 @@ class SimspeedCycleContractTests(unittest.TestCase):
         self.assertNotIn("UI_SetPropertyValue", self.source)
 
         self.assertRegex(self.locdb, r"(?m)^4,[^\r\n]*,NORMAL\r?$")
-        self.assertRegex(self.locdb, r"(?m)^5,[^\r\n]*,PAUSED\r?$")
+        self.assertRegex(self.locdb, r"(?m)^5,[^\r\n]*,SLOW\r?$")
+        self.assertNotRegex(self.locdb, r"(?m)^5,[^\r\n]*,PAUSED\r?$")
 
     def test_game_over_stops_transitions_and_active_objective(self) -> None:
 
