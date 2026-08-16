@@ -36,6 +36,8 @@ NORMAL_SIM_RATE = 8
 SLOW_SIM_RATE = 1
 NORMAL_SPEED_DURATION_SECONDS = 45
 SLOW_SPEED_DURATION_SECONDS = 15
+NORMAL_PHASE_OBJECTIVE_TITLE = "$dfb5645698a84afb91cf7a2dfb0f4a4e:4"
+SLOW_PHASE_OBJECTIVE_TITLE = "$dfb5645698a84afb91cf7a2dfb0f4a4e:5"
 
 -- Register the win condition (Some functions can be prepended with "Mod_" to be called automatically as part of the scripting framework)
 Core_RegisterModule(_mod.module)
@@ -68,15 +70,15 @@ end
 
 -- Called after initialization is done when game is fading up from black
 function Mod_Start()
-	Mod_StartPhase("$4", NORMAL_SPEED_DURATION_SECONDS, NORMAL_SIM_RATE, Mod_EnterSlowSpeed)
+	Mod_StartPhase(NORMAL_PHASE_OBJECTIVE_TITLE, NORMAL_SPEED_DURATION_SECONDS, NORMAL_SIM_RATE, Mod_EnterSlowSpeed)
 end
 
 function Mod_EnterSlowSpeed()
-	Mod_StartPhase("$5", SLOW_SPEED_DURATION_SECONDS, SLOW_SIM_RATE, Mod_EnterNormalSpeed)
+	Mod_StartPhase(SLOW_PHASE_OBJECTIVE_TITLE, SLOW_SPEED_DURATION_SECONDS, SLOW_SIM_RATE, Mod_EnterNormalSpeed)
 end
 
 function Mod_EnterNormalSpeed()
-	Mod_StartPhase("$4", NORMAL_SPEED_DURATION_SECONDS, NORMAL_SIM_RATE, Mod_EnterSlowSpeed)
+	Mod_StartPhase(NORMAL_PHASE_OBJECTIVE_TITLE, NORMAL_SPEED_DURATION_SECONDS, NORMAL_SIM_RATE, Mod_EnterSlowSpeed)
 end
 
 function Mod_GetCompensatedRuleDelay(realDuration, simRate)

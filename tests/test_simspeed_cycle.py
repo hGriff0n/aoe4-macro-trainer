@@ -74,21 +74,33 @@ class SimspeedCycleContractTests(unittest.TestCase):
 
         start = function_body(self.source, "Mod_Start")
         self.assertIn(
-            'Mod_StartPhase("$4", NORMAL_SPEED_DURATION_SECONDS, NORMAL_SIM_RATE, Mod_EnterSlowSpeed)',
+            "Mod_StartPhase(NORMAL_PHASE_OBJECTIVE_TITLE, NORMAL_SPEED_DURATION_SECONDS, NORMAL_SIM_RATE, Mod_EnterSlowSpeed)",
             start,
         )
 
         slow = function_body(self.source, "Mod_EnterSlowSpeed")
         self.assertIn(
-            'Mod_StartPhase("$5", SLOW_SPEED_DURATION_SECONDS, SLOW_SIM_RATE, Mod_EnterNormalSpeed)',
+            "Mod_StartPhase(SLOW_PHASE_OBJECTIVE_TITLE, SLOW_SPEED_DURATION_SECONDS, SLOW_SIM_RATE, Mod_EnterNormalSpeed)",
             slow,
         )
 
         normal = function_body(self.source, "Mod_EnterNormalSpeed")
         self.assertIn(
-            'Mod_StartPhase("$4", NORMAL_SPEED_DURATION_SECONDS, NORMAL_SIM_RATE, Mod_EnterSlowSpeed)',
+            "Mod_StartPhase(NORMAL_PHASE_OBJECTIVE_TITLE, NORMAL_SPEED_DURATION_SECONDS, NORMAL_SIM_RATE, Mod_EnterSlowSpeed)",
             normal,
         )
+
+    def test_phase_titles_use_fully_qualified_mod_localization_keys(self) -> None:
+        mod_namespace = "dfb5645698a84afb91cf7a2dfb0f4a4e"
+        self.assertIn(
+            f'NORMAL_PHASE_OBJECTIVE_TITLE = "${mod_namespace}:4"',
+            self.source,
+        )
+        self.assertIn(
+            f'SLOW_PHASE_OBJECTIVE_TITLE = "${mod_namespace}:5"',
+            self.source,
+        )
+        self.assertNotRegex(self.source, r'Mod_StartPhase\("\$[45]"')
 
     def test_each_phase_replaces_the_standard_objective_silently(self) -> None:
         clear = function_body(self.source, "Mod_ClearPhaseObjective")
