@@ -12,3 +12,9 @@ approval_mode = "approve"
 
 [mcp_servers.aoe4_mcp.tools.check_code]
 approval_mode = "approve"
+
+[mcp_servers.aoe4_mcp.tools.find_api]
+approval_mode = "approve"
+
+[windows]
+sandbox = "unelevated"  # https://github.com/openai/codex/issues/9062
