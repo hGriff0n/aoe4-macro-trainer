@@ -106,17 +106,44 @@ class SimspeedCycleContractTests(unittest.TestCase):
         )
         self.assertNotRegex(self.source, r'Mod_StartPhase\("\$[45]"')
 
+    def test_speed_banners_appear_only_after_later_phase_transitions(self) -> None:
+        start = function_body(self.source, "Mod_Start")
+        slow = function_body(self.source, "Mod_EnterSlowSpeed")
+        normal = function_body(self.source, "Mod_EnterNormalSpeed")
+        banner = function_body(self.source, "Mod_ShowSpeedBanner")
+
+        self.assertNotIn("Mod_ShowSpeedBanner", start)
+        self.assertIn(
+            "Mod_ShowSpeedBanner(SLOW_PHASE_OBJECTIVE_TITLE)",
+            slow,
+        )
+        self.assertIn(
+            "Mod_ShowSpeedBanner(NORMAL_PHASE_OBJECTIVE_TITLE)",
+            normal,
+        )
+        self.assertIn(
+            'Obj_CreatePopup(_mod.phaseObjectiveID, title, "")',
+            banner,
+        )
+        self.assertNotIn("UI_CreateEventCue", self.source)
+        self.assertNotIn("Objective_TriggerTitleCard", self.source)
+        self.assertNotIn("EventCues_CallToAction", self.source)
+        self.assertNotIn("Game_TextTitleFade", self.source)
+
     def test_each_phase_replaces_the_standard_objective_silently(self) -> None:
         clear = function_body(self.source, "Mod_ClearPhaseObjective")
         self.assertIn("Objective_StopTimer(_mod.phaseObjective)", clear)
         self.assertIn("Objective_Expire(_mod.phaseObjective, false, false)", clear)
+        self.assertIn("_mod.phaseObjectiveID = nil", clear)
         self.assert_call_order(clear, "Objective_StopTimer", "Objective_Expire")
 
         phase = function_body(self.source, "Mod_StartPhase")
         self.assertIn("Mod_ClearPhaseObjective()", phase)
         self.assertIn("Title = title", phase)
         self.assertIn("Type = OT_Information", phase)
-        self.assertIn("Objective_Register(objective)", phase)
+        self.assertIn(
+            "_mod.phaseObjectiveID = Objective_Register(objective)", phase
+        )
         self.assertIn("Objective_Start(objective, false, false)", phase)
         self.assert_call_order(phase, "Objective_Register", "Objective_Start(")
         self.assert_call_order(phase, "Objective_Start(", "Objective_StartTimer")

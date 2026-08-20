@@ -28,6 +28,7 @@ import("gameplay/currentageui.scar")
 _mod = {
 	module = "Mod",
 	phaseObjective = nil,
+	phaseObjectiveID = nil,
 	phaseStartTime = nil,
 	phaseDeadline = nil,
 	normalPhaseDuration = nil,
@@ -79,10 +80,16 @@ end
 
 function Mod_EnterSlowSpeed()
 	Mod_StartPhase(SLOW_PHASE_OBJECTIVE_TITLE, _mod.slowPhaseDuration, SLOW_SIM_RATE, Mod_EnterNormalSpeed)
+	Mod_ShowSpeedBanner(SLOW_PHASE_OBJECTIVE_TITLE)
 end
 
 function Mod_EnterNormalSpeed()
 	Mod_StartPhase(NORMAL_PHASE_OBJECTIVE_TITLE, _mod.normalPhaseDuration, NORMAL_SIM_RATE, Mod_EnterSlowSpeed)
+	Mod_ShowSpeedBanner(NORMAL_PHASE_OBJECTIVE_TITLE)
+end
+
+function Mod_ShowSpeedBanner(title)
+	Obj_CreatePopup(_mod.phaseObjectiveID, title, "")
 end
 
 function Mod_ClearPhaseObjective()
@@ -90,6 +97,7 @@ function Mod_ClearPhaseObjective()
 		Objective_StopTimer(_mod.phaseObjective)
 		Objective_Expire(_mod.phaseObjective, false, false)
 		_mod.phaseObjective = nil
+		_mod.phaseObjectiveID = nil
 	end
 end
 
@@ -104,7 +112,7 @@ function Mod_StartPhase(title, phaseDuration, simRate, nextRule)
 		Type = OT_Information,
 	}
 
-	Objective_Register(objective)
+	_mod.phaseObjectiveID = Objective_Register(objective)
 	Objective_Start(objective, false, false)
 	Objective_StartTimer(objective, COUNT_DOWN, phaseDuration, 0)
 	_mod.phaseObjective = objective
