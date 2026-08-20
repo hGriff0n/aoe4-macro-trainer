@@ -4,3 +4,17 @@
 3,,,,,,Macro Trainer
 4,,,Normal phase objective title.,,,NORMAL
 5,,,Slowed phase objective title.,,,SLOW
+6,,,Game option section name.,,,Macro Trainer Settings
+7,,,Normal duration option name.,,,Normal Duration
+8,,,Normal duration option tooltip.,,,Seconds of normal-speed gameplay in each cycle (1-300).
+9,,,Slow duration option name.,,,Slow Duration
+10,,,Slow duration option tooltip.,,,Seconds of slowed gameplay in each cycle (1-300).
+11,,,Slow simulation rate option name.,,,Slow Simulation Rate
+12,,,Slow simulation rate option tooltip.,,,Simulation rate used during the slowed phase (1 is slowest; 7 is nearly normal).
+13,,,Slow simulation rate value.,,,1
+14,,,Slow simulation rate value.,,,2
+15,,,Slow simulation rate value.,,,3
+16,,,Slow simulation rate value.,,,4
+17,,,Slow simulation rate value.,,,5
+18,,,Slow simulation rate value.,,,6
+19,,,Slow simulation rate value.,,,7
