@@ -32,14 +32,24 @@ _mod = {
 	phaseDeadline = nil,
 	normalPhaseDuration = nil,
 	slowPhaseDuration = nil,
+	normalDurationSeconds = 45,
+	slowDurationSeconds = 15,
+	slowSimRate = 1,
 }
 
 NORMAL_SIM_RATE = 8
-SLOW_SIM_RATE = 1
-NORMAL_SPEED_DURATION_SECONDS = 45
-SLOW_SPEED_DURATION_SECONDS = 15
 NORMAL_PHASE_OBJECTIVE_TITLE = "$dfb5645698a84afb91cf7a2dfb0f4a4e:4"
 SLOW_PHASE_OBJECTIVE_TITLE = "$dfb5645698a84afb91cf7a2dfb0f4a4e:5"
+
+SLOW_SIM_RATES = {
+	slow_sim_rate_1 = 1,
+	slow_sim_rate_2 = 2,
+	slow_sim_rate_3 = 3,
+	slow_sim_rate_4 = 4,
+	slow_sim_rate_5 = 5,
+	slow_sim_rate_6 = 6,
+	slow_sim_rate_7 = 7,
+}
 
 -- Register the win condition (Some functions can be prepended with "Mod_" to be called automatically as part of the scripting framework)
 Core_RegisterModule(_mod.module)
@@ -49,10 +59,21 @@ Core_RegisterModule(_mod.module)
 -----------------------------------------------------------------------
 
 -- Called during load as part of the game setup sequence
-function Mod_OnGameSetup()
-	
-	
-	
+function Mod_SetupSettings(options)
+	if options == nil or options.section_macro_trainer_settings == nil then
+		return
+	end
+
+	local settings = options.section_macro_trainer_settings
+	if settings.option_normal_duration_seconds ~= nil then
+		_mod.normalDurationSeconds = math.max(1, math.min(300, settings.option_normal_duration_seconds))
+	end
+	if settings.option_slow_duration_seconds ~= nil then
+		_mod.slowDurationSeconds = math.max(1, math.min(300, settings.option_slow_duration_seconds))
+	end
+	if SLOW_SIM_RATES[settings.option_slow_sim_rate] ~= nil then
+		_mod.slowSimRate = SLOW_SIM_RATES[settings.option_slow_sim_rate]
+	end
 end
 
 -- Called before initialization, preceding other module OnInit functions
@@ -72,13 +93,13 @@ end
 
 -- Called after initialization is done when game is fading up from black
 function Mod_Start()
-	_mod.normalPhaseDuration = math.ceil(NORMAL_SPEED_DURATION_SECONDS * NORMAL_SIM_RATE / NORMAL_SIM_RATE)
-	_mod.slowPhaseDuration = math.ceil(SLOW_SPEED_DURATION_SECONDS * SLOW_SIM_RATE / NORMAL_SIM_RATE)
+	_mod.normalPhaseDuration = math.ceil(_mod.normalDurationSeconds * NORMAL_SIM_RATE / NORMAL_SIM_RATE)
+	_mod.slowPhaseDuration = math.ceil(_mod.slowDurationSeconds * _mod.slowSimRate / NORMAL_SIM_RATE)
 	Mod_StartPhase(NORMAL_PHASE_OBJECTIVE_TITLE, _mod.normalPhaseDuration, NORMAL_SIM_RATE, Mod_EnterSlowSpeed)
 end
 
 function Mod_EnterSlowSpeed()
-	Mod_StartPhase(SLOW_PHASE_OBJECTIVE_TITLE, _mod.slowPhaseDuration, SLOW_SIM_RATE, Mod_EnterNormalSpeed)
+	Mod_StartPhase(SLOW_PHASE_OBJECTIVE_TITLE, _mod.slowPhaseDuration, _mod.slowSimRate, Mod_EnterNormalSpeed)
 end
 
 function Mod_EnterNormalSpeed()
