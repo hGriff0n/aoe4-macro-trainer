@@ -105,7 +105,7 @@ An invalid build order never ends the match. The player may quit through the nor
 
 ## Error Message and Pause Lifecycle
 
-Configuration errors use the native message-box API rather than a custom XAML view or an objective popup. Startup sets the simulation rate to `0`, resets/configures the message box, and displays one enabled button labeled `Continue Without Build Order`.
+Configuration errors use the native message-box API rather than a custom XAML view or an objective popup. Startup resets/configures the message box and displays one enabled button labeled `Continue Without Build Order` while the simulation is still running. It then schedules a self-removing rule that sets the simulation rate to `0` on the next simulation tick if the alert remains open, allowing the UI time to create the modal.
 
 The civilization mismatch message names the selected build order, its required civilization, and the player's actual civilization. The no-selection message explains that neither a build order nor the sim-rate cycle was enabled.
 
@@ -113,8 +113,9 @@ The message-box callback:
 
 1. ignores duplicate invocation;
 2. closes or resets the message box as required by the native API;
-3. restores the normal simulation rate; and
-4. starts the sim-rate cycle only when that setting is enabled.
+3. cancels any pending startup-pause callback;
+4. restores the normal simulation rate; and
+5. starts the sim-rate cycle only when that setting is enabled.
 
 Build-order initialization is permanently disabled for that match after either configuration error. Error handling does not disable or mutate the sim-rate setting itself.
 

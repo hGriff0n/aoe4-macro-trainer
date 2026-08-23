@@ -583,9 +583,9 @@ end
 
 Do not mutate the selected setting or sim-rate enabled setting.
 
-- [ ] **Step 4: Implement the native paused message box**
+- [ ] **Step 4: Implement the native message box with a deferred pause**
 
-Before showing the message, set `_mod.buildOrderDisabled=true`, `_mod.startupAlertOpen=true`, and `Misc_SetSimRate(0)`. Configure:
+Set `_mod.buildOrderDisabled=true` and `_mod.startupAlertOpen=true`, then configure and show the message box while the simulation is still running:
 
 ```lua
 UI_MessageBoxSetText(title, message)
@@ -598,7 +598,7 @@ UI_MessageBoxSetButton(
 UI_MessageBoxShow(DC_Default, BuildOrderStartup_Continue)
 ```
 
-`BuildOrderStartup_Continue` returns unless the alert is open and `button == DB_Button1`; then closes the guard, restores `NORMAL_SIM_RATE`, and starts the timer only if enabled. It never starts the build-order engine.
+After `UI_MessageBoxShow`, replace any pending startup-pause rule with a `Rule_Add` callback. On the next simulation tick, that callback removes itself and sets the simulation rate to `0` only if the alert remains open. `BuildOrderStartup_Continue` returns unless the alert is open and `button == DB_Button1`; then it closes the guard, cancels any pending pause callback, restores `NORMAL_SIM_RATE`, and starts the timer only if enabled. It never starts the build-order engine. Shutdown also cancels the pending pause callback.
 
 - [ ] **Step 5: Integrate startup and cleanup with the win-condition lifecycle**
 

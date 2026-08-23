@@ -150,11 +150,11 @@ class BuildOrderStartupContractTests(unittest.TestCase):
                 "actualCiv ~= string.lower(buildOrder.civ)", start
             )
 
-    def test_alert_pauses_and_configures_only_the_continue_button(self) -> None:
+    def test_alert_schedules_next_tick_pause_after_showing_continue_button(self) -> None:
         show = function_body(self.startup, "BuildOrderStartup_ShowError")
         self.assertIn("_mod.buildOrderDisabled = true", show)
         self.assertIn("_mod.startupAlertOpen = true", show)
-        self.assertIn("Misc_SetSimRate(0)", show)
+        self.assertNotIn("Misc_SetSimRate(0)", show)
         self.assertIn("UI_MessageBoxSetText(title, message)", show)
         self.assertRegex(
             show,
@@ -169,8 +169,27 @@ class BuildOrderStartupContractTests(unittest.TestCase):
         self.assertEqual(self.startup.count("UI_MessageBoxSetButton("), 1)
         for button in ("DB_Button2", "DB_Button3", "DB_Button4"):
             self.assertNotIn(button, self.startup)
-        self.assert_order(show, "UI_MessageBoxShow(", "Misc_SetSimRate(0)")
-        self.assertRegex(show, r"Misc_SetSimRate\(0\)\s*end\s*$")
+        self.assertIn("Rule_Remove(BuildOrderStartup_PauseNextTick)", show)
+        self.assertIn("Rule_Add(BuildOrderStartup_PauseNextTick)", show)
+        self.assert_order(
+            show,
+            "Rule_Remove(BuildOrderStartup_PauseNextTick)",
+            "Rule_Add(BuildOrderStartup_PauseNextTick)",
+        )
+        self.assert_order(
+            show,
+            "UI_MessageBoxShow(",
+            "Rule_Add(BuildOrderStartup_PauseNextTick)",
+        )
+
+        pause = function_body(self.startup, "BuildOrderStartup_PauseNextTick")
+        self.assertIn("Rule_RemoveMe()", pause)
+        self.assertRegex(
+            pause,
+            r"Rule_RemoveMe\(\)\s*"
+            r"if _mod\.startupAlertOpen then\s*"
+            r"Misc_SetSimRate\(0\)\s*end",
+        )
 
     def test_continue_is_idempotent_and_only_starts_enabled_cycle(self) -> None:
         resume = function_body(self.startup, "BuildOrderStartup_Continue")
@@ -178,6 +197,7 @@ class BuildOrderStartupContractTests(unittest.TestCase):
             "if not _mod.startupAlertOpen or button ~= DB_Button1 then", resume
         )
         self.assertIn("_mod.startupAlertOpen = false", resume)
+        self.assertIn("Rule_Remove(BuildOrderStartup_PauseNextTick)", resume)
         self.assertIn("Misc_SetSimRate(NORMAL_SIM_RATE)", resume)
         self.assertRegex(
             resume,
@@ -187,6 +207,16 @@ class BuildOrderStartupContractTests(unittest.TestCase):
         self.assertNotIn("BuildOrder_Start(", resume)
         self.assert_order(
             resume, "_mod.startupAlertOpen = false", "Misc_SetSimRate(NORMAL_SIM_RATE)"
+        )
+        self.assert_order(
+            resume,
+            "_mod.startupAlertOpen = false",
+            "Rule_Remove(BuildOrderStartup_PauseNextTick)",
+        )
+        self.assert_order(
+            resume,
+            "Rule_Remove(BuildOrderStartup_PauseNextTick)",
+            "Misc_SetSimRate(NORMAL_SIM_RATE)",
         )
 
     def test_startup_never_mutates_selected_or_cycle_settings(self) -> None:
@@ -218,6 +248,7 @@ class BuildOrderStartupContractTests(unittest.TestCase):
 
         stop = function_body(self.startup, "BuildOrderStartup_Stop")
         self.assertIn("_mod.startupAlertOpen = false", stop)
+        self.assertIn("Rule_Remove(BuildOrderStartup_PauseNextTick)", stop)
         self.assertNotIn("Mod_StartSimspeedCycle", stop)
         self.assertNotIn("BuildOrder_Start", stop)
 

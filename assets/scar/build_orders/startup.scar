@@ -61,7 +61,15 @@ function BuildOrderStartup_ShowError(title, message)
 		"",
 		true)
 	UI_MessageBoxShow(DC_Default, BuildOrderStartup_Continue)
-	Misc_SetSimRate(0)
+	Rule_Remove(BuildOrderStartup_PauseNextTick)
+	Rule_Add(BuildOrderStartup_PauseNextTick)
+end
+
+function BuildOrderStartup_PauseNextTick()
+	Rule_RemoveMe()
+	if _mod.startupAlertOpen then
+		Misc_SetSimRate(0)
+	end
 end
 
 function BuildOrderStartup_Continue(button)
@@ -70,6 +78,7 @@ function BuildOrderStartup_Continue(button)
 	end
 
 	_mod.startupAlertOpen = false
+	Rule_Remove(BuildOrderStartup_PauseNextTick)
 	Misc_SetSimRate(NORMAL_SIM_RATE)
 	if _mod.simspeedEnabled then
 		Mod_StartSimspeedCycle()
@@ -78,4 +87,5 @@ end
 
 function BuildOrderStartup_Stop()
 	_mod.startupAlertOpen = false
+	Rule_Remove(BuildOrderStartup_PauseNextTick)
 end
