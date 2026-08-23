@@ -38,6 +38,8 @@ _mod = {
 	slowDurationSeconds = 15,
 	slowSimRate = 1,
 	selectedBuildOrderID = nil,
+	simspeedEnabled = true,
+	simspeedStarted = false,
 }
 
 NORMAL_SIM_RATE = 8
@@ -89,6 +91,9 @@ function Mod_SetupSettings(options)
 	if SLOW_SIM_RATES[settings.option_slow_sim_rate] ~= nil then
 		_mod.slowSimRate = SLOW_SIM_RATES[settings.option_slow_sim_rate]
 	end
+	if settings.option_enable_simspeed_cycle ~= nil then
+		_mod.simspeedEnabled = settings.option_enable_simspeed_cycle
+	end
 	_mod.selectedBuildOrderID = Mod_ReadSelectedBuildOrder(settings)
 end
 
@@ -109,16 +114,33 @@ end
 
 -- Called after initialization is done when game is fading up from black
 function Mod_Start()
-	_mod.normalPhaseDuration = math.ceil(_mod.normalDurationSeconds * NORMAL_SIM_RATE / NORMAL_SIM_RATE)
+	if _mod.simspeedEnabled then
+		Mod_StartSimspeedCycle()
+	end
+end
+
+function Mod_StartSimspeedCycle()
+	if _mod.simspeedStarted then
+		return
+	end
+
+	_mod.simspeedStarted = true
+	_mod.normalPhaseDuration = math.ceil(_mod.normalDurationSeconds)
 	_mod.slowPhaseDuration = math.ceil(_mod.slowDurationSeconds * _mod.slowSimRate / NORMAL_SIM_RATE)
 	Mod_StartPhase(NORMAL_PHASE_OBJECTIVE_TITLE, _mod.normalPhaseDuration, NORMAL_SIM_RATE, Mod_EnterSlowSpeed)
 end
 
 function Mod_EnterSlowSpeed()
+	if not _mod.simspeedStarted then
+		return
+	end
 	Mod_StartPhase(SLOW_PHASE_OBJECTIVE_TITLE, _mod.slowPhaseDuration, _mod.slowSimRate, Mod_EnterNormalSpeed)
 end
 
 function Mod_EnterNormalSpeed()
+	if not _mod.simspeedStarted then
+		return
+	end
 	Mod_StartPhase(NORMAL_PHASE_OBJECTIVE_TITLE, _mod.normalPhaseDuration, NORMAL_SIM_RATE, Mod_EnterSlowSpeed)
 end
 
@@ -128,6 +150,14 @@ function Mod_ClearPhaseObjective()
 		Objective_Expire(_mod.phaseObjective, false, false)
 		_mod.phaseObjective = nil
 	end
+end
+
+function Mod_StopSimspeedCycle()
+	Rule_Remove(Mod_EnterSlowSpeed)
+	Rule_Remove(Mod_EnterNormalSpeed)
+	Mod_ClearPhaseObjective()
+	Misc_SetSimRate(NORMAL_SIM_RATE)
+	_mod.simspeedStarted = false
 end
 
 function Mod_StartPhase(title, phaseDuration, simRate, nextRule)
@@ -160,8 +190,5 @@ end
 
 -- When a victory condition is met, a module must call Core_OnGameOver() in order to invoke this delegate and notify all modules that the match is about to end. Generally used for clean up (removal of rules, objectives, and UI elements specific to the module).
 function Mod_OnGameOver()
-	Rule_Remove(Mod_EnterSlowSpeed)
-	Rule_Remove(Mod_EnterNormalSpeed)
-	Mod_ClearPhaseObjective()
-	Misc_SetSimRate(NORMAL_SIM_RATE)
+	Mod_StopSimspeedCycle()
 end

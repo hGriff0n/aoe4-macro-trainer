@@ -32,6 +32,45 @@ def csv_rows(path: Path) -> dict[int, list[str]]:
 
 
 class BuildOrderSettingTests(unittest.TestCase):
+    def test_template_defines_enabled_simspeed_cycle_option(self) -> None:
+        root = ET.parse(RDO_TEMPLATE).getroot()
+        option = option_by_key(root, "option_enable_simspeed_cycle")
+        self.assertEqual(option.get("Type"), "WinCondition::BooleanOptionUIDescriptor")
+        self.assertEqual(
+            option.find("./DataProperty[@Name='m_defaultValue']").get("Value"),
+            "true",
+        )
+
+        slow_rate = option_by_key(root, "option_slow_sim_rate")
+        build_order = option_by_key(root, "option_build_order")
+        option_ids = [
+            item.get("Id")
+            for item in root.findall(
+                ".//DataObject[@Type='WinCondition::OptionSectionUIDescriptor']"
+                "/DataProperty[@Name='m_options']/DataObject"
+            )
+        ]
+        self.assertLess(option_ids.index(slow_rate.get("Id")), option_ids.index(option.get("Id")))
+        self.assertLess(option_ids.index(option.get("Id")), option_ids.index(build_order.get("Id")))
+
+        rows = csv_rows(LOCDB_TEMPLATE)
+        name_key = int(
+            option.find(
+                "./DataProperty[@Name='m_feName']//DataProperty[@Name='m_locStringKey']"
+            ).get("Value")
+        )
+        tooltip_key = int(
+            option.find(
+                "./DataProperty[@Name='m_feDescriptionTooltip']"
+                "//DataProperty[@Name='m_locStringKey']"
+            ).get("Value")
+        )
+        self.assertEqual(rows[name_key][-1], "Enable Slow/Normal Cycle")
+        self.assertEqual(
+            rows[tooltip_key][-1],
+            "Alternate between configured normal-speed and slowed planning phases.",
+        )
+
     def test_template_defines_default_none_build_order_option(self) -> None:
         root = ET.parse(RDO_TEMPLATE).getroot()
         option = option_by_key(root, "option_build_order")
@@ -112,6 +151,7 @@ class BuildOrderSettingTests(unittest.TestCase):
         setup = re.search(r"function Mod_SetupSettings\([^)]*\)(.*?)(?=^function |\Z)", source, re.MULTILINE | re.DOTALL).group(1)
         self.assertIn("_mod.selectedBuildOrderID = Mod_ReadSelectedBuildOrder(settings)", setup)
         self.assertNotIn("Objective_", setup)
+        self.assertNotIn("Mod_StartSimspeedCycle", setup)
 
 
 if __name__ == "__main__":

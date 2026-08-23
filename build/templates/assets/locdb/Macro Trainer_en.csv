@@ -21,3 +21,5 @@
 20,,,Build order option name.,,,Build Order
 21,,,Build order option tooltip.,,,Choose a generated build order to practice.
 22,,,Build order value.,,,None
+23,,,Sim-rate cycle option name.,,,Enable Slow/Normal Cycle
+24,,,Sim-rate cycle option tooltip.,,,Alternate between configured normal-speed and slowed planning phases.
