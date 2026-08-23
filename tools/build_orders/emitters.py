@@ -6,6 +6,8 @@ from pathlib import Path
 from .model import Catalog
 
 NAMESPACE = "dfb5645698a84afb91cf7a2dfb0f4a4e"
+GENERATED_RDO_ID_START = 9100000000000000000
+GENERATED_ENUM_MARKER = "<!-- GENERATED_BUILD_ORDER_ENUM_ITEMS -->"
 
 
 def _atomic_write(path: Path, content: str) -> None:
@@ -47,6 +49,10 @@ def _render_locdb(template: Path, catalog: Catalog) -> tuple[str, dict[tuple[str
     writer = csv.writer(output, lineterminator="\n")
     localization: dict[tuple[str, int], int] = {}
     identifier = 1000
+    for order in sorted(catalog.build_orders, key=lambda item: (item.civ.casefold(), item.title.casefold())):
+        localization[(order.id, -2)] = identifier
+        writer.writerow([identifier, "", "", "Generated build-order option.", "", "", f"[{order.civ.title()}] {order.title}"])
+        identifier += 1
     for order in catalog.build_orders:
         localization[(order.id, -1)] = identifier
         writer.writerow([identifier, "", "", "Generated build-order title.", "", "", order.title])
@@ -56,6 +62,44 @@ def _render_locdb(template: Path, catalog: Catalog) -> tuple[str, dict[tuple[str
             writer.writerow([identifier, "", "", "Generated step title.", "", "", step.title or f"Step {step_index + 1}"])
             identifier += 1
     return baseline + output.getvalue(), localization
+
+
+def _reflect_loc_string(identifier: int, owner_id: int, localization_id: int, indent: str) -> str:
+    return "\n".join([
+        f'{indent}<DataValue Name="util::ReflectLocString">{identifier}</DataValue>',
+        f'{indent}<DataObject Name="" Type="util::ReflectLocString" Id="{identifier}" OwnerId="{owner_id}">',
+        f'{indent}\t<DataProperty Name="m_modPart2" Type="UInt32" Value="763023249"/>',
+        f'{indent}\t<DataProperty Name="m_modPart3" Type="UInt32" Value="1313476603"/>',
+        f'{indent}\t<DataProperty Name="m_modPart0" Type="UInt32" Value="3753206870"/>',
+        f'{indent}\t<DataProperty Name="m_modPart1" Type="UInt32" Value="1258002600"/>',
+        f'{indent}\t<DataProperty Name="m_locStringKey" Type="Int32" Value="{localization_id}"/>',
+        f'{indent}</DataObject>',
+    ])
+
+
+def _render_rdo(template: str, catalog: Catalog, localization: dict[tuple[str, int], int]) -> str:
+    if template.count(GENERATED_ENUM_MARKER) != 1:
+        raise ValueError("RDO template must contain exactly one generated build-order enum marker")
+    indent = "\t" * 9
+    fragments: list[str] = []
+    for offset, order in enumerate(sorted(catalog.build_orders, key=lambda item: (item.civ.casefold(), item.title.casefold()))):
+        item_id = GENERATED_RDO_ID_START + offset * 3
+        label_id = localization[(order.id, -2)]
+        fragments.extend([
+            f'{indent}<DataValue Name="WinCondition::OptionEnumItemUIDescriptor">{item_id}</DataValue>',
+            f'{indent}<DataObject Name="" Type="WinCondition::OptionEnumItemUIDescriptor" Id="{item_id}" OwnerId="9000000000000000035">',
+            f'{indent}\t<DataProperty Name="m_key" Type="String" Value="build_order_{order.id}"/>',
+            f'{indent}\t<DataProperty Name="m_feSummaryName" Type="Object">',
+            _reflect_loc_string(item_id + 1, item_id, label_id, indent + "\t\t"),
+            f'{indent}\t</DataProperty>',
+            f'{indent}\t<DataProperty Name="m_feName" Type="Object">',
+            _reflect_loc_string(item_id + 2, item_id, label_id, indent + "\t\t"),
+            f'{indent}\t</DataProperty>',
+            f'{indent}\t<DataProperty Name="m_isDefaultValue" Type="Bool" Value="false"/>',
+            f'{indent}\t<DataProperty Name="m_devOnly" Type="Bool" Value="false"/>',
+            f'{indent}</DataObject>',
+        ])
+    return template.replace(GENERATED_ENUM_MARKER, "\n".join(fragments))
 
 
 def reset_outputs(paths) -> None:
@@ -69,7 +113,7 @@ def reset_outputs(paths) -> None:
 def emit_outputs(catalog: Catalog, paths) -> None:
     locdb, localization = _render_locdb(paths.locdb_template, catalog)
     scar = _render_scar(catalog, localization)
-    rdo = paths.rdo_template.read_text(encoding="utf-8")
+    rdo = _render_rdo(paths.rdo_template.read_text(encoding="utf-8"), catalog, localization)
     staged = [(paths.rdo_output, rdo), (paths.locdb_output, locdb), (paths.scar_output, scar)]
     temporaries: list[tuple[Path, Path]] = []
     try:

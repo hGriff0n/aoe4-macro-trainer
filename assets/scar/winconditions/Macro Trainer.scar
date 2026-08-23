@@ -37,6 +37,7 @@ _mod = {
 	normalDurationSeconds = 45,
 	slowDurationSeconds = 15,
 	slowSimRate = 1,
+	selectedBuildOrderID = nil,
 }
 
 NORMAL_SIM_RATE = 8
@@ -61,6 +62,18 @@ Core_RegisterModule(_mod.module)
 -----------------------------------------------------------------------
 
 -- Called during load as part of the game setup sequence
+function Mod_ReadSelectedBuildOrder(settings)
+	local option = settings.option_build_order
+	local enumKey = option
+	if type(option) == "table" then
+		enumKey = option.enum_value
+	end
+	if enumKey == nil or enumKey == "build_order_none" then
+		return nil
+	end
+	return string.gsub(enumKey, "^build_order_", "")
+end
+
 function Mod_SetupSettings(options)
 	if options == nil or options.section_macro_trainer_settings == nil then
 		return
@@ -76,6 +89,7 @@ function Mod_SetupSettings(options)
 	if SLOW_SIM_RATES[settings.option_slow_sim_rate] ~= nil then
 		_mod.slowSimRate = SLOW_SIM_RATES[settings.option_slow_sim_rate]
 	end
+	_mod.selectedBuildOrderID = Mod_ReadSelectedBuildOrder(settings)
 end
 
 -- Called before initialization, preceding other module OnInit functions

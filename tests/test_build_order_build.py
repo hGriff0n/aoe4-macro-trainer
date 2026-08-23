@@ -19,7 +19,7 @@ class BuildOrderBuildTests(unittest.TestCase):
         self.rdo_template = self.root / "templates" / "Macro Trainer.rdo"
         self.locdb_template = self.root / "templates" / "Macro Trainer_en.csv"
         self.rdo_template.parent.mkdir(parents=True)
-        self.rdo_template.write_text("RDO TEMPLATE\n", encoding="utf-8")
+        self.rdo_template.write_text("<!-- GENERATED_BUILD_ORDER_ENUM_ITEMS -->\n", encoding="utf-8")
         self.locdb_template.write_text("ID,Text\n1,BASELINE\n", encoding="utf-8")
         self.paths = BuildPaths(self.root, self.rdo_template, self.locdb_template, self.root / "assets" / "Macro Trainer.rdo", self.root / "assets" / "Macro Trainer_en.csv", self.root / "assets" / "generated" / "build_orders.scar")
         self.orders = self.root / "orders"
@@ -36,7 +36,7 @@ class BuildOrderBuildTests(unittest.TestCase):
             output.parent.mkdir(parents=True, exist_ok=True)
             output.write_text("STALE", encoding="utf-8")
         reset_outputs(self.paths)
-        self.assertEqual(self.paths.rdo_output.read_text(encoding="utf-8"), "RDO TEMPLATE\n")
+        self.assertEqual(self.paths.rdo_output.read_text(encoding="utf-8"), "<!-- GENERATED_BUILD_ORDER_ENUM_ITEMS -->\n")
         self.assertEqual(self.paths.locdb_output.read_text(encoding="utf-8"), "ID,Text\n1,BASELINE\n")
         self.assertEqual(self.paths.scar_output.read_text(encoding="utf-8"), "BUILD_ORDER_CATALOG = {}\n")
 
@@ -47,10 +47,11 @@ class BuildOrderBuildTests(unittest.TestCase):
         scar = self.paths.scar_output.read_text(encoding="utf-8")
         locdb = self.paths.locdb_output.read_text(encoding="utf-8")
         self.assertIn('BUILD_ORDER_CATALOG["english-framework-test"]', scar)
-        self.assertIn('$dfb5645698a84afb91cf7a2dfb0f4a4e:1000', scar)
+        self.assertIn('$dfb5645698a84afb91cf7a2dfb0f4a4e:1001', scar)
         self.assertLess(scar.index('kind = "vils"'), scar.index('kind = "hints"'))
-        self.assertIn("1000,,,Generated build-order title.,,,Framework Test", locdb)
-        self.assertIn("1001,,,Generated step title.,,,Opening Economy", locdb)
+        self.assertIn("1000,,,Generated build-order option.,,,[English] Framework Test", locdb)
+        self.assertIn("1001,,,Generated build-order title.,,,Framework Test", locdb)
+        self.assertIn("1002,,,Generated step title.,,,Opening Economy", locdb)
         self.assertFalse(list(self.root.rglob("*.tmp")))
 
     def test_malformed_yaml_leaves_baseline_and_never_calls_essence(self) -> None:
@@ -60,7 +61,7 @@ class BuildOrderBuildTests(unittest.TestCase):
         self.assertEqual(result, 2)
         self.assertEqual(calls, [])
         self.assertEqual(self.paths.scar_output.read_text(encoding="utf-8"), "BUILD_ORDER_CATALOG = {}\n")
-        self.assertEqual(self.paths.rdo_output.read_text(encoding="utf-8"), "RDO TEMPLATE\n")
+        self.assertEqual(self.paths.rdo_output.read_text(encoding="utf-8"), "<!-- GENERATED_BUILD_ORDER_ENUM_ITEMS -->\n")
 
     def test_successful_build_calls_exact_essence_command(self) -> None:
         (self.orders / "valid.yaml").write_text(VALID, encoding="utf-8")
