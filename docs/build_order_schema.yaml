@@ -7,7 +7,8 @@
 civ: string # game id of the civilization that must be selected for this build order
 title: string # in game display string to identify this build order. technically, the full display string is "icon(<civ>) - <title>" *unless the settings groups build order by civ)
 steps: # a list of build order steps, the intention is for each build order to describe the state that the player should be in when moving to the next step under ideal circumstances. However, the actual checks the objectives do are more loose as games generally don't go to plan
-  - vils: # ils typically specifies the minimum number of gatherers on the specified resource. This does not prevent vils being assigned to other resources and does not show a warning if the number is exceeded - both limitations are deliberate because games are dynamic and players may need to deviate at times
+  - title: string # optional player-facing step title
+    vils: # ils typically specifies the minimum number of gatherers on the specified resource. This does not prevent vils being assigned to other resources and does not show a warning if the number is exceeded - both limitations are deliberate because games are dynamic and players may need to deviate at times
       food: integer 
       gold: integer
       stone: integer 

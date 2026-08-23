@@ -20,3 +20,6 @@ aoe4-mcp.toml
 .worktrees/
 .superpowers/
 tests/__pycache__/
+/assets/scar/winconditions/Macro Trainer.rdo
+/assets/locdb/Macro Trainer_en.csv
+/assets/scar/generated/build_orders.scar

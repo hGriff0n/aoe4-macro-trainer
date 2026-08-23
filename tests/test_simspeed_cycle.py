@@ -13,12 +13,16 @@ SCAR_PATH = (
 )
 LOCDB_PATH = (
     Path(__file__).resolve().parents[1]
+    / "build"
+    / "templates"
     / "assets"
     / "locdb"
     / "Macro Trainer_en.csv"
 )
 RDO_PATH = (
     Path(__file__).resolve().parents[1]
+    / "build"
+    / "templates"
     / "assets"
     / "scar"
     / "winconditions"
