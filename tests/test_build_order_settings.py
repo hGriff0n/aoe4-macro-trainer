@@ -31,6 +31,17 @@ def csv_rows(path: Path) -> dict[int, list[str]]:
         return {int(row[0]): row for row in csv.reader(source) if row and row[0].isdigit()}
 
 
+def recover_enum_key_from_direct_map(option: dict[str, object]) -> str | None:
+    enum_items = option.get("enum_items")
+    enum_value = option.get("enum_value")
+    if not isinstance(enum_items, dict) or enum_value is None:
+        return None
+    for enum_key, item_value in enum_items.items():
+        if item_value == enum_value:
+            return enum_key
+    return None
+
+
 class BuildOrderSettingTests(unittest.TestCase):
     def test_template_defines_enabled_simspeed_cycle_option(self) -> None:
         root = ET.parse(RDO_TEMPLATE).getroot()
@@ -151,16 +162,71 @@ class BuildOrderSettingTests(unittest.TestCase):
             )
             self.assertEqual([rows[number][-1] for number in range(1, 20)], [csv_rows(LOCDB_TEMPLATE)[number][-1] for number in range(1, 20)])
 
-    def test_settings_records_selected_generated_id_without_starting_objectives(self) -> None:
+    def test_settings_recovers_enum_keys_from_opaque_lobby_values(self) -> None:
+        build_order_option = {
+            "enum_value": 62002,
+            "enum_items": {
+                "build_order_none": 62001,
+                "build_order_templar-fast-castle": 62002,
+            },
+        }
+        slow_rate_option = {
+            "enum_value": 71004,
+            "enum_items": {
+                "slow_sim_rate_1": 71001,
+                "slow_sim_rate_4": 71004,
+            },
+        }
+        self.assertEqual(
+            recover_enum_key_from_direct_map(build_order_option),
+            "build_order_templar-fast-castle",
+        )
+        self.assertEqual(
+            recover_enum_key_from_direct_map(slow_rate_option), "slow_sim_rate_4"
+        )
+
         source = SCAR.read_text(encoding="utf-8")
-        self.assertIn("selectedBuildOrderID = nil", source)
-        function = re.search(r"function Mod_ReadSelectedBuildOrder\(settings\)(.*?)(?=^function |\Z)", source, re.MULTILINE | re.DOTALL)
-        self.assertIsNotNone(function)
-        body = function.group(1)
-        self.assertIn('option.enum_value', body)
-        self.assertIn('enumKey == "build_order_none"', body)
-        self.assertIn('string.gsub(enumKey, "^build_order_", "")', body)
-        setup = re.search(r"function Mod_SetupSettings\([^)]*\)(.*?)(?=^function |\Z)", source, re.MULTILINE | re.DOTALL).group(1)
+        helper = re.search(
+            r"function Mod_GetOptionEnumKey\(option\)(.*?)(?=^function |\Z)",
+            source,
+            re.MULTILINE | re.DOTALL,
+        )
+        self.assertIsNotNone(helper)
+        body = helper.group(1)
+        self.assertIn('type(option) ~= "table"', body)
+        self.assertIn('type(option.enum_items) ~= "table"', body)
+        self.assertRegex(
+            body,
+            r"for enumKey, enumValue in pairs\(option\.enum_items\) do\s*"
+            r"if enumValue == option\.enum_value then\s*return enumKey",
+        )
+        self.assertNotIn("enumItem.value", body)
+        self.assertNotIn("enumItem.key", body)
+
+        build_order = re.search(
+            r"function Mod_ReadSelectedBuildOrder\(settings\)(.*?)(?=^function |\Z)",
+            source,
+            re.MULTILINE | re.DOTALL,
+        )
+        self.assertIsNotNone(build_order)
+        build_order_body = build_order.group(1)
+        self.assertIn(
+            "Mod_GetOptionEnumKey(settings.option_build_order)", build_order_body
+        )
+        self.assertIn('enumKey == "build_order_none"', build_order_body)
+        self.assertIn('string.gsub(enumKey, "^build_order_", "")', build_order_body)
+        self.assertNotIn("enumKey = option.enum_value", build_order_body)
+
+        setup = re.search(
+            r"function Mod_SetupSettings\([^)]*\)(.*?)(?=^function |\Z)",
+            source,
+            re.MULTILINE | re.DOTALL,
+        ).group(1)
+        self.assertIn(
+            "Mod_GetOptionEnumKey(settings.option_slow_sim_rate)", setup
+        )
+        self.assertIn("SLOW_SIM_RATES[slowSimRateKey]", setup)
+        self.assertIn("_mod.slowSimRate = SLOW_SIM_RATES[slowSimRateKey]", setup)
         self.assertIn("_mod.selectedBuildOrderID = Mod_ReadSelectedBuildOrder(settings)", setup)
         self.assertNotIn("Objective_", setup)
         self.assertNotIn("Mod_StartSimspeedCycle", setup)

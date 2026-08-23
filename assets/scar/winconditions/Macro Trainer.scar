@@ -66,20 +66,42 @@ Core_RegisterModule(_mod.module)
 -----------------------------------------------------------------------
 
 -- Called during load as part of the game setup sequence
-function Mod_ReadSelectedBuildOrder(settings)
-	local option = settings.option_build_order
-	local enumKey = option
-	if type(option) == "table" then
-		enumKey = option.enum_value
+function Mod_GetOptionEnumKey(option)
+	if type(option) ~= "table" or type(option.enum_items) ~= "table" then
+		return nil
 	end
+
+	if option.enum_value == nil then
+		return nil
+	end
+
+	for enumKey, enumValue in pairs(option.enum_items) do
+		if enumValue == option.enum_value then
+			return enumKey
+		end
+	end
+
+	return nil
+end
+
+function Mod_ReadSelectedBuildOrder(settings)
+	if type(settings) ~= "table" then
+		return nil
+	end
+
+	local enumKey = Mod_GetOptionEnumKey(settings.option_build_order)
 	if enumKey == nil or enumKey == "build_order_none" then
 		return nil
 	end
+	if type(enumKey) ~= "string" then
+		return nil
+	end
+
 	return string.gsub(enumKey, "^build_order_", "")
 end
 
 function Mod_SetupSettings(options)
-	if options == nil or options.section_macro_trainer_settings == nil then
+	if type(options) ~= "table" or type(options.section_macro_trainer_settings) ~= "table" then
 		return
 	end
 
@@ -90,8 +112,9 @@ function Mod_SetupSettings(options)
 	if settings.option_slow_duration_seconds ~= nil then
 		_mod.slowDurationSeconds = math.max(1, math.min(300, settings.option_slow_duration_seconds))
 	end
-	if SLOW_SIM_RATES[settings.option_slow_sim_rate] ~= nil then
-		_mod.slowSimRate = SLOW_SIM_RATES[settings.option_slow_sim_rate]
+	local slowSimRateKey = Mod_GetOptionEnumKey(settings.option_slow_sim_rate)
+	if SLOW_SIM_RATES[slowSimRateKey] ~= nil then
+		_mod.slowSimRate = SLOW_SIM_RATES[slowSimRateKey]
 	end
 	if settings.option_enable_simspeed_cycle ~= nil then
 		_mod.simspeedEnabled = settings.option_enable_simspeed_cycle

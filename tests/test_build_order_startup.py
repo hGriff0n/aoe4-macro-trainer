@@ -85,25 +85,37 @@ class BuildOrderStartupContractTests(unittest.TestCase):
             "BuildOrder_Start(buildOrder, localPlayer)",
         )
 
-    def test_mismatch_and_missing_catalog_use_invalid_build_alert(self) -> None:
+    def test_missing_catalog_and_civilization_mismatch_use_distinct_alerts(self) -> None:
         start = function_body(self.startup, "BuildOrderStartup_Start")
         self.assertIn(
-            "if buildOrder == nil or actualCiv ~= string.lower(buildOrder.civ) then",
+            "if buildOrder == nil then",
             start,
         )
         self.assertIn(
-            "BuildOrderStartup_ShowInvalidBuildError(buildOrder, actualCiv)", start
+            "BuildOrderStartup_ShowMissingBuildError()", start
         )
+        self.assertIn(
+            "if actualCiv ~= string.lower(buildOrder.civ) then", start
+        )
+        self.assertIn("BuildOrderStartup_ShowInvalidBuildError(buildOrder, actualCiv)", start)
 
         invalid = function_body(
             self.startup, "BuildOrderStartup_ShowInvalidBuildError"
         )
-        self.assertIn("buildOrder.title", invalid)
         self.assertIn("buildOrder.civ", invalid)
         self.assertIn("actualCiv", invalid)
+        self.assertIn(
+            '"Selected build order for " .. buildOrder.civ .. " but playing as " .. actualCiv',
+            invalid,
+        )
         self.assertIn("BuildOrderStartup_ShowError(", invalid)
 
-    def test_authored_civ_case_survives_generation_and_matches_case_insensitively(self) -> None:
+        missing = function_body(
+            self.startup, "BuildOrderStartup_ShowMissingBuildError"
+        )
+        self.assertIn("BUILD_ORDER_STARTUP_MISSING_BUILD_TITLE", missing)
+
+    def test_templar_pbgname_survives_generation_and_matches_case_insensitively(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             templates = root / "templates"
@@ -117,7 +129,7 @@ class BuildOrderStartupContractTests(unittest.TestCase):
             orders = root / "orders"
             orders.mkdir()
             (orders / "upper.yaml").write_text(
-                "civ: English\ntitle: Case Test\nsteps:\n  - hints:\n      - Scout\n",
+                "civ: templar\ntitle: Case Test\nsteps:\n  - hints:\n      - Scout\n",
                 encoding="utf-8",
             )
             paths = BuildPaths(
@@ -132,7 +144,7 @@ class BuildOrderStartupContractTests(unittest.TestCase):
             emit_outputs(compile_directory(orders), paths)
 
             generated = paths.scar_output.read_text(encoding="utf-8")
-            self.assertIn('civ = "English"', generated)
+            self.assertIn('civ = "templar"', generated)
             start = function_body(self.startup, "BuildOrderStartup_Start")
             self.assertIn(
                 "actualCiv ~= string.lower(buildOrder.civ)", start
@@ -157,7 +169,8 @@ class BuildOrderStartupContractTests(unittest.TestCase):
         self.assertEqual(self.startup.count("UI_MessageBoxSetButton("), 1)
         for button in ("DB_Button2", "DB_Button3", "DB_Button4"):
             self.assertNotIn(button, self.startup)
-        self.assert_order(show, "Misc_SetSimRate(0)", "UI_MessageBoxShow(")
+        self.assert_order(show, "UI_MessageBoxShow(", "Misc_SetSimRate(0)")
+        self.assertRegex(show, r"Misc_SetSimRate\(0\)\s*end\s*$")
 
     def test_continue_is_idempotent_and_only_starts_enabled_cycle(self) -> None:
         resume = function_body(self.startup, "BuildOrderStartup_Continue")
@@ -215,7 +228,7 @@ class BuildOrderStartupContractTests(unittest.TestCase):
         self.assertEqual(rows[25][-1], "No Training Systems Enabled")
         self.assertEqual(
             rows[26][-1],
-            "Neither a build order nor the slow/normal cycle is enabled.",
+            "The mod is not intended to be played with both off.",
         )
         self.assertEqual(rows[27][-1], "Build Order Disabled")
         self.assertEqual(rows[28][-1], "Selected build order is unavailable.")

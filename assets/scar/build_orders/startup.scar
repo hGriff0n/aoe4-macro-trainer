@@ -15,9 +15,14 @@ function BuildOrderStartup_Start()
 	end
 
 	local buildOrder = BUILD_ORDER_CATALOG[selectedID]
+	if buildOrder == nil then
+		BuildOrderStartup_ShowMissingBuildError()
+		return
+	end
+
 	local localPlayer = Game_GetLocalPlayer()
 	local actualCiv = string.lower(Player_GetRaceName(localPlayer))
-	if buildOrder == nil or actualCiv ~= string.lower(buildOrder.civ) then
+	if actualCiv ~= string.lower(buildOrder.civ) then
 		BuildOrderStartup_ShowInvalidBuildError(buildOrder, actualCiv)
 		return
 	end
@@ -35,23 +40,19 @@ function BuildOrderStartup_ShowNoSystemsError()
 end
 
 function BuildOrderStartup_ShowInvalidBuildError(buildOrder, actualCiv)
-	local buildTitle = BUILD_ORDER_STARTUP_MISSING_BUILD_TITLE
-	local requiredCiv = "unknown"
-	if buildOrder ~= nil then
-		buildTitle = buildOrder.title
-		requiredCiv = buildOrder.civ
-	end
-
-	local message = "Build order: " .. buildTitle ..
-		"\nRequired civilization: " .. requiredCiv ..
-		"\nActual civilization: " .. actualCiv
+	local message = "Selected build order for " .. buildOrder.civ .. " but playing as " .. actualCiv
 	BuildOrderStartup_ShowError(BUILD_ORDER_STARTUP_INVALID_TITLE, message)
+end
+
+function BuildOrderStartup_ShowMissingBuildError()
+	BuildOrderStartup_ShowError(
+		BUILD_ORDER_STARTUP_INVALID_TITLE,
+		BUILD_ORDER_STARTUP_MISSING_BUILD_TITLE)
 end
 
 function BuildOrderStartup_ShowError(title, message)
 	_mod.buildOrderDisabled = true
 	_mod.startupAlertOpen = true
-	Misc_SetSimRate(0)
 	UI_MessageBoxSetText(title, message)
 	UI_MessageBoxSetButton(
 		DB_Button1,
@@ -60,6 +61,7 @@ function BuildOrderStartup_ShowError(title, message)
 		"",
 		true)
 	UI_MessageBoxShow(DC_Default, BuildOrderStartup_Continue)
+	Misc_SetSimRate(0)
 end
 
 function BuildOrderStartup_Continue(button)
