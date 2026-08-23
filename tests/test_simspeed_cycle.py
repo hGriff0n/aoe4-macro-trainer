@@ -186,6 +186,22 @@ class SimspeedCycleContractTests(unittest.TestCase):
         self.assertIn("slow_sim_rate_1", self.source)
         self.assertIn("slow_sim_rate_7", self.source)
 
+    def test_on_init_loads_lobby_settings_before_applying_them(self) -> None:
+        on_init = function_body(self.source, "Mod_OnInit")
+        self.assertIn("local options_selected = {}", on_init)
+        self.assertIn("Setup_GetWinConditionOptions(options_selected)", on_init)
+        self.assertIn("Mod_SetupSettings(options_selected)", on_init)
+        self.assert_call_order(
+            on_init,
+            "local options_selected = {}",
+            "Setup_GetWinConditionOptions(options_selected)",
+        )
+        self.assert_call_order(
+            on_init,
+            "Setup_GetWinConditionOptions(options_selected)",
+            "Mod_SetupSettings(options_selected)",
+        )
+
     def test_cycle_start_is_guarded_and_idempotent(self) -> None:
         self.assertIn("simspeedEnabled = true", self.source)
         self.assertIn("simspeedStarted = false", self.source)

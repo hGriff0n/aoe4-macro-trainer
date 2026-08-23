@@ -109,9 +109,9 @@ end
 
 -- Called on match initialization before handing control to the player
 function Mod_OnInit()
-	
-	
-	
+	local options_selected = {}
+	Setup_GetWinConditionOptions(options_selected)
+	Mod_SetupSettings(options_selected)
 end
 
 -- Called after initialization is done when game is fading up from black
