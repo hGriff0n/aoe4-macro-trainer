@@ -1,0 +1,79 @@
+BUILD_ORDER_STARTUP_NO_SYSTEMS_TITLE = "$dfb5645698a84afb91cf7a2dfb0f4a4e:25"
+BUILD_ORDER_STARTUP_NO_SYSTEMS_MESSAGE = "$dfb5645698a84afb91cf7a2dfb0f4a4e:26"
+BUILD_ORDER_STARTUP_INVALID_TITLE = "$dfb5645698a84afb91cf7a2dfb0f4a4e:27"
+BUILD_ORDER_STARTUP_MISSING_BUILD_TITLE = "$dfb5645698a84afb91cf7a2dfb0f4a4e:28"
+
+function BuildOrderStartup_Start()
+	local selectedID = _mod.selectedBuildOrderID
+	if selectedID == nil then
+		if _mod.simspeedEnabled then
+			Mod_StartSimspeedCycle()
+		else
+			BuildOrderStartup_ShowNoSystemsError()
+		end
+		return
+	end
+
+	local buildOrder = BUILD_ORDER_CATALOG[selectedID]
+	local localPlayer = Game_GetLocalPlayer()
+	local actualCiv = string.lower(Player_GetRaceName(localPlayer))
+	if buildOrder == nil or actualCiv ~= buildOrder.civ then
+		BuildOrderStartup_ShowInvalidBuildError(buildOrder, actualCiv)
+		return
+	end
+
+	BuildOrder_Start(buildOrder, localPlayer)
+	if _mod.simspeedEnabled then
+		Mod_StartSimspeedCycle()
+	end
+end
+
+function BuildOrderStartup_ShowNoSystemsError()
+	BuildOrderStartup_ShowError(
+		BUILD_ORDER_STARTUP_NO_SYSTEMS_TITLE,
+		BUILD_ORDER_STARTUP_NO_SYSTEMS_MESSAGE)
+end
+
+function BuildOrderStartup_ShowInvalidBuildError(buildOrder, actualCiv)
+	local buildTitle = BUILD_ORDER_STARTUP_MISSING_BUILD_TITLE
+	local requiredCiv = "unknown"
+	if buildOrder ~= nil then
+		buildTitle = buildOrder.title
+		requiredCiv = buildOrder.civ
+	end
+
+	local message = "Build order: " .. buildTitle ..
+		"\nRequired civilization: " .. requiredCiv ..
+		"\nActual civilization: " .. actualCiv
+	BuildOrderStartup_ShowError(BUILD_ORDER_STARTUP_INVALID_TITLE, message)
+end
+
+function BuildOrderStartup_ShowError(title, message)
+	_mod.buildOrderDisabled = true
+	_mod.startupAlertOpen = true
+	Misc_SetSimRate(0)
+	UI_MessageBoxSetText(title, message)
+	UI_MessageBoxSetButton(
+		DB_Button1,
+		"Continue Without Build Order",
+		"Resume the match without build-order objectives.",
+		"",
+		true)
+	UI_MessageBoxShow(DC_Default, BuildOrderStartup_Continue)
+end
+
+function BuildOrderStartup_Continue(button)
+	if not _mod.startupAlertOpen or button ~= DB_Button1 then
+		return
+	end
+
+	_mod.startupAlertOpen = false
+	Misc_SetSimRate(NORMAL_SIM_RATE)
+	if _mod.simspeedEnabled then
+		Mod_StartSimspeedCycle()
+	end
+end
+
+function BuildOrderStartup_Stop()
+	_mod.startupAlertOpen = false
+end

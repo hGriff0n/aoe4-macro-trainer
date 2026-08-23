@@ -100,12 +100,18 @@ class SimspeedCycleContractTests(unittest.TestCase):
             phase, "Misc_SetSimRate(simRate)", "Rule_AddOneShot("
         )
 
-    def test_build_order_sources_load_generated_catalog_before_engine(self) -> None:
+    def test_build_order_sources_load_before_startup_coordinator(self) -> None:
         generated = 'import("generated/build_orders.scar")'
         engine = 'import("build_orders/objective_engine.scar")'
+        startup = 'import("build_orders/startup.scar")'
         self.assertIn(generated, self.source)
         self.assertIn(engine, self.source)
+        self.assertIn(startup, self.source)
         self.assertLess(self.source.index(generated), self.source.index(engine))
+        self.assertLess(
+            self.source.index("Rule_AddOneShot(nextRule, phaseDuration)"),
+            self.source.index(startup),
+        )
 
     def test_lobby_options_define_integer_durations_and_slow_rate_enum(self) -> None:
         sections = self.rdo_root.findall(".//DataObject[@Type='WinCondition::OptionSectionUIDescriptor']")
@@ -180,13 +186,13 @@ class SimspeedCycleContractTests(unittest.TestCase):
         self.assertIn("slow_sim_rate_1", self.source)
         self.assertIn("slow_sim_rate_7", self.source)
 
-    def test_cycle_start_is_enabled_guarded_and_idempotent(self) -> None:
+    def test_cycle_start_is_guarded_and_idempotent(self) -> None:
         self.assertIn("simspeedEnabled = true", self.source)
         self.assertIn("simspeedStarted = false", self.source)
 
         mod_start = function_body(self.source, "Mod_Start")
-        self.assertIn("if _mod.simspeedEnabled then", mod_start)
-        self.assertIn("Mod_StartSimspeedCycle()", mod_start)
+        self.assertIn("BuildOrderStartup_Start()", mod_start)
+        self.assertNotIn("Mod_StartSimspeedCycle()", mod_start)
         self.assertNotIn("Mod_StartPhase(", mod_start)
 
         start = function_body(self.source, "Mod_StartSimspeedCycle")
@@ -239,7 +245,9 @@ class SimspeedCycleContractTests(unittest.TestCase):
 
     def test_game_over_stops_transitions_and_active_objective(self) -> None:
         game_over = function_body(self.source, "Mod_OnGameOver")
-        self.assertIn("Mod_StopSimspeedCycle()", game_over)
+        self.assertEqual(game_over.count("BuildOrderStartup_Stop()"), 1)
+        self.assertEqual(game_over.count("BuildOrder_Stop()"), 1)
+        self.assertEqual(game_over.count("Mod_StopSimspeedCycle()"), 1)
 
         stop = function_body(self.source, "Mod_StopSimspeedCycle")
         self.assertIn("Rule_Remove(Mod_EnterSlowSpeed)", stop)

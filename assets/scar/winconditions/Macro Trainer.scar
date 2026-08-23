@@ -40,6 +40,8 @@ _mod = {
 	selectedBuildOrderID = nil,
 	simspeedEnabled = true,
 	simspeedStarted = false,
+	buildOrderDisabled = false,
+	startupAlertOpen = false,
 }
 
 NORMAL_SIM_RATE = 8
@@ -114,9 +116,7 @@ end
 
 -- Called after initialization is done when game is fading up from black
 function Mod_Start()
-	if _mod.simspeedEnabled then
-		Mod_StartSimspeedCycle()
-	end
+	BuildOrderStartup_Start()
 end
 
 function Mod_StartSimspeedCycle()
@@ -181,6 +181,8 @@ function Mod_StartPhase(title, phaseDuration, simRate, nextRule)
 	Rule_AddOneShot(nextRule, phaseDuration)
 end
 
+import("build_orders/startup.scar")
+
 -- Called when Core_SetPlayerDefeated() is invoked. Signals that a player has been eliminated from play due to defeat.
 function Mod_OnPlayerDefeated(player, reason)
 	
@@ -190,5 +192,7 @@ end
 
 -- When a victory condition is met, a module must call Core_OnGameOver() in order to invoke this delegate and notify all modules that the match is about to end. Generally used for clean up (removal of rules, objectives, and UI elements specific to the module).
 function Mod_OnGameOver()
+	BuildOrderStartup_Stop()
+	BuildOrder_Stop()
 	Mod_StopSimspeedCycle()
 end
