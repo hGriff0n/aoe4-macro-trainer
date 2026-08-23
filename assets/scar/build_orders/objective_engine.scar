@@ -68,9 +68,10 @@ function BuildOrder_ActivateStep(stepIndex)
 
 	BUILD_ORDER_STATE.activeStepIndex = stepIndex
 	local player = BUILD_ORDER_STATE.localPlayer
+	local faction = Player_GetRaceName(player)
 	local primaryID = Obj_Create(
-		player.id, step.title, Loc_Empty(), "", DT_PRIMARY_DEFAULT,
-		player.raceName, OT_Primary, 0, "buildOrderStep")
+		player, step.title, Loc_Empty(), "", DT_PRIMARY_DEFAULT,
+		faction, OT_Primary, 0, "buildOrderStep")
 	Obj_SetState(primaryID, OS_Incomplete)
 	BUILD_ORDER_STATE.primaryObjectiveID = primaryID
 
@@ -87,8 +88,8 @@ function BuildOrder_ActivateStep(stepIndex)
 			}
 		end
 		local childID = Obj_Create(
-			player.id, check.title, Loc_Empty(), "", DT_SECONDARY_DEFAULT,
-			player.raceName, OT_Secondary, primaryID, "buildOrderCheck")
+			player, check.title, Loc_Empty(), "", DT_SECONDARY_DEFAULT,
+			faction, OT_Secondary, primaryID, "buildOrderCheck")
 		Obj_SetState(childID, OS_Incomplete)
 		local child = {
 			checkID = checkID,

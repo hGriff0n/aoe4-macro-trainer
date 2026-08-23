@@ -69,14 +69,18 @@ class BuildOrderObjectiveContractTests(unittest.TestCase):
 
     def test_activation_creates_normal_primary_and_secondary_objectives(self) -> None:
         activate = function_body(self.engine, "BuildOrder_ActivateStep")
+        self.assertIn("local faction = Player_GetRaceName(player)", activate)
         self.assertRegex(
             activate,
-            r"Obj_Create\(\s*player\.id,\s*step\.title,\s*Loc_Empty\(\),\s*\"\",\s*DT_PRIMARY_DEFAULT,\s*player\.raceName,\s*OT_Primary,\s*0,\s*\"buildOrderStep\"\s*\)",
+            r"Obj_Create\(\s*player,\s*step\.title,\s*Loc_Empty\(\),\s*\"\",\s*DT_PRIMARY_DEFAULT,\s*faction,\s*OT_Primary,\s*0,\s*\"buildOrderStep\"\s*\)",
         )
         self.assertRegex(
             activate,
-            r"Obj_Create\(\s*player\.id,\s*check\.title,\s*Loc_Empty\(\),\s*\"\",\s*DT_SECONDARY_DEFAULT,\s*player\.raceName,\s*OT_Secondary,\s*primaryID,\s*\"buildOrderCheck\"\s*\)",
+            r"Obj_Create\(\s*player,\s*check\.title,\s*Loc_Empty\(\),\s*\"\",\s*DT_SECONDARY_DEFAULT,\s*faction,\s*OT_Secondary,\s*primaryID,\s*\"buildOrderCheck\"\s*\)",
         )
+        self.assertNotIn("Player_GetID", activate)
+        self.assertNotIn("player.id", activate)
+        self.assertNotIn("player.raceName", activate)
         self.assertIn("Obj_SetState(primaryID, OS_Incomplete)", activate)
         self.assertIn("Obj_SetState(childID, OS_Incomplete)", activate)
         self.assertNotIn("DT_PRIMARY_WARNING", self.engine)
