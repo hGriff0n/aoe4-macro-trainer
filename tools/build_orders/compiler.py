@@ -13,8 +13,8 @@ class BuildOrderValidationError(ValueError):
     pass
 
 
-def _error(file: Path, path: str, message: str) -> None:
-    raise BuildOrderValidationError(f"{file.name}: {path}: {message}")
+def _error(file: Path | str, path: str, message: str) -> None:
+    raise BuildOrderValidationError(f"{file}: {path}: {message}")
 
 
 def _mapping(value: Any, file: Path, path: str) -> dict[str, Any]:
@@ -83,7 +83,14 @@ def _check_descriptors(kind: str, value: Any, file: Path, path: str) -> list[Che
     if kind in {"vils", "resources"}:
         return _resource_checks(kind, value, file, path)
     if kind == "rallypoint":
-        return [CheckDescriptor(kind, f"Rally to {_string(item, file, f'{path}[{index}]')}", False, {"resource": _string(item, file, f"{path}[{index}]")}) for index, item in enumerate(_list(value, file, path))]
+        checks = []
+        for index, item in enumerate(_list(value, file, path)):
+            item_path = f"{path}[{index}]"
+            resource = _string(item, file, item_path)
+            if resource not in RESOURCES:
+                _error(file, item_path, "unsupported resource")
+            checks.append(CheckDescriptor(kind, f"Rally to {resource}", False, {"resource": resource}))
+        return checks
     if kind in {"built", "age_up"}:
         entries = [value] if kind == "age_up" else _list(value, file, path)
         result = []
@@ -160,15 +167,16 @@ def _compile_order(document: Any, file: Path, index: int | None) -> BuildOrder:
 def compile_directory(input_dir: Path) -> Catalog:
     orders: list[BuildOrder] = []
     for file in sorted((path for path in input_dir.rglob("*") if path.suffix.lower() in {".yaml", ".yml"}), key=lambda path: path.relative_to(input_dir).as_posix()):
+        source = file.relative_to(input_dir).as_posix()
         try:
             document = yaml.safe_load(file.read_text(encoding="utf-8"))
         except yaml.YAMLError as exc:
-            raise BuildOrderValidationError(f"{file.name}: invalid YAML: {exc}") from exc
+            raise BuildOrderValidationError(f"{source}: invalid YAML: {exc}") from exc
         documents = document if isinstance(document, list) else [document]
         if not isinstance(document, (dict, list)):
-            _error(file, "", "root must be a mapping or list of mappings")
+            _error(source, "", "root must be a mapping or list of mappings")
         for index, item in enumerate(documents):
-            orders.append(_compile_order(item, file, index if isinstance(document, list) else None))
+            orders.append(_compile_order(item, source, index if isinstance(document, list) else None))
     seen: set[str] = set()
     for order in orders:
         if order.id in seen:

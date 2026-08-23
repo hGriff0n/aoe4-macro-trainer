@@ -8,6 +8,7 @@ from tools.build_orders.model import BuildOrder, Catalog, CheckDescriptor, Step,
 
 class BuildOrderCompilerTests(unittest.TestCase):
     def write(self, directory: Path, name: str, content: str) -> None:
+        (directory / name).parent.mkdir(parents=True, exist_ok=True)
         (directory / name).write_text(content, encoding="utf-8")
 
     def compile(self, files: dict[str, str]) -> Catalog:
@@ -61,6 +62,22 @@ class BuildOrderCompilerTests(unittest.TestCase):
 
     def test_rejects_duplicate_generated_slugs(self) -> None:
         self.assert_invalid("- civ: English\n  title: 2 TC\n  steps: [{hints: [a]}]\n- civ: english\n  title: 2-tc\n  steps: [{hints: [b]}]\n", "duplicate generated id 'english-2-tc'")
+
+    def test_reports_nested_relative_paths_for_schema_and_yaml_errors(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            self.write(directory, "openings/english.yaml", "civ: english\ntitle: x\nsteps:\n  - resources: {iron: 2}\n")
+            with self.assertRaises(BuildOrderValidationError) as schema_error:
+                compile_directory(directory)
+            self.assertIn("openings/english.yaml: steps[0].resources.iron", str(schema_error.exception))
+            (directory / "openings/english.yaml").unlink()
+            self.write(directory, "openings/malformed.yml", "civ: english\ntitle: [\n")
+            with self.assertRaises(BuildOrderValidationError) as yaml_error:
+                compile_directory(directory)
+            self.assertIn("openings/malformed.yml: invalid YAML", str(yaml_error.exception))
+
+    def test_rejects_unsupported_rallypoint_resources(self) -> None:
+        self.assert_invalid("civ: english\ntitle: x\nsteps:\n  - rallypoint: [iron]\n", "file.yaml: steps[0].rallypoint[0]")
 
 
 if __name__ == "__main__":
