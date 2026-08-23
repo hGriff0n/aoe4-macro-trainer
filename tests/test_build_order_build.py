@@ -73,6 +73,38 @@ class BuildOrderBuildTests(unittest.TestCase):
         self.assertNotIn('title = "7 food villagers"', scar)
         self.assertFalse(list(self.root.rglob("*.tmp")))
 
+    def test_emits_extended_built_and_upgrade_payload_fields(self) -> None:
+        (self.orders / "extended.yaml").write_text(
+            """civ: english
+title: Extended
+steps:
+  - built:
+      - id: barracks
+        count: 2
+        vils: 3
+        location: forward
+      - oneof: [stable, archery_range]
+    upgrades:
+      - id: wheelbarrow
+        queued: true
+      - id: horticulture
+""",
+            encoding="utf-8",
+        )
+        reset_outputs(self.paths)
+        emit_outputs(compile_directory(self.orders), self.paths)
+
+        scar = self.paths.scar_output.read_text(encoding="utf-8")
+        self.assertIn(
+            'payload = {id = "barracks", count = 2, vils = 3, location = "forward"}',
+            scar,
+        )
+        self.assertIn(
+            'payload = {oneof = {"stable", "archery_range"}, count = 1}', scar
+        )
+        self.assertIn('payload = {id = "wheelbarrow", queued = true}', scar)
+        self.assertIn('payload = {id = "horticulture", queued = false}', scar)
+
     def test_malformed_yaml_leaves_baseline_and_never_calls_essence(self) -> None:
         (self.orders / "bad.yaml").write_text("civ: english\ntitle: Bad\nsteps: [not-a-mapping]\n", encoding="utf-8")
         calls = []

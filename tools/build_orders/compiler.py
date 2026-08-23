@@ -96,13 +96,17 @@ def _check_descriptors(kind: str, value: Any, file: Path, path: str) -> list[Che
         result = []
         for index, entry in enumerate(entries):
             item_path = path if kind == "age_up" else f"{path}[{index}]"
-            payload = _id_or_oneof(entry, file, item_path, {"id", "oneof", "vils", "location"} if kind == "age_up" else {"id", "oneof"})
+            permitted = {"id", "oneof", "vils", "location"}
+            if kind == "built":
+                permitted.add("count")
+            payload = _id_or_oneof(entry, file, item_path, permitted)
             mapping = _mapping(entry, file, item_path)
-            if kind == "age_up":
-                if "vils" in mapping:
-                    payload["vils"] = _positive(mapping["vils"], file, f"{item_path}.vils")
-                if "location" in mapping:
-                    payload["location"] = _string(mapping["location"], file, f"{item_path}.location")
+            if kind == "built":
+                payload["count"] = _positive(mapping.get("count", 1), file, f"{item_path}.count")
+            if "vils" in mapping:
+                payload["vils"] = _positive(mapping["vils"], file, f"{item_path}.vils")
+            if "location" in mapping:
+                payload["location"] = _string(mapping["location"], file, f"{item_path}.location")
             label = payload["id"] if "id" in payload else " or ".join(payload["oneof"])
             result.append(CheckDescriptor(kind, f"{kind.replace('_', ' ').title()}: {label}", False, dict(payload)))
         return result
@@ -111,7 +115,7 @@ def _check_descriptors(kind: str, value: Any, file: Path, path: str) -> list[Che
         for index, entry in enumerate(_list(value, file, path)):
             item_path = f"{path}[{index}]"
             mapping = _mapping(entry, file, item_path)
-            permitted = {"id", "optional"} if kind == "upgrades" else ({"id", "count", "constant", "queued"} if kind == "produce" else {"id", "count"})
+            permitted = {"id", "optional", "queued"} if kind == "upgrades" else ({"id", "count", "constant", "queued"} if kind == "produce" else {"id", "count"})
             unknown = set(mapping) - permitted
             if unknown:
                 _error(file, f"{item_path}.{next(iter(unknown))}", "unknown field")
@@ -121,6 +125,9 @@ def _check_descriptors(kind: str, value: Any, file: Path, path: str) -> list[Che
             if kind == "upgrades":
                 optional = mapping.get("optional", False)
                 if not isinstance(optional, bool): _error(file, f"{item_path}.optional", "must be boolean")
+                queued = mapping.get("queued", False)
+                if not isinstance(queued, bool): _error(file, f"{item_path}.queued", "must be boolean")
+                payload["queued"] = queued
             else:
                 payload["count"] = _positive(mapping.get("count", 1), file, f"{item_path}.count")
                 for flag in ("constant", "queued"):

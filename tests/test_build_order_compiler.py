@@ -41,8 +41,41 @@ class BuildOrderCompilerTests(unittest.TestCase):
         checks = catalog.build_orders[0].steps[0].checks
         self.assertEqual([check.kind for check in checks], ["vils", "vils", "rallypoint", "rallypoint", "built", "built", "age_up", "upgrades", "produce", "resources", "buildings", "units", "hints"])
         self.assertEqual(checks[1].payload, {"resource": "gold", "no_collect": True})
-        self.assertEqual(checks[5].payload, {"oneof": ["archery_range", "stable"]})
+        self.assertEqual(checks[5].payload, {"oneof": ["archery_range", "stable"], "count": 1})
         self.assertEqual(checks[7].optional, True)
+
+    def test_compiles_extended_built_and_upgrade_fields_with_defaults(self) -> None:
+        catalog = self.compile({"extended.yaml": """civ: English
+title: Extended
+steps:
+  - built:
+      - id: barracks
+        count: 2
+        vils: 3
+        location: forward
+      - oneof: [stable, archery_range]
+    upgrades:
+      - id: wheelbarrow
+        queued: true
+      - id: horticulture
+"""})
+        checks = catalog.build_orders[0].steps[0].checks
+        self.assertEqual(
+            checks[0].payload,
+            {"id": "barracks", "count": 2, "vils": 3, "location": "forward"},
+        )
+        self.assertEqual(
+            checks[1].payload,
+            {"oneof": ["stable", "archery_range"], "count": 1},
+        )
+        self.assertEqual(checks[2].payload, {"id": "wheelbarrow", "queued": True})
+        self.assertEqual(checks[3].payload, {"id": "horticulture", "queued": False})
+
+    def test_rejects_invalid_extended_built_and_upgrade_fields(self) -> None:
+        self.assert_invalid("civ: english\ntitle: x\nsteps:\n  - built: [{id: a, count: 0}]\n", "file.yaml: steps[0].built[0].count: must be a positive integer")
+        self.assert_invalid("civ: english\ntitle: x\nsteps:\n  - built: [{id: a, vils: false}]\n", "file.yaml: steps[0].built[0].vils: must be a positive integer")
+        self.assert_invalid('civ: english\ntitle: x\nsteps:\n  - built: [{id: a, location: ""}]\n', "file.yaml: steps[0].built[0].location: must be a non-empty string")
+        self.assert_invalid('civ: english\ntitle: x\nsteps:\n  - upgrades: [{id: a, queued: "yes"}]\n', "file.yaml: steps[0].upgrades[0].queued: must be boolean")
 
     def test_normalizes_unicode_ids(self) -> None:
         self.assertEqual(normalize_id("Énglish", "2 TC!"), "english-2-tc")
