@@ -1,7 +1,10 @@
+import io
+import os
 import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stderr
 from pathlib import Path
 
 from tools.build_mod import BuildConfig, BuildPaths, build_mod
@@ -25,7 +28,12 @@ class BuildOrderBuildTests(unittest.TestCase):
         self.orders = self.root / "orders"
         self.orders.mkdir()
         self.mod = self.root / "Macro Trainer.aoe4mod"
-        self.mod.write_text("mod", encoding="utf-8")
+        self.mod.write_text(
+            "<?xml version='1.0' encoding='utf-8'?>\n"
+            "<Mod xmlns='http://schemas.datacontract.org/2004/07/Essence.Editor.Modding'>"
+            "<DataIntermediatePath>cache</DataIntermediatePath></Mod>\n",
+            encoding="utf-8",
+        )
         self.config = BuildConfig(self.paths, self.orders, self.mod, Path(r"F:\Program Files (x86)\Steam\steamapps\common\Age of Empires IV Content Editor\EssenceLauncher.exe"))
 
     def tearDown(self) -> None:
@@ -52,13 +60,28 @@ class BuildOrderBuildTests(unittest.TestCase):
         self.assertIn("1000,,,Generated build-order option.,,,[English] Framework Test", locdb)
         self.assertIn("1001,,,Generated build-order title.,,,Framework Test", locdb)
         self.assertIn("1002,,,Generated step title.,,,Opening Economy", locdb)
+        self.assertIn("1003,,,Generated check title.,,,7 food villagers", locdb)
+        self.assertIn("1004,,,Generated check title.,,,Keep producing villagers", locdb)
+        self.assertIn("1005,,,Generated step title.,,,Step 2", locdb)
+        self.assertIn("1006,,,Generated check title.,,,400 wood", locdb)
+        self.assertIn(
+            'id = "english-framework-test:1:1", kind = "vils", '
+            'title = "$dfb5645698a84afb91cf7a2dfb0f4a4e:1003"',
+            scar,
+        )
+        self.assertIn('id = "english-framework-test:2:1"', scar)
+        self.assertNotIn('title = "7 food villagers"', scar)
         self.assertFalse(list(self.root.rglob("*.tmp")))
 
     def test_malformed_yaml_leaves_baseline_and_never_calls_essence(self) -> None:
         (self.orders / "bad.yaml").write_text("civ: english\ntitle: Bad\nsteps: [not-a-mapping]\n", encoding="utf-8")
         calls = []
-        result = build_mod(self.config, lambda *args, **kwargs: calls.append((args, kwargs)))
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            result = build_mod(self.config, lambda *args, **kwargs: calls.append((args, kwargs)))
         self.assertEqual(result, 2)
+        self.assertIn("bad.yaml: steps[0]: must be a mapping", stderr.getvalue())
+        self.assertNotIn("Traceback", stderr.getvalue())
         self.assertEqual(calls, [])
         self.assertEqual(self.paths.scar_output.read_text(encoding="utf-8"), "BUILD_ORDER_CATALOG = {}\n")
         self.assertEqual(self.paths.rdo_output.read_text(encoding="utf-8"), "<!-- GENERATED_BUILD_ORDER_ENUM_ITEMS -->\n")
@@ -68,6 +91,9 @@ class BuildOrderBuildTests(unittest.TestCase):
         calls = []
         def runner(command, **kwargs):
             calls.append((command, kwargs))
+            output = self.root / "cache" / "built.package"
+            output.parent.mkdir()
+            output.write_bytes(b"fresh")
             return subprocess.CompletedProcess(command, 0)
         self.assertEqual(build_mod(self.config, runner), 0)
         self.assertEqual(calls[0][0], [self.config.essence_launcher, "--build_mod", str(self.mod.resolve()), "--auto_close_burn_window"])
@@ -76,6 +102,109 @@ class BuildOrderBuildTests(unittest.TestCase):
         (self.orders / "valid.yaml").write_text(VALID, encoding="utf-8")
         result = build_mod(self.config, lambda command, **kwargs: subprocess.CompletedProcess(command, 23))
         self.assertEqual(result, 23)
+
+    def test_zero_exit_without_created_output_is_a_controlled_failure(self) -> None:
+        (self.orders / "valid.yaml").write_text(VALID, encoding="utf-8")
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            result = build_mod(
+                self.config,
+                lambda command, **kwargs: subprocess.CompletedProcess(command, 0),
+            )
+        self.assertEqual(result, 3)
+        self.assertIn("no fresh files", stderr.getvalue())
+        self.assertNotIn("Traceback", stderr.getvalue())
+
+    def test_zero_exit_with_unchanged_output_is_a_controlled_failure(self) -> None:
+        (self.orders / "valid.yaml").write_text(VALID, encoding="utf-8")
+        output = self.root / "cache" / "existing.package"
+        output.parent.mkdir()
+        output.write_bytes(b"stale")
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            result = build_mod(
+                self.config,
+                lambda command, **kwargs: subprocess.CompletedProcess(command, 0),
+            )
+        self.assertEqual(result, 3)
+        self.assertIn("no fresh files", stderr.getvalue())
+
+    def test_zero_exit_that_only_deletes_output_is_a_controlled_failure(self) -> None:
+        (self.orders / "valid.yaml").write_text(VALID, encoding="utf-8")
+        output = self.root / "cache" / "existing.package"
+        output.parent.mkdir()
+        output.write_bytes(b"stale")
+
+        def runner(command, **kwargs):
+            output.unlink()
+            return subprocess.CompletedProcess(command, 0)
+
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            result = build_mod(self.config, runner)
+        self.assertEqual(result, 3)
+        self.assertIn("no fresh files", stderr.getvalue())
+
+    def test_same_size_rewrite_with_preserved_timestamp_is_fresh(self) -> None:
+        (self.orders / "valid.yaml").write_text(VALID, encoding="utf-8")
+        output = self.root / "cache" / "existing.package"
+        output.parent.mkdir()
+        output.write_bytes(b"before")
+        original = output.stat()
+
+        def runner(command, **kwargs):
+            output.write_bytes(b"after!")
+            os.utime(output, ns=(original.st_atime_ns, original.st_mtime_ns))
+            return subprocess.CompletedProcess(command, 0)
+
+        self.assertEqual(build_mod(self.config, runner), 0)
+
+    def test_malformed_descriptor_is_a_controlled_failure(self) -> None:
+        (self.orders / "valid.yaml").write_text(VALID, encoding="utf-8")
+        self.mod.write_text("not xml", encoding="utf-8")
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            result = build_mod(
+                self.config,
+                lambda command, **kwargs: subprocess.CompletedProcess(command, 0),
+            )
+        self.assertEqual(result, 3)
+        self.assertIn("mod descriptor", stderr.getvalue())
+        self.assertNotIn("Traceback", stderr.getvalue())
+
+    def test_missing_template_is_a_controlled_failure_before_essence(self) -> None:
+        (self.orders / "valid.yaml").write_text(VALID, encoding="utf-8")
+        self.rdo_template.unlink()
+        calls = []
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            try:
+                result = build_mod(
+                    self.config,
+                    lambda *args, **kwargs: calls.append((args, kwargs)),
+                )
+            except Exception as exc:
+                self.fail(f"expected controlled failure, got {type(exc).__name__}: {exc}")
+        self.assertEqual(result, 3)
+        self.assertEqual(calls, [])
+        self.assertIn("Macro Trainer.rdo", stderr.getvalue())
+
+    def test_missing_rdo_marker_is_a_controlled_failure_before_essence(self) -> None:
+        (self.orders / "valid.yaml").write_text(VALID, encoding="utf-8")
+        self.rdo_template.write_text("<DataWarehouse/>", encoding="utf-8")
+        calls = []
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            try:
+                result = build_mod(
+                    self.config,
+                    lambda *args, **kwargs: calls.append((args, kwargs)),
+                )
+            except Exception as exc:
+                self.fail(f"expected controlled failure, got {type(exc).__name__}: {exc}")
+        self.assertEqual(result, 3)
+        self.assertEqual(calls, [])
+        self.assertIn("generated build-order enum marker", stderr.getvalue())
 
     def test_generate_only_cli_runs_directly_from_repository_root(self) -> None:
         root = Path(__file__).resolve().parents[1]

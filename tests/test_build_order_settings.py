@@ -108,6 +108,10 @@ class BuildOrderSettingTests(unittest.TestCase):
                 "civ: english\ntitle: 2 TC\nsteps:\n  - hints:\n      - Make villagers\n",
                 encoding="utf-8",
             )
+            (orders / "a-english-z.yaml").write_text(
+                "civ: english\ntitle: Z Plan\nsteps:\n  - hints:\n      - Keep scouting\n",
+                encoding="utf-8",
+            )
             paths = BuildPaths(root, rdo_template, locdb_template, root / "assets" / "Macro Trainer.rdo", root / "assets" / "Macro Trainer_en.csv", root / "assets" / "generated" / "build_orders.scar")
             reset_outputs(paths)
             emit_outputs(compile_directory(orders), paths)
@@ -116,11 +120,16 @@ class BuildOrderSettingTests(unittest.TestCase):
             items = option.findall("./DataProperty[@Name='m_enumItems']/DataObject")
             self.assertEqual(
                 [item.find("./DataProperty[@Name='m_key']").get("Value") for item in items],
-                ["build_order_none", "build_order_english-2-tc", "build_order_zulu-z-plan"],
+                [
+                    "build_order_none",
+                    "build_order_english-2-tc",
+                    "build_order_english-z-plan",
+                    "build_order_zulu-z-plan",
+                ],
             )
             self.assertEqual(
                 [item.find("./DataProperty[@Name='m_isDefaultValue']").get("Value") for item in items],
-                ["true", "false", "false"],
+                ["true", "false", "false", "false"],
             )
             self.assertTrue(all(item.find("./DataProperty[@Name='m_devOnly']").get("Value") == "false" for item in items))
 
@@ -129,14 +138,17 @@ class BuildOrderSettingTests(unittest.TestCase):
                 for item in ET.parse(paths.rdo_output).getroot().findall(".//DataObject")
                 if item.get("Id", "").startswith("910")
             ]
-            self.assertEqual(generated_ids, list(range(GENERATED_ID_START, GENERATED_ID_START + 6)))
+            self.assertEqual(generated_ids, list(range(GENERATED_ID_START, GENERATED_ID_START + 9)))
             self.assertEqual(len(generated_ids), len(set(generated_ids)))
 
             rows = csv_rows(paths.locdb_output)
             labels = []
             for item in items[1:]:
                 labels.append(rows[int(item.find("./DataProperty[@Name='m_feName']//DataProperty[@Name='m_locStringKey']").get("Value"))][-1])
-            self.assertEqual(labels, ["[English] 2 TC", "[Zulu] Z Plan"])
+            self.assertEqual(
+                labels,
+                ["[English] 2 TC", "[English] Z Plan", "[Zulu] Z Plan"],
+            )
             self.assertEqual([rows[number][-1] for number in range(1, 20)], [csv_rows(LOCDB_TEMPLATE)[number][-1] for number in range(1, 20)])
 
     def test_settings_records_selected_generated_id_without_starting_objectives(self) -> None:

@@ -17,7 +17,7 @@ function BuildOrderStartup_Start()
 	local buildOrder = BUILD_ORDER_CATALOG[selectedID]
 	local localPlayer = Game_GetLocalPlayer()
 	local actualCiv = string.lower(Player_GetRaceName(localPlayer))
-	if buildOrder == nil or actualCiv ~= buildOrder.civ then
+	if buildOrder == nil or actualCiv ~= string.lower(buildOrder.civ) then
 		BuildOrderStartup_ShowInvalidBuildError(buildOrder, actualCiv)
 		return
 	end

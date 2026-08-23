@@ -8,6 +8,8 @@ from .model import Catalog
 NAMESPACE = "dfb5645698a84afb91cf7a2dfb0f4a4e"
 GENERATED_RDO_ID_START = 9100000000000000000
 GENERATED_ENUM_MARKER = "<!-- GENERATED_BUILD_ORDER_ENUM_ITEMS -->"
+LocalizationKey = tuple[str, int] | tuple[str, int, int]
+LocalizationMap = dict[LocalizationKey, int]
 
 
 def _atomic_write(path: Path, content: str) -> None:
@@ -27,7 +29,7 @@ def _lua(value: object) -> str:
     raise TypeError(f"unsupported SCAR value: {value!r}")
 
 
-def _render_scar(catalog: Catalog, localization: dict[tuple[str, int], int]) -> str:
+def _render_scar(catalog: Catalog, localization: LocalizationMap) -> str:
     lines = ["BUILD_ORDER_CATALOG = {}"]
     for order in catalog.build_orders:
         title_id = localization[(order.id, -1)]
@@ -35,19 +37,25 @@ def _render_scar(catalog: Catalog, localization: dict[tuple[str, int], int]) -> 
         for step_index, step in enumerate(order.steps):
             step_id = localization[(order.id, step_index)]
             lines.append(f'{{ title = "${NAMESPACE}:{step_id}", checks = {{')
-            for check in step.checks:
-                lines.append(f'{{ kind = {_lua(check.kind)}, title = {_lua(check.title)}, optional = {_lua(check.optional)}, payload = {_lua(check.payload)} }},')
+            for check_index, check in enumerate(step.checks):
+                check_id = f"{order.id}:{step_index + 1}:{check_index + 1}"
+                check_title_id = localization[(order.id, step_index, check_index)]
+                lines.append(
+                    f'{{ id = {_lua(check_id)}, kind = {_lua(check.kind)}, '
+                    f'title = "${NAMESPACE}:{check_title_id}", '
+                    f'optional = {_lua(check.optional)}, payload = {_lua(check.payload)} }},'
+                )
             lines.append("}},")
         lines.append("} }")
     return "\n".join(lines) + "\n"
 
 
-def _render_locdb(template: Path, catalog: Catalog) -> tuple[str, dict[tuple[str, int], int]]:
+def _render_locdb(template: Path, catalog: Catalog) -> tuple[str, LocalizationMap]:
     baseline = template.read_text(encoding="utf-8-sig")
     if baseline and not baseline.endswith(("\n", "\r")): baseline += "\n"
     output = io.StringIO(newline="")
     writer = csv.writer(output, lineterminator="\n")
-    localization: dict[tuple[str, int], int] = {}
+    localization: LocalizationMap = {}
     identifier = 1000
     for order in sorted(catalog.build_orders, key=lambda item: (item.civ.casefold(), item.title.casefold())):
         localization[(order.id, -2)] = identifier
@@ -61,6 +69,12 @@ def _render_locdb(template: Path, catalog: Catalog) -> tuple[str, dict[tuple[str
             localization[(order.id, step_index)] = identifier
             writer.writerow([identifier, "", "", "Generated step title.", "", "", step.title or f"Step {step_index + 1}"])
             identifier += 1
+            for check_index, check in enumerate(step.checks):
+                localization[(order.id, step_index, check_index)] = identifier
+                writer.writerow(
+                    [identifier, "", "", "Generated check title.", "", "", check.title]
+                )
+                identifier += 1
     return baseline + output.getvalue(), localization
 
 
@@ -77,7 +91,7 @@ def _reflect_loc_string(identifier: int, owner_id: int, localization_id: int, in
     ])
 
 
-def _render_rdo(template: str, catalog: Catalog, localization: dict[tuple[str, int], int]) -> str:
+def _render_rdo(template: str, catalog: Catalog, localization: LocalizationMap) -> str:
     if template.count(GENERATED_ENUM_MARKER) != 1:
         raise ValueError("RDO template must contain exactly one generated build-order enum marker")
     indent = "\t" * 9

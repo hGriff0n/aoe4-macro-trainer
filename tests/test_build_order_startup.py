@@ -1,7 +1,13 @@
 import csv
 import re
+import shutil
+import tempfile
 import unittest
 from pathlib import Path
+
+from tools.build_mod import BuildPaths
+from tools.build_orders.compiler import compile_directory
+from tools.build_orders.emitters import emit_outputs, reset_outputs
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -82,7 +88,8 @@ class BuildOrderStartupContractTests(unittest.TestCase):
     def test_mismatch_and_missing_catalog_use_invalid_build_alert(self) -> None:
         start = function_body(self.startup, "BuildOrderStartup_Start")
         self.assertIn(
-            "if buildOrder == nil or actualCiv ~= buildOrder.civ then", start
+            "if buildOrder == nil or actualCiv ~= string.lower(buildOrder.civ) then",
+            start,
         )
         self.assertIn(
             "BuildOrderStartup_ShowInvalidBuildError(buildOrder, actualCiv)", start
@@ -95,6 +102,41 @@ class BuildOrderStartupContractTests(unittest.TestCase):
         self.assertIn("buildOrder.civ", invalid)
         self.assertIn("actualCiv", invalid)
         self.assertIn("BuildOrderStartup_ShowError(", invalid)
+
+    def test_authored_civ_case_survives_generation_and_matches_case_insensitively(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            templates = root / "templates"
+            templates.mkdir()
+            rdo_template = templates / "Macro Trainer.rdo"
+            locdb_template = templates / "Macro Trainer_en.csv"
+            rdo_template.write_text(
+                "<!-- GENERATED_BUILD_ORDER_ENUM_ITEMS -->\n", encoding="utf-8"
+            )
+            shutil.copyfile(LOCDB_PATH, locdb_template)
+            orders = root / "orders"
+            orders.mkdir()
+            (orders / "upper.yaml").write_text(
+                "civ: English\ntitle: Case Test\nsteps:\n  - hints:\n      - Scout\n",
+                encoding="utf-8",
+            )
+            paths = BuildPaths(
+                root,
+                rdo_template,
+                locdb_template,
+                root / "assets" / "Macro Trainer.rdo",
+                root / "assets" / "Macro Trainer_en.csv",
+                root / "assets" / "generated" / "build_orders.scar",
+            )
+            reset_outputs(paths)
+            emit_outputs(compile_directory(orders), paths)
+
+            generated = paths.scar_output.read_text(encoding="utf-8")
+            self.assertIn('civ = "English"', generated)
+            start = function_body(self.startup, "BuildOrderStartup_Start")
+            self.assertIn(
+                "actualCiv ~= string.lower(buildOrder.civ)", start
+            )
 
     def test_alert_pauses_and_configures_only_the_continue_button(self) -> None:
         show = function_body(self.startup, "BuildOrderStartup_ShowError")
