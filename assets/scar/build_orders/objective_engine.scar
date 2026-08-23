@@ -1,0 +1,157 @@
+BUILD_ORDER_STATE = {
+	localPlayer = nil,
+	selectedBuild = nil,
+	activeStepIndex = nil,
+	primaryObjectiveID = nil,
+	childByCheckID = {},
+	childRecords = {},
+	handlerMap = {},
+	advancing = false,
+	activatingHandlers = false,
+}
+
+function BuildOrder_RegisterHandler(kind, handler)
+	BUILD_ORDER_STATE.handlerMap[kind] = handler
+end
+
+function BuildOrder_ClearActiveHierarchy()
+	for _, child in ipairs(BUILD_ORDER_STATE.childRecords) do
+		local handler = child.handler
+		if handler ~= nil and handler.deactivate ~= nil then
+			handler.deactivate(child.check, child.objectiveID, BUILD_ORDER_STATE)
+		end
+	end
+
+	for _, child in ipairs(BUILD_ORDER_STATE.childRecords) do
+		Obj_Delete(child.objectiveID)
+	end
+	if BUILD_ORDER_STATE.primaryObjectiveID ~= nil then
+		Obj_Delete(BUILD_ORDER_STATE.primaryObjectiveID)
+	end
+
+	BUILD_ORDER_STATE.primaryObjectiveID = nil
+	BUILD_ORDER_STATE.childByCheckID = {}
+	BUILD_ORDER_STATE.childRecords = {}
+end
+
+function BuildOrder_Stop()
+	BUILD_ORDER_STATE.advancing = true
+	BuildOrder_ClearActiveHierarchy()
+	BUILD_ORDER_STATE.localPlayer = nil
+	BUILD_ORDER_STATE.selectedBuild = nil
+	BUILD_ORDER_STATE.activeStepIndex = nil
+	BUILD_ORDER_STATE.activatingHandlers = false
+	BUILD_ORDER_STATE.advancing = false
+end
+
+function BuildOrder_Start(buildOrder, player)
+	BuildOrder_Stop()
+	if buildOrder == nil or player == nil then
+		return
+	end
+
+	BUILD_ORDER_STATE.localPlayer = player
+	BUILD_ORDER_STATE.selectedBuild = buildOrder
+	BuildOrder_ActivateStep(1)
+end
+
+function BuildOrder_ActivateStep(stepIndex)
+	if BUILD_ORDER_STATE.selectedBuild == nil or BUILD_ORDER_STATE.localPlayer == nil then
+		return
+	end
+
+	local step = BUILD_ORDER_STATE.selectedBuild.steps[stepIndex]
+	if step == nil then
+		BuildOrder_Stop()
+		return
+	end
+
+	BUILD_ORDER_STATE.activeStepIndex = stepIndex
+	local player = BUILD_ORDER_STATE.localPlayer
+	local primaryID = Obj_Create(
+		player.id, step.title, Loc_Empty(), "", DT_PRIMARY_DEFAULT,
+		player.raceName, OT_Primary, 0, "buildOrderStep")
+	Obj_SetState(primaryID, OS_Incomplete)
+	BUILD_ORDER_STATE.primaryObjectiveID = primaryID
+
+	for checkIndex, check in ipairs(step.checks) do
+		local checkID = check.id
+		if checkID == nil then
+			checkID = tostring(stepIndex) .. ":" .. tostring(checkIndex)
+			check = {
+				id = checkID,
+				kind = check.kind,
+				title = check.title,
+				optional = check.optional,
+				payload = check.payload,
+			}
+		end
+		local childID = Obj_Create(
+			player.id, check.title, Loc_Empty(), "", DT_SECONDARY_DEFAULT,
+			player.raceName, OT_Secondary, primaryID, "buildOrderCheck")
+		Obj_SetState(childID, OS_Incomplete)
+		local child = {
+			checkID = checkID,
+			check = check,
+			objectiveID = childID,
+			handler = BUILD_ORDER_STATE.handlerMap[check.kind],
+			completed = false,
+		}
+		BUILD_ORDER_STATE.childByCheckID[checkID] = child
+		table.insert(BUILD_ORDER_STATE.childRecords, child)
+	end
+
+	BUILD_ORDER_STATE.activatingHandlers = true
+	for _, child in ipairs(BUILD_ORDER_STATE.childRecords) do
+		local handler = child.handler
+		if handler ~= nil and handler.activate ~= nil then
+			handler.activate(child.check, child.objectiveID, BUILD_ORDER_STATE)
+		end
+	end
+	BUILD_ORDER_STATE.activatingHandlers = false
+	BuildOrder_TryAdvance()
+end
+
+function BuildOrder_NotifyComplete(checkID)
+	local child = BUILD_ORDER_STATE.childByCheckID[checkID]
+	if child == nil or child.completed == true then
+		return
+	end
+
+	child.completed = true
+	Obj_SetState(child.objectiveID, OS_Complete)
+	BuildOrder_TryAdvance()
+end
+
+function BuildOrder_TryAdvance()
+	if BUILD_ORDER_STATE.advancing == true then
+		return
+	end
+	if BUILD_ORDER_STATE.activatingHandlers == true then
+		return
+	end
+
+	for _, child in ipairs(BUILD_ORDER_STATE.childRecords) do
+		if child.check.optional == false and child.completed == false then
+			return
+		end
+	end
+
+	if BUILD_ORDER_STATE.primaryObjectiveID == nil then
+		return
+	end
+
+	BUILD_ORDER_STATE.advancing = true
+	Obj_SetState(BUILD_ORDER_STATE.primaryObjectiveID, OS_Complete)
+	local nextStepIndex = BUILD_ORDER_STATE.activeStepIndex + 1
+	BuildOrder_ClearActiveHierarchy()
+	if nextStepIndex > #BUILD_ORDER_STATE.selectedBuild.steps then
+		BUILD_ORDER_STATE.advancing = false
+		BuildOrder_Stop()
+		return
+	end
+
+	BUILD_ORDER_STATE.activeStepIndex = nextStepIndex
+	BUILD_ORDER_STATE.advancing = false
+	BuildOrder_ActivateStep(nextStepIndex)
+end

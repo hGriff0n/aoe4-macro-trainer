@@ -100,6 +100,13 @@ class SimspeedCycleContractTests(unittest.TestCase):
             phase, "Misc_SetSimRate(simRate)", "Rule_AddOneShot("
         )
 
+    def test_build_order_sources_load_generated_catalog_before_engine(self) -> None:
+        generated = 'import("generated/build_orders.scar")'
+        engine = 'import("build_orders/objective_engine.scar")'
+        self.assertIn(generated, self.source)
+        self.assertIn(engine, self.source)
+        self.assertLess(self.source.index(generated), self.source.index(engine))
+
     def test_lobby_options_define_integer_durations_and_slow_rate_enum(self) -> None:
         sections = self.rdo_root.findall(".//DataObject[@Type='WinCondition::OptionSectionUIDescriptor']")
         section = next(
