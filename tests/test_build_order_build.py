@@ -3,6 +3,8 @@ import os
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 import unittest
 from contextlib import redirect_stderr
 from pathlib import Path
@@ -140,6 +142,27 @@ steps:
 
         self.assertEqual(build_mod(self.config, runner), 0)
 
+    def test_successful_build_waits_for_delayed_final_archive(self) -> None:
+        (self.orders / "valid.yaml").write_text(VALID, encoding="utf-8")
+        worker = None
+
+        def runner(command, **kwargs):
+            nonlocal worker
+
+            def emit_archive() -> None:
+                time.sleep(0.05)
+                self.archive.parent.mkdir()
+                self.archive.write_bytes(b"delayed archive")
+
+            worker = threading.Thread(target=emit_archive)
+            worker.start()
+            return subprocess.CompletedProcess(command, 0)
+
+        result = build_mod(self.config, runner)
+        if worker is not None:
+            worker.join()
+        self.assertEqual(result, 0)
+
     def test_nonzero_essence_result_is_returned(self) -> None:
         (self.orders / "valid.yaml").write_text(VALID, encoding="utf-8")
         result = build_mod(self.config, lambda command, **kwargs: subprocess.CompletedProcess(command, 23))
@@ -152,6 +175,7 @@ steps:
             result = build_mod(
                 self.config,
                 lambda command, **kwargs: subprocess.CompletedProcess(command, 0),
+                archive_wait_seconds=0,
             )
         self.assertEqual(result, 3)
         self.assertIn("no fresh archive", stderr.getvalue())
@@ -166,6 +190,7 @@ steps:
             result = build_mod(
                 self.config,
                 lambda command, **kwargs: subprocess.CompletedProcess(command, 0),
+                archive_wait_seconds=0,
             )
         self.assertEqual(result, 3)
         self.assertIn("no fresh archive", stderr.getvalue())
@@ -181,7 +206,7 @@ steps:
 
         stderr = io.StringIO()
         with redirect_stderr(stderr):
-            result = build_mod(self.config, runner)
+            result = build_mod(self.config, runner, archive_wait_seconds=0)
         self.assertEqual(result, 3)
         self.assertIn("no fresh archive", stderr.getvalue())
 
@@ -196,7 +221,7 @@ steps:
 
         stderr = io.StringIO()
         with redirect_stderr(stderr):
-            result = build_mod(self.config, runner)
+            result = build_mod(self.config, runner, archive_wait_seconds=0)
         self.assertEqual(result, 3)
         self.assertIn("no fresh archive", stderr.getvalue())
 

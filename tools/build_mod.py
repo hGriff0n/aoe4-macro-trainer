@@ -2,6 +2,7 @@ import argparse
 import hashlib
 import subprocess
 import sys
+import time
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
@@ -17,6 +18,8 @@ from tools.build_orders.model import Catalog
 
 
 BUILD_OPERATION_ERROR = 3
+ARCHIVE_WAIT_SECONDS = 120
+ARCHIVE_POLL_SECONDS = 0.25
 
 
 class BuildOperationError(RuntimeError):
@@ -82,12 +85,32 @@ def _file_signature(path: Path) -> tuple[int, int, str] | None:
     return stat.st_mtime_ns, stat.st_size, _file_digest(path)
 
 
+def _wait_for_fresh_archive(
+    path: Path,
+    before: tuple[int, int, str] | None,
+    timeout: float,
+) -> bool:
+    deadline = time.monotonic() + timeout
+    while True:
+        after = _file_signature(path)
+        if after is not None and before != after:
+            return True
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return False
+        time.sleep(min(ARCHIVE_POLL_SECONDS, remaining))
+
+
 def _report_operational_error(exc: Exception) -> int:
     print(f"build failed: {exc}", file=sys.stderr)
     return BUILD_OPERATION_ERROR
 
 
-def build_mod(config: BuildConfig, runner: Callable[..., subprocess.CompletedProcess] = subprocess.run) -> int:
+def build_mod(
+    config: BuildConfig,
+    runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+    archive_wait_seconds: float = ARCHIVE_WAIT_SECONDS,
+) -> int:
     try:
         generate_assets(config)
     except BuildOrderValidationError as exc:
@@ -112,10 +135,14 @@ def build_mod(config: BuildConfig, runner: Callable[..., subprocess.CompletedPro
         return result.returncode
 
     try:
-        after = _file_signature(output_path)
+        has_fresh_archive = _wait_for_fresh_archive(
+            output_path,
+            before,
+            archive_wait_seconds,
+        )
     except (OSError, BuildOperationError) as exc:
         return _report_operational_error(exc)
-    if after is None or before == after:
+    if not has_fresh_archive:
         return _report_operational_error(
             BuildOperationError(
                 f"Essence exited successfully but produced no fresh archive at {output_path}"

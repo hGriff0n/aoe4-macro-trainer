@@ -17,7 +17,7 @@ Build exactly one Macro Trainer package through the repository build wrapper. Th
    ```
 
 3. Display the exact command and ask the user to confirm before executing it. The wrapper generates local assets and launches an external build that writes build output.
-4. On confirmation, execute the command in PowerShell from the project directory. Preserve and report the exit code plus any relevant output. A nonzero exit means the mod was not successfully built. If the wrapper or configured launcher is absent, report the expected path and do not substitute another tool.
+4. On confirmation, execute the command in PowerShell from the project directory and wait for the wrapper itself to exit. After EssenceLauncher returns, the wrapper may poll the final archive for up to 120 seconds while the asynchronous export finishes. Preserve and report the wrapper's final exit code plus any relevant output. A nonzero final exit means the mod was not successfully built. If the wrapper or configured launcher is absent, report the expected path and do not substitute another tool.
 
 ## Boundaries
 
