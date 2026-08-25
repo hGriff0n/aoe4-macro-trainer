@@ -83,6 +83,18 @@ class BuildOrderObjectiveContractTests(unittest.TestCase):
         self.assertNotIn("player.raceName", activate)
         self.assertIn("Obj_SetState(primaryID, OS_Incomplete)", activate)
         self.assertIn("Obj_SetState(childID, OS_Incomplete)", activate)
+        self.assertIn("Obj_SetVisible(primaryID, true)", activate)
+        self.assertIn("Obj_SetVisible(childID, true)", activate)
+        self.assert_order(
+            activate,
+            "Obj_SetState(primaryID, OS_Incomplete)",
+            "Obj_SetVisible(primaryID, true)",
+        )
+        self.assert_order(
+            activate,
+            "Obj_SetState(childID, OS_Incomplete)",
+            "Obj_SetVisible(childID, true)",
+        )
         self.assertNotIn("DT_PRIMARY_WARNING", self.engine)
         self.assertNotIn("DT_SECONDARY_WARNING", self.engine)
         self.assertNotIn("OT_Warning", self.engine)

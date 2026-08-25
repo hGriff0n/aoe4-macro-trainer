@@ -73,6 +73,7 @@ function BuildOrder_ActivateStep(stepIndex)
 		player, step.title, Loc_Empty(), "", DT_PRIMARY_DEFAULT,
 		faction, OT_Primary, 0, "buildOrderStep")
 	Obj_SetState(primaryID, OS_Incomplete)
+	Obj_SetVisible(primaryID, true)
 	BUILD_ORDER_STATE.primaryObjectiveID = primaryID
 
 	for checkIndex, check in ipairs(step.checks) do
@@ -91,6 +92,7 @@ function BuildOrder_ActivateStep(stepIndex)
 			player, check.title, Loc_Empty(), "", DT_SECONDARY_DEFAULT,
 			faction, OT_Secondary, primaryID, "buildOrderCheck")
 		Obj_SetState(childID, OS_Incomplete)
+		Obj_SetVisible(childID, true)
 		local child = {
 			checkID = checkID,
 			check = check,
