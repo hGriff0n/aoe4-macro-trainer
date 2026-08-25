@@ -1,6 +1,6 @@
 # Build-Order Check Handler Guide
 
-This guide explains how to add a production check to the GRI-71 build-order objective engine. The binding architecture and acceptance criteria live in `docs/superpowers/specs/2026-08-25-build-order-checks-design.md`.
+This guide explains how to add a production check to the GRI-83 build-order objective engine. The binding architecture and acceptance criteria live in `docs/superpowers/specs/2026-08-25-build-order-checks-design.md`.
 
 ## Data Flow
 
@@ -79,6 +79,8 @@ BuildOrder_SetCheckComplete(check.id, predicateIsTrue)
 For a latched event counter, call it with `true` once the human player's counter reaches its threshold. For a reversible polling check, call it after each poll with the current predicate result. Repeating the current state is safe and must not replay completion effects.
 
 `BuildOrder_NotifyComplete(check.id)` is retained for compatibility, but new handlers should prefer the explicit state API.
+
+The engine ignores unknown check IDs and repeated assignments of the current state. A transition to `true` marks the child objective complete and asks the engine to advance when all required checks are complete; a transition to `false` marks it incomplete without advancing.
 
 An old callback may fire after a transition. The engine ignores unknown inactive check IDs, and the handler callback should also return immediately when its per-check state is absent.
 

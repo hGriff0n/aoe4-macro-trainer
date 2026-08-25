@@ -116,13 +116,26 @@ class BuildOrderObjectiveContractTests(unittest.TestCase):
 
     def test_missing_handler_leaves_child_pending_and_completion_latches(self) -> None:
         activate = function_body(self.engine, "BuildOrder_ActivateStep")
-        notify = function_body(self.engine, "BuildOrder_NotifyComplete")
+        setter = function_body(self.engine, "BuildOrder_SetCheckComplete")
         self.assertIn("Obj_SetState(childID, OS_Incomplete)", activate)
         self.assertIn("if handler ~= nil and handler.activate ~= nil then", activate)
-        self.assertIn("if child == nil or child.completed == true then", notify)
-        self.assertIn("child.completed = true", notify)
-        self.assertIn("Obj_SetState(child.objectiveID, OS_Complete)", notify)
-        self.assertIn("BuildOrder_TryAdvance()", notify)
+        self.assertIn("if child == nil or child.completed == completed then", setter)
+        self.assertIn("child.completed = completed", setter)
+        self.assertIn("Obj_SetState(child.objectiveID, OS_Complete)", setter)
+        self.assertIn("BuildOrder_TryAdvance()", setter)
+
+    def test_state_api_is_idempotent_reversible_and_advances_only_on_completion(self) -> None:
+        body = function_body(self.engine, "BuildOrder_SetCheckComplete")
+        self.assertIn("if child == nil or child.completed == completed then", body)
+        self.assertIn("child.completed = completed", body)
+        self.assertIn("OS_Complete", body)
+        self.assertIn("OS_Incomplete", body)
+        self.assertIn("if completed == true then", body)
+        self.assertIn("BuildOrder_TryAdvance()", body)
+
+    def test_notify_complete_wraps_explicit_state_api(self) -> None:
+        body = function_body(self.engine, "BuildOrder_NotifyComplete")
+        self.assertIn("BuildOrder_SetCheckComplete(checkID, true)", body)
 
     def test_required_children_block_but_optional_children_do_not(self) -> None:
         advance = function_body(self.engine, "BuildOrder_TryAdvance")

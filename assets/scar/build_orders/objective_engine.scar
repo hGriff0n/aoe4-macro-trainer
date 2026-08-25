@@ -115,15 +115,23 @@ function BuildOrder_ActivateStep(stepIndex)
 	BuildOrder_TryAdvance()
 end
 
-function BuildOrder_NotifyComplete(checkID)
+function BuildOrder_SetCheckComplete(checkID, completed)
 	local child = BUILD_ORDER_STATE.childByCheckID[checkID]
-	if child == nil or child.completed == true then
+	if child == nil or child.completed == completed then
 		return
 	end
 
-	child.completed = true
-	Obj_SetState(child.objectiveID, OS_Complete)
-	BuildOrder_TryAdvance()
+	child.completed = completed
+	if completed == true then
+		Obj_SetState(child.objectiveID, OS_Complete)
+		BuildOrder_TryAdvance()
+	else
+		Obj_SetState(child.objectiveID, OS_Incomplete)
+	end
+end
+
+function BuildOrder_NotifyComplete(checkID)
+	BuildOrder_SetCheckComplete(checkID, true)
 end
 
 function BuildOrder_TryAdvance()
