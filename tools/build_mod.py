@@ -48,7 +48,7 @@ def generate_assets(config: BuildConfig) -> Catalog:
     return catalog
 
 
-def _intermediate_output_path(mod_file: Path) -> Path:
+def _validate_mod_descriptor(mod_file: Path) -> None:
     try:
         root = ET.parse(mod_file).getroot()
     except ET.ParseError as exc:
@@ -58,10 +58,11 @@ def _intermediate_output_path(mod_file: Path) -> Path:
         raise BuildOperationError(
             f"mod descriptor {mod_file} has no DataIntermediatePath"
         )
-    configured = Path(element.text.strip())
-    if not configured.is_absolute():
-        configured = mod_file.parent / configured
-    return configured.resolve()
+
+
+def _archive_output_path(mod_file: Path) -> Path:
+    archive_name = f"{mod_file.stem.replace(' ', '_')}.sga"
+    return (mod_file.parent / "archives" / archive_name).resolve()
 
 
 def _file_digest(path: Path) -> str:
@@ -72,20 +73,13 @@ def _file_digest(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _snapshot_files(root: Path) -> dict[str, tuple[int, int, str]]:
-    if not root.exists():
-        return {}
-    if not root.is_dir():
-        raise BuildOperationError(f"intermediate output path is not a directory: {root}")
-    snapshot: dict[str, tuple[int, int, str]] = {}
-    for path in sorted(item for item in root.rglob("*") if item.is_file()):
-        stat = path.stat()
-        snapshot[path.relative_to(root).as_posix()] = (
-            stat.st_mtime_ns,
-            stat.st_size,
-            _file_digest(path),
-        )
-    return snapshot
+def _file_signature(path: Path) -> tuple[int, int, str] | None:
+    if not path.exists():
+        return None
+    if not path.is_file():
+        raise BuildOperationError(f"archive output path is not a file: {path}")
+    stat = path.stat()
+    return stat.st_mtime_ns, stat.st_size, _file_digest(path)
 
 
 def _report_operational_error(exc: Exception) -> int:
@@ -103,8 +97,9 @@ def build_mod(config: BuildConfig, runner: Callable[..., subprocess.CompletedPro
         return _report_operational_error(exc)
 
     try:
-        output_path = _intermediate_output_path(config.mod_file)
-        before = _snapshot_files(output_path)
+        _validate_mod_descriptor(config.mod_file)
+        output_path = _archive_output_path(config.mod_file)
+        before = _file_signature(output_path)
     except (OSError, BuildOperationError) as exc:
         return _report_operational_error(exc)
 
@@ -117,14 +112,13 @@ def build_mod(config: BuildConfig, runner: Callable[..., subprocess.CompletedPro
         return result.returncode
 
     try:
-        after = _snapshot_files(output_path)
+        after = _file_signature(output_path)
     except (OSError, BuildOperationError) as exc:
         return _report_operational_error(exc)
-    has_fresh_file = any(before.get(path) != signature for path, signature in after.items())
-    if not has_fresh_file:
+    if after is None or before == after:
         return _report_operational_error(
             BuildOperationError(
-                f"Essence exited successfully but produced no fresh files in {output_path}"
+                f"Essence exited successfully but produced no fresh archive at {output_path}"
             )
         )
     return 0

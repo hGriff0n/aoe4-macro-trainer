@@ -34,6 +34,7 @@ class BuildOrderBuildTests(unittest.TestCase):
             "<DataIntermediatePath>cache</DataIntermediatePath></Mod>\n",
             encoding="utf-8",
         )
+        self.archive = self.root / "archives" / "Macro_Trainer.sga"
         self.config = BuildConfig(self.paths, self.orders, self.mod, Path(r"F:\Program Files (x86)\Steam\steamapps\common\Age of Empires IV Content Editor\EssenceLauncher.exe"))
 
     def tearDown(self) -> None:
@@ -123,12 +124,21 @@ steps:
         calls = []
         def runner(command, **kwargs):
             calls.append((command, kwargs))
-            output = self.root / "cache" / "built.package"
-            output.parent.mkdir()
-            output.write_bytes(b"fresh")
+            self.archive.parent.mkdir()
+            self.archive.write_bytes(b"fresh")
             return subprocess.CompletedProcess(command, 0)
         self.assertEqual(build_mod(self.config, runner), 0)
         self.assertEqual(calls[0][0], [self.config.essence_launcher, "--build_mod", str(self.mod.resolve()), "--auto_close_burn_window"])
+
+    def test_successful_build_accepts_fresh_final_archive_without_cache_changes(self) -> None:
+        (self.orders / "valid.yaml").write_text(VALID, encoding="utf-8")
+
+        def runner(command, **kwargs):
+            self.archive.parent.mkdir()
+            self.archive.write_bytes(b"fresh archive")
+            return subprocess.CompletedProcess(command, 0)
+
+        self.assertEqual(build_mod(self.config, runner), 0)
 
     def test_nonzero_essence_result_is_returned(self) -> None:
         (self.orders / "valid.yaml").write_text(VALID, encoding="utf-8")
@@ -144,14 +154,13 @@ steps:
                 lambda command, **kwargs: subprocess.CompletedProcess(command, 0),
             )
         self.assertEqual(result, 3)
-        self.assertIn("no fresh files", stderr.getvalue())
+        self.assertIn("no fresh archive", stderr.getvalue())
         self.assertNotIn("Traceback", stderr.getvalue())
 
     def test_zero_exit_with_unchanged_output_is_a_controlled_failure(self) -> None:
         (self.orders / "valid.yaml").write_text(VALID, encoding="utf-8")
-        output = self.root / "cache" / "existing.package"
-        output.parent.mkdir()
-        output.write_bytes(b"stale")
+        self.archive.parent.mkdir()
+        self.archive.write_bytes(b"stale")
         stderr = io.StringIO()
         with redirect_stderr(stderr):
             result = build_mod(
@@ -159,34 +168,50 @@ steps:
                 lambda command, **kwargs: subprocess.CompletedProcess(command, 0),
             )
         self.assertEqual(result, 3)
-        self.assertIn("no fresh files", stderr.getvalue())
+        self.assertIn("no fresh archive", stderr.getvalue())
 
     def test_zero_exit_that_only_deletes_output_is_a_controlled_failure(self) -> None:
         (self.orders / "valid.yaml").write_text(VALID, encoding="utf-8")
-        output = self.root / "cache" / "existing.package"
-        output.parent.mkdir()
-        output.write_bytes(b"stale")
+        self.archive.parent.mkdir()
+        self.archive.write_bytes(b"stale")
 
         def runner(command, **kwargs):
-            output.unlink()
+            self.archive.unlink()
             return subprocess.CompletedProcess(command, 0)
 
         stderr = io.StringIO()
         with redirect_stderr(stderr):
             result = build_mod(self.config, runner)
         self.assertEqual(result, 3)
-        self.assertIn("no fresh files", stderr.getvalue())
+        self.assertIn("no fresh archive", stderr.getvalue())
+
+    def test_cache_only_changes_do_not_count_as_success(self) -> None:
+        (self.orders / "valid.yaml").write_text(VALID, encoding="utf-8")
+
+        def runner(command, **kwargs):
+            output = self.root / "cache" / "built.package"
+            output.parent.mkdir()
+            output.write_bytes(b"fresh cache")
+            return subprocess.CompletedProcess(command, 0)
+
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            result = build_mod(self.config, runner)
+        self.assertEqual(result, 3)
+        self.assertIn("no fresh archive", stderr.getvalue())
 
     def test_same_size_rewrite_with_preserved_timestamp_is_fresh(self) -> None:
         (self.orders / "valid.yaml").write_text(VALID, encoding="utf-8")
-        output = self.root / "cache" / "existing.package"
-        output.parent.mkdir()
-        output.write_bytes(b"before")
-        original = output.stat()
+        self.archive.parent.mkdir()
+        self.archive.write_bytes(b"before")
+        original = self.archive.stat()
 
         def runner(command, **kwargs):
-            output.write_bytes(b"after!")
-            os.utime(output, ns=(original.st_atime_ns, original.st_mtime_ns))
+            self.archive.write_bytes(b"after!")
+            os.utime(
+                self.archive,
+                ns=(original.st_atime_ns, original.st_mtime_ns),
+            )
             return subprocess.CompletedProcess(command, 0)
 
         self.assertEqual(build_mod(self.config, runner), 0)
