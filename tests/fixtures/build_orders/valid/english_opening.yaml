@@ -1,0 +1,10 @@
+civ: english
+title: Framework Test
+steps:
+  - title: Opening Economy
+    vils:
+      food: 7
+    hints:
+      - Keep producing villagers
+  - resources:
+      wood: 400

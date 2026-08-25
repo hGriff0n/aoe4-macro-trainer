@@ -18,3 +18,12 @@
 17,,,Slow simulation rate value.,,,5
 18,,,Slow simulation rate value.,,,6
 19,,,Slow simulation rate value.,,,7
+20,,,Build order option name.,,,Build Order
+21,,,Build order option tooltip.,,,Choose a generated build order to practice.
+22,,,Build order value.,,,None
+23,,,Sim-rate cycle option name.,,,Enable Slow/Normal Cycle
+24,,,Sim-rate cycle option tooltip.,,,Alternate between configured normal-speed and slowed planning phases.
+25,,,Startup no-systems title.,,,No Training Systems Enabled
+26,,,Startup no-systems message.,,,The mod is not intended to be played with both off.
+27,,,Startup invalid-build title.,,,Build Order Disabled
+28,,,Startup missing-build value.,,,Selected build order is unavailable.

@@ -13,12 +13,16 @@ SCAR_PATH = (
 )
 LOCDB_PATH = (
     Path(__file__).resolve().parents[1]
+    / "build"
+    / "templates"
     / "assets"
     / "locdb"
     / "Macro Trainer_en.csv"
 )
 RDO_PATH = (
     Path(__file__).resolve().parents[1]
+    / "build"
+    / "templates"
     / "assets"
     / "scar"
     / "winconditions"
@@ -56,9 +60,9 @@ class SimspeedCycleContractTests(unittest.TestCase):
         self.assertNotIn("TimerAddOnce", self.source)
         self.assertNotIn("TimerDel", self.source)
 
-        start = function_body(self.source, "Mod_Start")
+        start = function_body(self.source, "Mod_StartSimspeedCycle")
         self.assertIn(
-            "_mod.normalPhaseDuration = math.ceil(_mod.normalDurationSeconds * NORMAL_SIM_RATE / NORMAL_SIM_RATE)",
+            "_mod.normalPhaseDuration = math.ceil(_mod.normalDurationSeconds)",
             start,
         )
         self.assertIn(
@@ -94,6 +98,19 @@ class SimspeedCycleContractTests(unittest.TestCase):
         self.assertIn("Rule_AddOneShot(nextRule, phaseDuration)", phase)
         self.assert_call_order(
             phase, "Misc_SetSimRate(simRate)", "Rule_AddOneShot("
+        )
+
+    def test_build_order_sources_load_before_startup_coordinator(self) -> None:
+        generated = 'import("generated/build_orders.scar")'
+        engine = 'import("build_orders/objective_engine.scar")'
+        startup = 'import("build_orders/startup.scar")'
+        self.assertIn(generated, self.source)
+        self.assertIn(engine, self.source)
+        self.assertIn(startup, self.source)
+        self.assertLess(self.source.index(generated), self.source.index(engine))
+        self.assertLess(
+            self.source.index("Rule_AddOneShot(nextRule, phaseDuration)"),
+            self.source.index(startup),
         )
 
     def test_lobby_options_define_integer_durations_and_slow_rate_enum(self) -> None:
@@ -144,15 +161,71 @@ class SimspeedCycleContractTests(unittest.TestCase):
         ]
         self.assertEqual(defaults, ["slow_sim_rate_1"])
 
+        self.assertIn("option_enable_simspeed_cycle", options)
+        simspeed = options["option_enable_simspeed_cycle"]
+        self.assertEqual(
+            simspeed.get("Type"), "WinCondition::BooleanOptionUIDescriptor"
+        )
+        self.assertEqual(
+            simspeed.find("./DataProperty[@Name='m_defaultValue']").get("Value"),
+            "true",
+        )
+
     def test_setup_settings_applies_safe_lobby_values(self) -> None:
         setup = function_body(self.source, "Mod_SetupSettings")
         self.assertIn("options.section_macro_trainer_settings", setup)
         self.assertIn("option_normal_duration_seconds", setup)
         self.assertIn("option_slow_duration_seconds", setup)
         self.assertIn("option_slow_sim_rate", setup)
+        self.assertIn("option_enable_simspeed_cycle", setup)
+        self.assertIn(
+            "_mod.simspeedEnabled = settings.option_enable_simspeed_cycle",
+            setup,
+        )
         self.assertIn("math.max(1, math.min(300,", setup)
         self.assertIn("slow_sim_rate_1", self.source)
         self.assertIn("slow_sim_rate_7", self.source)
+
+    def test_on_init_loads_lobby_settings_before_applying_them(self) -> None:
+        on_init = function_body(self.source, "Mod_OnInit")
+        self.assertIn("local options_selected = {}", on_init)
+        self.assertIn("Setup_GetWinConditionOptions(options_selected)", on_init)
+        self.assertIn("Mod_SetupSettings(options_selected)", on_init)
+        self.assert_call_order(
+            on_init,
+            "local options_selected = {}",
+            "Setup_GetWinConditionOptions(options_selected)",
+        )
+        self.assert_call_order(
+            on_init,
+            "Setup_GetWinConditionOptions(options_selected)",
+            "Mod_SetupSettings(options_selected)",
+        )
+
+    def test_cycle_start_is_guarded_and_idempotent(self) -> None:
+        self.assertIn("simspeedEnabled = true", self.source)
+        self.assertIn("simspeedStarted = false", self.source)
+
+        mod_start = function_body(self.source, "Mod_Start")
+        self.assertIn("BuildOrderStartup_Start()", mod_start)
+        self.assertNotIn("Mod_StartSimspeedCycle()", mod_start)
+        self.assertNotIn("Mod_StartPhase(", mod_start)
+
+        start = function_body(self.source, "Mod_StartSimspeedCycle")
+        self.assertIn("if _mod.simspeedStarted then", start)
+        self.assertIn("return", start)
+        self.assertIn("_mod.simspeedStarted = true", start)
+        self.assert_call_order(
+            start,
+            "_mod.simspeedStarted = true",
+            "Mod_StartPhase(NORMAL_PHASE_OBJECTIVE_TITLE",
+        )
+
+    def test_transitions_ignore_callbacks_after_cycle_stops(self) -> None:
+        for function_name in ("Mod_EnterSlowSpeed", "Mod_EnterNormalSpeed"):
+            body = function_body(self.source, function_name)
+            self.assertIn("if not _mod.simspeedStarted then", body)
+            self.assert_call_order(body, "return", "Mod_StartPhase(")
 
     def test_phase_titles_use_fully_qualified_mod_localization_keys(self) -> None:
         mod_namespace = "dfb5645698a84afb91cf7a2dfb0f4a4e"
@@ -187,12 +260,26 @@ class SimspeedCycleContractTests(unittest.TestCase):
         self.assertNotRegex(self.locdb, r"(?m)^5,[^\r\n]*,PAUSED\r?$")
 
     def test_game_over_stops_transitions_and_active_objective(self) -> None:
-
         game_over = function_body(self.source, "Mod_OnGameOver")
-        self.assertIn("Rule_Remove(Mod_EnterSlowSpeed)", game_over)
-        self.assertIn("Rule_Remove(Mod_EnterNormalSpeed)", game_over)
-        self.assertIn("Mod_ClearPhaseObjective()", game_over)
-        self.assertIn("Misc_SetSimRate(NORMAL_SIM_RATE)", game_over)
+        self.assertEqual(game_over.count("BuildOrderStartup_Stop()"), 1)
+        self.assertEqual(game_over.count("BuildOrder_Stop()"), 1)
+        self.assertEqual(game_over.count("Mod_StopSimspeedCycle()"), 1)
+
+        stop = function_body(self.source, "Mod_StopSimspeedCycle")
+        self.assertIn("Rule_Remove(Mod_EnterSlowSpeed)", stop)
+        self.assertIn("Rule_Remove(Mod_EnterNormalSpeed)", stop)
+        self.assertIn("Mod_ClearPhaseObjective()", stop)
+        self.assertIn("Misc_SetSimRate(NORMAL_SIM_RATE)", stop)
+        self.assertIn("_mod.simspeedStarted = false", stop)
+        self.assert_call_order(
+            stop, "Rule_Remove(Mod_EnterNormalSpeed)", "Mod_ClearPhaseObjective()"
+        )
+        self.assert_call_order(
+            stop, "Mod_ClearPhaseObjective()", "Misc_SetSimRate(NORMAL_SIM_RATE)"
+        )
+        self.assert_call_order(
+            stop, "Misc_SetSimRate(NORMAL_SIM_RATE)", "_mod.simspeedStarted = false"
+        )
 
 
 if __name__ == "__main__":

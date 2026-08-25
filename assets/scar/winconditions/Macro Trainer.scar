@@ -5,6 +5,8 @@
 -- Import Utility Scripts
 import("cardinal.scar")							-- Contains sfx references, UI templates, and Civ/Age helper functions
 import("ScarUtil.scar")							-- Contains game helper functions
+import("generated/build_orders.scar")
+import("build_orders/objective_engine.scar")
 
 -- Import Gameplay Systems
 import("gameplay/score.scar")					-- Tracks player score
@@ -35,6 +37,11 @@ _mod = {
 	normalDurationSeconds = 45,
 	slowDurationSeconds = 15,
 	slowSimRate = 1,
+	selectedBuildOrderID = nil,
+	simspeedEnabled = true,
+	simspeedStarted = false,
+	buildOrderDisabled = false,
+	startupAlertOpen = false,
 }
 
 NORMAL_SIM_RATE = 8
@@ -59,8 +66,42 @@ Core_RegisterModule(_mod.module)
 -----------------------------------------------------------------------
 
 -- Called during load as part of the game setup sequence
+function Mod_GetOptionEnumKey(option)
+	if type(option) ~= "table" or type(option.enum_items) ~= "table" then
+		return nil
+	end
+
+	if option.enum_value == nil then
+		return nil
+	end
+
+	for enumKey, enumValue in pairs(option.enum_items) do
+		if enumValue == option.enum_value then
+			return enumKey
+		end
+	end
+
+	return nil
+end
+
+function Mod_ReadSelectedBuildOrder(settings)
+	if type(settings) ~= "table" then
+		return nil
+	end
+
+	local enumKey = Mod_GetOptionEnumKey(settings.option_build_order)
+	if enumKey == nil or enumKey == "build_order_none" then
+		return nil
+	end
+	if type(enumKey) ~= "string" then
+		return nil
+	end
+
+	return string.gsub(enumKey, "^build_order_", "")
+end
+
 function Mod_SetupSettings(options)
-	if options == nil or options.section_macro_trainer_settings == nil then
+	if type(options) ~= "table" or type(options.section_macro_trainer_settings) ~= "table" then
 		return
 	end
 
@@ -71,9 +112,14 @@ function Mod_SetupSettings(options)
 	if settings.option_slow_duration_seconds ~= nil then
 		_mod.slowDurationSeconds = math.max(1, math.min(300, settings.option_slow_duration_seconds))
 	end
-	if SLOW_SIM_RATES[settings.option_slow_sim_rate] ~= nil then
-		_mod.slowSimRate = SLOW_SIM_RATES[settings.option_slow_sim_rate]
+	local slowSimRateKey = Mod_GetOptionEnumKey(settings.option_slow_sim_rate)
+	if SLOW_SIM_RATES[slowSimRateKey] ~= nil then
+		_mod.slowSimRate = SLOW_SIM_RATES[slowSimRateKey]
 	end
+	if settings.option_enable_simspeed_cycle ~= nil then
+		_mod.simspeedEnabled = settings.option_enable_simspeed_cycle
+	end
+	_mod.selectedBuildOrderID = Mod_ReadSelectedBuildOrder(settings)
 end
 
 -- Called before initialization, preceding other module OnInit functions
@@ -86,23 +132,38 @@ end
 
 -- Called on match initialization before handing control to the player
 function Mod_OnInit()
-	
-	
-	
+	local options_selected = {}
+	Setup_GetWinConditionOptions(options_selected)
+	Mod_SetupSettings(options_selected)
 end
 
 -- Called after initialization is done when game is fading up from black
 function Mod_Start()
-	_mod.normalPhaseDuration = math.ceil(_mod.normalDurationSeconds * NORMAL_SIM_RATE / NORMAL_SIM_RATE)
+	BuildOrderStartup_Start()
+end
+
+function Mod_StartSimspeedCycle()
+	if _mod.simspeedStarted then
+		return
+	end
+
+	_mod.simspeedStarted = true
+	_mod.normalPhaseDuration = math.ceil(_mod.normalDurationSeconds)
 	_mod.slowPhaseDuration = math.ceil(_mod.slowDurationSeconds * _mod.slowSimRate / NORMAL_SIM_RATE)
 	Mod_StartPhase(NORMAL_PHASE_OBJECTIVE_TITLE, _mod.normalPhaseDuration, NORMAL_SIM_RATE, Mod_EnterSlowSpeed)
 end
 
 function Mod_EnterSlowSpeed()
+	if not _mod.simspeedStarted then
+		return
+	end
 	Mod_StartPhase(SLOW_PHASE_OBJECTIVE_TITLE, _mod.slowPhaseDuration, _mod.slowSimRate, Mod_EnterNormalSpeed)
 end
 
 function Mod_EnterNormalSpeed()
+	if not _mod.simspeedStarted then
+		return
+	end
 	Mod_StartPhase(NORMAL_PHASE_OBJECTIVE_TITLE, _mod.normalPhaseDuration, NORMAL_SIM_RATE, Mod_EnterSlowSpeed)
 end
 
@@ -112,6 +173,14 @@ function Mod_ClearPhaseObjective()
 		Objective_Expire(_mod.phaseObjective, false, false)
 		_mod.phaseObjective = nil
 	end
+end
+
+function Mod_StopSimspeedCycle()
+	Rule_Remove(Mod_EnterSlowSpeed)
+	Rule_Remove(Mod_EnterNormalSpeed)
+	Mod_ClearPhaseObjective()
+	Misc_SetSimRate(NORMAL_SIM_RATE)
+	_mod.simspeedStarted = false
 end
 
 function Mod_StartPhase(title, phaseDuration, simRate, nextRule)
@@ -135,6 +204,8 @@ function Mod_StartPhase(title, phaseDuration, simRate, nextRule)
 	Rule_AddOneShot(nextRule, phaseDuration)
 end
 
+import("build_orders/startup.scar")
+
 -- Called when Core_SetPlayerDefeated() is invoked. Signals that a player has been eliminated from play due to defeat.
 function Mod_OnPlayerDefeated(player, reason)
 	
@@ -144,8 +215,7 @@ end
 
 -- When a victory condition is met, a module must call Core_OnGameOver() in order to invoke this delegate and notify all modules that the match is about to end. Generally used for clean up (removal of rules, objectives, and UI elements specific to the module).
 function Mod_OnGameOver()
-	Rule_Remove(Mod_EnterSlowSpeed)
-	Rule_Remove(Mod_EnterNormalSpeed)
-	Mod_ClearPhaseObjective()
-	Misc_SetSimRate(NORMAL_SIM_RATE)
+	BuildOrderStartup_Stop()
+	BuildOrder_Stop()
+	Mod_StopSimspeedCycle()
 end

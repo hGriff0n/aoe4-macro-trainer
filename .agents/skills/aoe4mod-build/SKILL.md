@@ -1,24 +1,24 @@
 ---
 name: aoe4mod-build
-description: Build or export an Age of Empires IV `.aoe4mod` file through the AoE4 Content Editor CLI. Use when Codex needs to build or export a mod package from a supplied `.aoe4mod` filepath.
+description: Use when Codex needs to build or export the Macro Trainer `.aoe4mod` package with user-authored YAML build orders bundled into the generated mod assets.
 ---
 
 # AoE4 Mod Build
 
-Build exactly one AoE4 mod package through the installed Content Editor launcher.
+Build exactly one Macro Trainer package through the repository build wrapper. The wrapper resets generated outputs to baseline, validates and emits the authoritative YAML build orders, and invokes the installed Content Editor launcher only after generation succeeds.
 
 ## Procedure
 
-1. Require one absolute path to an existing `.aoe4mod` file. If the user supplies a relative path, resolve it against the current workspace and show the resulting absolute path. Reject missing files and files with another extension.
-2. Construct only this command; do not add other Content Editor arguments:
+1. Require an absolute path to the existing `Macro Trainer.aoe4mod` file and an absolute path to the directory containing the YAML build orders. Resolve relative paths against the current workspace and show the results. Reject a missing mod file, another extension or filename, a missing/non-directory build-order path, or a project whose `tools/build_mod.py` wrapper is absent.
+2. Construct only this command, deriving the wrapper path from the `.aoe4mod` file's parent directory:
 
    ```powershell
-   & 'F:\Program Files (x86)\Steam\steamapps\common\Age of Empires IV Content Editor\EssenceLauncher.exe' --build_mod '<absolute-path-to-aoe4mod>' --auto_close_burn_window
+   python '<absolute-project-path>\tools\build_mod.py' --build-orders '<absolute-path-to-build-orders>'
    ```
 
-3. Display the exact command and ask the user to confirm before executing it. The launcher performs an external build and can write build output.
-4. On confirmation, execute the command in PowerShell. Preserve and report the exit code plus any relevant output. If the launcher executable is absent, report its expected path and do not substitute another tool.
+3. Display the exact command and ask the user to confirm before executing it. The wrapper generates local assets and launches an external build that writes build output.
+4. On confirmation, execute the command in PowerShell from the project directory and wait for the wrapper itself to exit. After EssenceLauncher returns, the wrapper may poll the final archive for up to 120 seconds while the asynchronous export finishes. Preserve and report the wrapper's final exit code plus any relevant output. A nonzero final exit means the mod was not successfully built. If the wrapper or configured launcher is absent, report the expected path and do not substitute another tool.
 
 ## Boundaries
 
-This skill is intentionally limited to the `--build_mod` workflow. Do not use it for general Content Editor CLI operations, imports, localization, source control, or custom build settings.
+This skill is intentionally limited to the Macro Trainer build workflow. Do not call Essence directly, omit `--build-orders`, use `--generate-only` for a requested mod build, or add unrelated build settings. Do not use it for general Content Editor CLI operations, imports, localization, or source control.
