@@ -1,0 +1,68 @@
+local RESOURCES_STATE = {}
+local RESOURCES_POLL_INTERVAL_SECONDS = 1
+
+function Resources_ResourceType(resource)
+	if resource == "food" then
+		return RT_Food
+	end
+	if resource == "gold" then
+		return RT_Gold
+	end
+	if resource == "wood" then
+		return RT_Wood
+	end
+	if resource == "stone" then
+		return RT_Stone
+	end
+	return nil
+end
+
+function Resources_Poll(checkID)
+	local state = RESOURCES_STATE[checkID]
+	if state == nil then
+		return
+	end
+
+	local amount = Player_GetResource(state.player, state.resourceType)
+	BuildOrder_SetCheckComplete(checkID, amount >= state.payload.count)
+end
+
+function Resources_Activate(check, objectiveID, context)
+	local player = context.localPlayer
+	if player == nil then
+		return
+	end
+
+	local resourceType = Resources_ResourceType(check.payload.resource)
+	if resourceType == nil then
+		return
+	end
+
+	local state = {
+		player = context.localPlayer,
+		objectiveID = objectiveID,
+		payload = check.payload,
+		resourceType = resourceType,
+	}
+	RESOURCES_STATE[check.id] = state
+	state.pollRule = function()
+		Resources_Poll(check.id)
+	end
+	Rule_AddInterval(state.pollRule, RESOURCES_POLL_INTERVAL_SECONDS)
+	Resources_Poll(check.id)
+end
+
+function Resources_Deactivate(check, objectiveID, context)
+	local state = RESOURCES_STATE[check.id]
+	if state == nil then
+		return
+	end
+
+	Rule_Remove(state.pollRule)
+	RESOURCES_STATE[check.id] = nil
+end
+
+BuildOrder_RegisterHandler("resources", {
+	activate = Resources_Activate,
+	deactivate = Resources_Deactivate,
+})
