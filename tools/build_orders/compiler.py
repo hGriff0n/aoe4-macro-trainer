@@ -97,6 +97,8 @@ def _check_descriptors(kind: str, value: Any, file: Path, path: str, civ: str) -
         for index, entry in enumerate(entries):
             item_path = path if kind == "age_up" else f"{path}[{index}]"
             permitted = {"id", "oneof", "vils", "location"}
+            if kind == "age_up":
+                permitted.add("capability")
             if kind == "built":
                 permitted.add("count")
             payload = _id_or_oneof(entry, file, item_path, permitted)
@@ -107,6 +109,12 @@ def _check_descriptors(kind: str, value: Any, file: Path, path: str, civ: str) -
                 payload["vils"] = _positive(mapping["vils"], file, f"{item_path}.vils")
             if "location" in mapping:
                 payload["location"] = _string(mapping["location"], file, f"{item_path}.location")
+            capability = mapping.get("capability")
+            if kind == "age_up" and capability is not None:
+                capability = _string(capability, file, f"{item_path}.capability")
+                if capability not in {"landmark", "non_building"}:
+                    _error(file, f"{item_path}.capability", "must be landmark or non_building")
+                payload["capability"] = capability
             label = payload["id"] if "id" in payload else " / ".join(payload["oneof"])
             if kind == "age_up":
                 title = f"Age up: {label}"
@@ -114,7 +122,7 @@ def _check_descriptors(kind: str, value: Any, file: Path, path: str, civ: str) -
                     title += f" with {payload['vils']} vils"
                 if "location" in payload:
                     title += f" on {payload['location']}"
-                unsupported_non_building = civ.casefold() == "golden horde"
+                unsupported_non_building = capability == "non_building"
                 if unsupported_non_building:
                     title += " [unsupported: non-building progress]"
             else:

@@ -48,11 +48,18 @@ local function AgeUp_NonBuildingProgressStarted(state)
 	return false
 end
 
+local function AgeUp_ProgressStarted(state)
+	if state.payload.capability == "non_building" then
+		return AgeUp_NonBuildingProgressStarted(state)
+	end
+	return AgeUp_LandmarkProgressStarted(state)
+end
+
 local function AgeUp_TryComplete(state)
 	if state == nil or state.completed then
 		return
 	end
-	if AgeUp_LandmarkProgressStarted(state) or AgeUp_NonBuildingProgressStarted(state) then
+	if AgeUp_ProgressStarted(state) then
 		state.completed = true
 		BuildOrder_SetCheckComplete(state.checkID, true)
 	end
