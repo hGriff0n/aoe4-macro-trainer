@@ -1,6 +1,7 @@
 import re
 import tempfile
 import unittest
+from dataclasses import dataclass
 from pathlib import Path
 
 from tools.build_orders.compiler import compile_directory
@@ -19,6 +20,57 @@ def function_body(source: str, name: str) -> str:
     if match is None:
         raise AssertionError(f"missing function {name}")
     return match.group(1)
+
+
+@dataclass
+class SquadFixture:
+    owner: str
+    blueprint: str
+    alive: bool = True
+
+
+class PoisonedOpponentSquad:
+    def __init__(self, owner: str) -> None:
+        self.owner = owner
+
+    @property
+    def blueprint(self) -> str:
+        raise AssertionError("blueprint must not be read before opponent ownership is rejected")
+
+    @property
+    def alive(self) -> bool:
+        raise AssertionError("alive status must not be read before opponent ownership is rejected")
+
+
+class UnitsPollingModel:
+    """Test-only executable contract for the SCAR polling boundary."""
+
+    def __init__(self) -> None:
+        self.checks: dict[str, dict[str, object]] = {}
+        self.polling = False
+
+    def activate(self, check_id: str, player: str, blueprint: str, count: int) -> None:
+        self.checks[check_id] = {"player": player, "blueprint": blueprint, "count": count}
+        self.polling = True
+
+    def deactivate(self, check_id: str) -> None:
+        self.checks.pop(check_id, None)
+        self.polling = bool(self.checks)
+
+    def poll(self, squads: list[SquadFixture | PoisonedOpponentSquad]) -> dict[str, bool]:
+        completed: dict[str, bool] = {}
+        for check_id, check in self.checks.items():
+            active_count = 0
+            for squad in squads:
+                if squad.owner != check["player"]:
+                    continue
+                if squad.blueprint != check["blueprint"]:
+                    continue
+                if squad.alive is False:
+                    continue
+                active_count += 1
+            completed[check_id] = active_count >= check["count"]
+        return completed
 
 
 class UnitsCompilerTests(unittest.TestCase):
@@ -88,6 +140,48 @@ class UnitsHandlerContractTests(unittest.TestCase):
         self.assertIn("UNITS_STATE[check.id] = nil", deactivate)
         self.assertIn("if next(UNITS_STATE) == nil and UNITS_POLLING then", deactivate)
         self.assertIn("Rule_Remove(Units_Poll)", deactivate)
+
+
+class UnitsPollingBehaviorTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.model = UnitsPollingModel()
+        self.model.activate("spears", "human", "spearman", 2)
+
+    def test_opponent_squad_is_rejected_before_blueprint_or_alive_are_observed(self) -> None:
+        result = self.model.poll(
+            [
+                SquadFixture("human", "spearman"),
+                SquadFixture("human", "spearman"),
+                PoisonedOpponentSquad("opponent"),
+            ]
+        )
+        self.assertEqual(result, {"spears": True})
+
+    def test_death_below_threshold_reverses_a_completed_check(self) -> None:
+        first = SquadFixture("human", "spearman")
+        second = SquadFixture("human", "spearman")
+        self.assertEqual(self.model.poll([first, second]), {"spears": True})
+        second.alive = False
+        self.assertEqual(self.model.poll([first, second]), {"spears": False})
+
+    def test_conversion_away_from_the_human_reverses_a_completed_check(self) -> None:
+        first = SquadFixture("human", "spearman")
+        second = SquadFixture("human", "spearman")
+        self.assertEqual(self.model.poll([first, second]), {"spears": True})
+        second.owner = "opponent"
+        self.assertEqual(self.model.poll([first, second]), {"spears": False})
+
+    def test_simultaneous_descriptors_remain_independent_when_one_is_removed(self) -> None:
+        self.model.activate("archers", "human", "archer", 1)
+        squads = [SquadFixture("human", "spearman"), SquadFixture("human", "spearman"), SquadFixture("human", "archer")]
+        self.assertEqual(self.model.poll(squads), {"spears": True, "archers": True})
+        self.model.deactivate("spears")
+        self.assertTrue(self.model.polling)
+        self.assertEqual(self.model.poll(squads), {"archers": True})
+        self.model.deactivate("archers")
+        self.model.deactivate("archers")
+        self.assertFalse(self.model.polling)
+        self.assertEqual(self.model.poll(squads), {})
 
 
 if __name__ == "__main__":
