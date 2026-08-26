@@ -41,6 +41,10 @@ def _positive(value: Any, file: Path, path: str) -> int:
     return value
 
 
+def _plural_label(label: str) -> str:
+    return label if label.endswith("s") else f"{label}s"
+
+
 def _id_or_oneof(value: Any, file: Path, path: str, allowed: set[str]) -> dict[str, object]:
     mapping = _mapping(value, file, path)
     unknown = set(mapping) - allowed
@@ -108,7 +112,17 @@ def _check_descriptors(kind: str, value: Any, file: Path, path: str) -> list[Che
             if "location" in mapping:
                 payload["location"] = _string(mapping["location"], file, f"{item_path}.location")
             label = payload["id"] if "id" in payload else " or ".join(payload["oneof"])
-            result.append(CheckDescriptor(kind, f"{kind.replace('_', ' ').title()}: {label}", False, dict(payload)))
+            if kind == "built":
+                count = payload["count"]
+                plural_label = _plural_label(label) if "id" in payload else label
+                title = f"Build {label}" if count == 1 else f"Build {count} {plural_label}"
+                if "vils" in payload:
+                    title += f" with {payload['vils']} vils"
+                if "location" in payload:
+                    title += f" on {payload['location']}"
+            else:
+                title = f"{kind.replace('_', ' ').title()}: {label}"
+            result.append(CheckDescriptor(kind, title, False, dict(payload)))
         return result
     if kind in {"upgrades", "produce", "buildings", "units"}:
         result = []

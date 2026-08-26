@@ -1,0 +1,89 @@
+BUILT_STATE = {}
+
+function Built_Matches(state, blueprint)
+	if state.payload.id ~= nil then
+		return state.payload.id == blueprint
+	end
+
+	for _, candidate in ipairs(state.payload.oneof) do
+		if candidate == blueprint then
+			return true
+		end
+	end
+	return false
+end
+
+function Built_OnConstructionComplete(checkID, entity)
+	local state = BUILT_STATE[checkID]
+	if state == nil or state.remaining == 0 then
+		return
+	end
+	if Entity_GetPlayerOwner(entity) ~= state.player then
+		return
+	end
+
+	local blueprint = Entity_GetBlueprint(entity)
+	if Built_Matches(state, blueprint) == false then
+		return
+	end
+
+	state.remaining = state.remaining - 1
+	if state.remaining == 0 then
+		BuildOrder_SetCheckComplete(checkID, true)
+	end
+end
+
+function Built_ScanEntity(groupID, entityIndex, entity)
+	for checkID, state in pairs(BUILT_STATE) do
+		if Entity_GetPlayerOwner(entity) == state.player then
+			local entityID = Entity_GetID(entity)
+			if Entity_IsBuilding(entity) and Entity_GetBuildingProgress(entity) >= 1.0 and state.seen[entityID] ~= true then
+				state.seen[entityID] = true
+				Built_OnConstructionComplete(checkID, entity)
+			end
+		end
+	end
+	return false
+end
+
+function Built_Update()
+	for _, state in pairs(BUILT_STATE) do
+		EGroup_ForEach(Player_GetEntities(state.player), Built_ScanEntity)
+	end
+end
+
+function Built_Activate(check, objectiveID, context)
+	local player = context.localPlayer
+	if player == nil then
+		return
+	end
+
+	local addRule = next(BUILT_STATE) == nil
+	BUILT_STATE[check.id] = {
+		player = player,
+		objectiveID = objectiveID,
+		payload = check.payload,
+		remaining = check.payload.count,
+		seen = {},
+	}
+	if addRule then
+		Rule_Add(Built_Update)
+	end
+end
+
+function Built_Deactivate(check, objectiveID, context)
+	local state = BUILT_STATE[check.id]
+	if state == nil then
+		return
+	end
+
+	BUILT_STATE[check.id] = nil
+	if next(BUILT_STATE) == nil then
+		Rule_Remove(Built_Update)
+	end
+end
+
+BuildOrder_RegisterHandler("built", {
+	activate = Built_Activate,
+	deactivate = Built_Deactivate,
+})

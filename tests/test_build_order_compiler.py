@@ -71,6 +71,34 @@ steps:
         self.assertEqual(checks[2].payload, {"id": "wheelbarrow", "queued": True})
         self.assertEqual(checks[3].payload, {"id": "horticulture", "queued": False})
 
+    def test_formats_built_titles_from_count_choice_and_presentation_hints(self) -> None:
+        catalog = self.compile({"built.yaml": """civ: English
+title: Built titles
+steps:
+  - built:
+      - id: barracks
+      - id: house
+        count: 2
+      - id: barracks
+        count: 2
+      - oneof: [stable, archery_range]
+      - id: outpost
+        count: 2
+        vils: 3
+        location: wood
+"""})
+        checks = catalog.build_orders[0].steps[0].checks
+        self.assertEqual(
+            [check.title for check in checks],
+            [
+                "Build barracks",
+                "Build 2 houses",
+                "Build 2 barracks",
+                "Build stable or archery_range",
+                "Build 2 outposts with 3 vils on wood",
+            ],
+        )
+
     def test_rejects_invalid_extended_built_and_upgrade_fields(self) -> None:
         self.assert_invalid("civ: english\ntitle: x\nsteps:\n  - built: [{id: a, count: 0}]\n", "file.yaml: steps[0].built[0].count: must be a positive integer")
         self.assert_invalid("civ: english\ntitle: x\nsteps:\n  - built: [{id: a, vils: false}]\n", "file.yaml: steps[0].built[0].vils: must be a positive integer")
