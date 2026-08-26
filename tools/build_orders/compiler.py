@@ -84,12 +84,26 @@ def _check_descriptors(kind: str, value: Any, file: Path, path: str) -> list[Che
         return _resource_checks(kind, value, file, path)
     if kind == "rallypoint":
         checks = []
-        for index, item in enumerate(_list(value, file, path)):
+        resources = _list(value, file, path)
+        resource_count = len(resources)
+        for index, item in enumerate(resources):
             item_path = f"{path}[{index}]"
             resource = _string(item, file, item_path)
             if resource not in RESOURCES:
                 _error(file, item_path, "unsupported resource")
-            checks.append(CheckDescriptor(kind, f"Rally to {resource}", False, {"resource": resource}))
+            tc_index = index + 1
+            if resource_count == 1:
+                title = f"Rally new vils to {resource}"
+            elif tc_index == 1:
+                title = f"Rally Main TC to {resource}"
+            else:
+                title = f"Rally TC #{tc_index} to {resource}"
+            checks.append(CheckDescriptor(
+                kind,
+                title,
+                True,
+                {"resource": resource, "tc_index": tc_index, "tc_count": resource_count},
+            ))
         return checks
     if kind in {"built", "age_up"}:
         entries = [value] if kind == "age_up" else _list(value, file, path)
