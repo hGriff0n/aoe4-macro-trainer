@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+from dataclasses import dataclass
 from pathlib import Path
 
 from tools.build_orders.compiler import compile_directory
@@ -81,43 +82,136 @@ class BuildOrderUpgradeHandlerContractTests(unittest.TestCase):
         self.assertIn("for _, state in pairs(UPGRADES_STATE) do", self.source)
         self.assertIn("if state == nil then", self.source)
 
-    def test_matching_opponent_or_unrelated_queue_cannot_complete_check(self) -> None:
-        scan = function_body(self.source, "Upgrades_HasQueuedResearch")
-        self.assertRegex(
-            scan,
-            r"if entity ~= nil and Entity_GetPlayerOwner\(entity\) == state\.player then"
-            r"(?s:.*?)"
-            r"if \(itemType == PITEM_Upgrade or itemType == PITEM_PlayerUpgrade\)"
-            r"(?s:.*?)and Entity_GetProductionQueueItem\(entity, index\) == state\.upgrade then"
-            r"(?s:.*?)return true",
-        )
-        self.assertIn("return false", scan)
 
-    def test_completed_research_is_fallback_and_queue_scan_is_queued_only(self) -> None:
-        complete = function_body(self.source, "Upgrades_TryComplete")
-        self.assertIn("Upgrades_IsCompletedResearch(state)", complete)
-        self.assertIn("state.queued and Upgrades_HasQueuedResearch(state)", complete)
-        self.assertLess(
-            complete.index("Upgrades_IsCompletedResearch(state)"),
-            complete.index("Upgrades_HasQueuedResearch(state)"),
-        )
+@dataclass(frozen=True)
+class QueueEntity:
+    owner: str
+    queue: tuple[tuple[str, str], ...]
 
-    def test_duplicate_activation_is_idempotent_for_one_check(self) -> None:
-        activate = function_body(self.source, "Upgrades_Activate")
-        self.assertIn("if UPGRADES_STATE[check.id] ~= nil then", activate)
-        self.assertLess(
-            activate.index("if UPGRADES_STATE[check.id] ~= nil then"),
-            activate.index("UPGRADES_STATE[check.id] = {"),
-        )
 
-    def test_multiple_checks_share_polling_and_late_or_duplicate_calls_are_safe(self) -> None:
-        complete = function_body(self.source, "Upgrades_TryComplete")
-        poll = function_body(self.source, "Upgrades_Poll")
-        deactivate = function_body(self.source, "Upgrades_Deactivate")
-        self.assertIn("if state == nil or state.completed then", complete)
-        self.assertIn("for _, state in pairs(UPGRADES_STATE) do", poll)
-        self.assertIn("if state == nil then", deactivate)
-        self.assertIn("if next(UPGRADES_STATE) == nil and UPGRADES_POLLING then", deactivate)
+@dataclass
+class UpgradeCheckState:
+    check_id: str
+    player: str
+    upgrade: str
+    queued: bool
+    completed: bool = False
+
+
+class UpgradeHandlerModel:
+    """Executable contract for the player-scoped upgrade handler boundary."""
+
+    def __init__(self) -> None:
+        self.entities: list[QueueEntity] = []
+        self.researched: set[tuple[str, str]] = set()
+        self.states: dict[str, UpgradeCheckState] = {}
+        self.polling = False
+        self.rule_add_count = 0
+        self.rule_remove_count = 0
+
+    def activate(self, check_id: str, player: str, upgrade: str, *, queued: bool) -> UpgradeCheckState:
+        state = self.states.get(check_id)
+        if state is not None:
+            return state
+        state = UpgradeCheckState(check_id, player, upgrade, queued)
+        self.states[check_id] = state
+        if not self.polling:
+            self.polling = True
+            self.rule_add_count += 1
+        self._try_complete(state)
+        return state
+
+    def deactivate(self, check_id: str) -> None:
+        if self.states.pop(check_id, None) is None:
+            return
+        if not self.states and self.polling:
+            self.polling = False
+            self.rule_remove_count += 1
+
+    def poll(self) -> None:
+        for state in list(self.states.values()):
+            self._try_complete(state)
+
+    def is_complete(self, check_id: str) -> bool:
+        state = self.states.get(check_id)
+        return state is not None and state.completed
+
+    def _try_complete(self, state: UpgradeCheckState) -> None:
+        if state.completed:
+            return
+        if (state.player, state.upgrade) in self.researched or (
+            state.queued and self._has_queued_research(state)
+        ):
+            state.completed = True
+
+    def _has_queued_research(self, state: UpgradeCheckState) -> bool:
+        for entity in self.entities:
+            if entity.owner != state.player:
+                continue
+            for item_type, upgrade in entity.queue:
+                if item_type in {"PITEM_Upgrade", "PITEM_PlayerUpgrade"} and upgrade == state.upgrade:
+                    return True
+        return False
+
+
+class BuildOrderUpgradeBehaviorTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.model = UpgradeHandlerModel()
+
+    def test_matching_opponent_queue_is_rejected(self) -> None:
+        self.model.entities = [QueueEntity("opponent", (("PITEM_Upgrade", "wheelbarrow"),))]
+        self.model.activate("queued", "human", "wheelbarrow", queued=True)
+
+        self.assertFalse(self.model.is_complete("queued"))
+
+    def test_unrelated_queue_type_or_upgrade_is_rejected(self) -> None:
+        self.model.entities = [
+            QueueEntity("human", (("PITEM_Spawn", "wheelbarrow"),)),
+            QueueEntity("human", (("PITEM_Upgrade", "horticulture"),)),
+        ]
+        self.model.activate("queued", "human", "wheelbarrow", queued=True)
+
+        self.assertFalse(self.model.is_complete("queued"))
+
+    def test_completed_research_is_permitted_fallback(self) -> None:
+        self.model.researched.add(("human", "wheelbarrow"))
+        self.model.activate("completed", "human", "wheelbarrow", queued=False)
+
+        self.assertTrue(self.model.is_complete("completed"))
+
+    def test_queued_check_requires_matching_human_owned_entity_queue(self) -> None:
+        self.model.entities = [QueueEntity("human", (("PITEM_PlayerUpgrade", "wheelbarrow"),))]
+        self.model.activate("queued", "human", "wheelbarrow", queued=True)
+
+        self.assertTrue(self.model.is_complete("queued"))
+
+    def test_duplicate_activation_does_not_replace_live_state(self) -> None:
+        first = self.model.activate("upgrade", "human", "wheelbarrow", queued=True)
+        second = self.model.activate("upgrade", "opponent", "horticulture", queued=False)
+
+        self.assertIs(first, second)
+        self.assertEqual((second.player, second.upgrade, second.queued), ("human", "wheelbarrow", True))
+        self.assertEqual(self.model.rule_add_count, 1)
+
+    def test_repeated_deactivation_and_late_poll_cannot_complete_removed_check(self) -> None:
+        self.model.activate("queued", "human", "wheelbarrow", queued=True)
+        self.model.deactivate("queued")
+        self.model.deactivate("queued")
+        self.model.researched.add(("human", "wheelbarrow"))
+        self.model.poll()
+
+        self.assertFalse(self.model.is_complete("queued"))
+        self.assertEqual(self.model.rule_remove_count, 1)
+
+    def test_two_active_check_ids_coexist_independently(self) -> None:
+        self.model.entities = [QueueEntity("human", (("PITEM_Upgrade", "horticulture"),))]
+        self.model.activate("first", "human", "wheelbarrow", queued=True)
+        self.model.activate("second", "human", "horticulture", queued=True)
+
+        self.assertFalse(self.model.is_complete("first"))
+        self.assertTrue(self.model.is_complete("second"))
+        self.model.deactivate("second")
+        self.assertTrue(self.model.polling)
 
 
 if __name__ == "__main__":

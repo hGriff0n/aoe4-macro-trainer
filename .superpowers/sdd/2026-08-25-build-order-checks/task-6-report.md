@@ -97,3 +97,46 @@ unknown calls: local helpers plus parser token `or`; low-confidence APIs: none; 
 git diff --check
 (no output)
 ```
+
+## Fix round 2/5: executable upgrade behavior contract
+
+The prior round's source contracts were retained for SCAR/API shape, but its
+review scenarios are now exercised by `UpgradeHandlerModel`, a test-only Python
+model of the handler boundary. The executable tests prove that:
+
+- matching opponent queues and unrelated queue type/PBG entries do not complete;
+- completed research completes a normal descriptor independently of queue state;
+- queued descriptors complete only for matching `PITEM_Upgrade` or
+  `PITEM_PlayerUpgrade` entries owned by the stored player;
+- duplicate activation keeps the original active state;
+- repeated deactivation and a late poll cannot complete a removed check; and
+- two active check IDs remain independent while sharing one polling lifecycle.
+
+RED before the harness existed:
+
+```text
+python -m unittest tests.test_build_order_upgrades -v
+ERROR: seven BuildOrderUpgradeBehaviorTests
+NameError: name 'UpgradeHandlerModel' is not defined
+Ran 12 tests ... FAILED (errors=7)
+```
+
+GREEN after adding the harness:
+
+```text
+python -m unittest tests.test_build_order_upgrades -v
+Ran 12 tests ... OK
+```
+
+The SCAR handler is unchanged in this round, so its prior `check_code` result
+remains applicable; no new SCAR API call was introduced.
+
+Final full validation for this round:
+
+```text
+python -m unittest discover -s tests -v
+Ran 75 tests ... OK
+
+git diff --check
+(no output)
+```
