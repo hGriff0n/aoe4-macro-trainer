@@ -1,0 +1,62 @@
+local VILS_STATE = {}
+
+function Vils_Poll(checkID)
+	local state = VILS_STATE[checkID]
+	if state == nil then
+		return
+	end
+
+	local completed = true
+	if state.payload.food ~= nil then
+		completed = completed and Player_GetNumGatheringSquads(state.player, RT_Food) >= state.payload.food
+	end
+	if state.payload.gold ~= nil then
+		completed = completed and Player_GetNumGatheringSquads(state.player, RT_Gold) >= state.payload.gold
+	end
+	if state.payload.wood ~= nil then
+		completed = completed and Player_GetNumGatheringSquads(state.player, RT_Wood) >= state.payload.wood
+	end
+	if state.payload.stone ~= nil then
+		completed = completed and Player_GetNumGatheringSquads(state.player, RT_Stone) >= state.payload.stone
+	end
+
+	if completed then
+		BuildOrder_SetCheckComplete(checkID, true)
+	else
+		BuildOrder_SetCheckComplete(checkID, false)
+	end
+end
+
+function Vils_Activate(check, objectiveID, context)
+	local player = context.localPlayer
+	if player == nil then
+		return
+	end
+
+	local state = {
+		player = context.localPlayer,
+		objectiveID = objectiveID,
+		payload = check.payload,
+	}
+	VILS_STATE[check.id] = state
+	state.pollRule = function()
+		Vils_Poll(check.id)
+	end
+	Rule_Add(state.pollRule)
+	Vils_Poll(check.id)
+end
+
+function Vils_Deactivate(check, objectiveID, context)
+	local state = VILS_STATE[check.id]
+	if state == nil then
+		return
+	end
+
+	Rule_Remove(state.pollRule)
+	VILS_STATE[check.id] = nil
+end
+
+BuildOrder_RegisterHandler("vils", {
+	activate = Vils_Activate,
+	deactivate = Vils_Deactivate,
+})
