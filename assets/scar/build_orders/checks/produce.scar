@@ -1,65 +1,6 @@
 PRODUCE_STATE = {}
-PRODUCE_SCAN_STATE = nil
-PRODUCE_SNAPSHOT_STATE = nil
 PRODUCE_QUEUE_STATE = nil
 PRODUCE_POLLING = false
-
-function Produce_OnCompletedSquad(checkID, squad)
-	local state = PRODUCE_STATE[checkID]
-	if state == nil or state.remaining == 0 then
-		return
-	end
-	if Squad_GetPlayerOwner(squad) ~= state.player then
-		return
-	end
-	if Squad_GetBlueprint(squad) ~= BP_GetSquadBlueprint(state.payload.id) then
-		return
-	end
-
-	state.remaining = state.remaining - 1
-	if state.remaining == 0 then
-		BuildOrder_SetCheckComplete(checkID, true)
-	end
-end
-
-function Produce_ScanSquad(groupID, squadIndex, squad)
-	local state = PRODUCE_SCAN_STATE
-	if state == nil then
-		return true
-	end
-	if Squad_GetPlayerOwner(squad) ~= state.player then
-		return false
-	end
-	if Squad_GetBlueprint(squad) ~= BP_GetSquadBlueprint(state.payload.id) then
-		return false
-	end
-
-	local squadID = Squad_GetID(squad)
-	if state.seen[squadID] ~= true then
-		state.seen[squadID] = true
-		Produce_OnCompletedSquad(state.checkID, squad)
-	end
-	return false
-end
-
-function Produce_SnapshotSquad(groupID, squadIndex, squad)
-	local state = PRODUCE_SNAPSHOT_STATE
-	if state == nil then
-		return true
-	end
-	if Squad_GetPlayerOwner(squad) ~= state.player then
-		-- Player_GetSquads is player-scoped, but retain the owner guard for converted squads.
-		return false
-	end
-	state.seen[Squad_GetID(squad)] = true
-	return false
-end
-
-function Produce_ScanNewSquads(state)
-	PRODUCE_SCAN_STATE = state
-	SGroup_ForEach(Player_GetSquads(state.player), Produce_ScanSquad)
-	PRODUCE_SCAN_STATE = nil
-end
 
 function Produce_ScanQueueEntity(groupID, entityIndex, entity)
 	local state = PRODUCE_QUEUE_STATE
@@ -91,20 +32,9 @@ function Produce_QueueHasCount(state)
 	return state.queueCount >= state.payload.count
 end
 
-function Produce_ConstantSatisfied(state)
-	-- No documented player-scoped API can prove uninterrupted production across idle gaps.
-	return false
-end
-
 function Produce_Poll()
 	for _, state in pairs(PRODUCE_STATE) do
-		if state.payload.constant then
-			Produce_ConstantSatisfied(state)
-		elseif state.payload.queued then
-			BuildOrder_SetCheckComplete(state.checkID, Produce_QueueHasCount(state))
-		else
-			Produce_ScanNewSquads(state)
-		end
+		BuildOrder_SetCheckComplete(state.checkID, Produce_QueueHasCount(state))
 	end
 end
 
@@ -114,25 +44,23 @@ function Produce_Activate(check, objectiveID, context)
 		return
 	end
 
+	if check.payload.queued == false or check.payload.constant then
+		-- Normal completion and uninterrupted production lack a documented scoped signal.
+		return
+	end
+
 	local addRule = next(PRODUCE_STATE) == nil
 	PRODUCE_STATE[check.id] = {
 		checkID = check.id,
 		objectiveID = objectiveID,
 		player = player,
 		payload = check.payload,
-		remaining = check.payload.count,
-		seen = {},
 	}
-	PRODUCE_SNAPSHOT_STATE = PRODUCE_STATE[check.id]
-	SGroup_ForEach(Player_GetSquads(player), Produce_SnapshotSquad)
-	PRODUCE_SNAPSHOT_STATE = nil
 	if addRule then
 		PRODUCE_POLLING = true
 		Rule_Add(Produce_Poll)
 	end
-	if check.payload.queued and check.payload.constant == false then
-		BuildOrder_SetCheckComplete(check.id, Produce_QueueHasCount(PRODUCE_STATE[check.id]))
-	end
+	BuildOrder_SetCheckComplete(check.id, Produce_QueueHasCount(PRODUCE_STATE[check.id]))
 end
 
 function Produce_Deactivate(check, objectiveID, context)

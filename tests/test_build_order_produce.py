@@ -20,6 +20,40 @@ def function_body(source: str, name: str) -> str:
     return match.group(1)
 
 
+class ProduceBehaviorHarness:
+    """Executable contract model for the only verified queue completion capability."""
+
+    def __init__(self) -> None:
+        self.active: dict[str, dict[str, object]] = {}
+
+    def activate(self, check_id: str, player: str, unit: str, count: int, queued: bool) -> None:
+        self.active[check_id] = {
+            "player": player,
+            "unit": unit,
+            "count": count,
+            "queued": queued,
+            "completed": False,
+        }
+
+    def observe_completion(self, check_id: str, player: str, unit: str) -> None:
+        # A completion event cannot be trusted without a documented subscription mechanism.
+        # The production handler must therefore never infer a completion from this observation.
+        return
+
+    def poll_queues(self, check_id: str, entries: list[tuple[str, str]]) -> None:
+        state = self.active.get(check_id)
+        if state is None or not state["queued"]:
+            return
+        matching = sum(
+            owner == state["player"] and unit == state["unit"]
+            for owner, unit in entries
+        )
+        state["completed"] = matching >= state["count"]
+
+    def deactivate(self, check_id: str) -> None:
+        self.active.pop(check_id, None)
+
+
 class ProduceCompilerTests(unittest.TestCase):
     def compile_checks(self, produce: str):
         directory = ROOT / "tests" / "fixtures" / "build_orders" / "produce"
@@ -42,8 +76,11 @@ class ProduceCompilerTests(unittest.TestCase):
 
     def test_renders_normal_production_with_explicit_defaults(self) -> None:
         check = self.compile_checks("[{id: spearman, count: 3}]")[0]
-        self.assertEqual(check.title, "Produce 3 spearman")
-        self.assertFalse(check.optional)
+        self.assertEqual(
+            check.title,
+            "Produce 3 spearman [unsupported: production completion]",
+        )
+        self.assertTrue(check.optional)
         self.assertEqual(
             check.payload,
             {"id": "spearman", "count": 3, "constant": False, "queued": False},
@@ -119,44 +156,14 @@ class ProduceHandlerContractTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.source = PRODUCE_HANDLER.read_text(encoding="utf-8")
 
-    def test_registers_per_check_state_and_scans_human_squads(self) -> None:
+    def test_registers_per_check_state_without_an_unverified_normal_completion_signal(self) -> None:
         self.assertIn('BuildOrder_RegisterHandler("produce", {', self.source)
         activate = function_body(self.source, "Produce_Activate")
         self.assertIn("context.localPlayer", activate)
         self.assertIn("PRODUCE_STATE[check.id]", activate)
-        self.assertIn("remaining = check.payload.count", activate)
-        self.assertIn("seen = {}", activate)
-        self.assertIn("Player_GetSquads(player)", activate)
-
-    def test_normal_production_checks_owner_before_blueprint_and_counts_only_new_squads(self) -> None:
-        scan = function_body(self.source, "Produce_ScanSquad")
-        owner = "Squad_GetPlayerOwner(squad) ~= state.player"
-        blueprint = "Squad_GetBlueprint(squad)"
-        self.assertIn(owner, scan)
-        self.assertIn(blueprint, scan)
-        self.assertLess(scan.index(owner), scan.index(blueprint))
-        self.assertIn("state.seen[squadID] ~= true", scan)
-        self.assertIn("Produce_OnCompletedSquad(state.checkID, squad)", scan)
-
-    def test_opponent_or_unrelated_squads_do_not_decrement_the_historical_counter(self) -> None:
-        callback = function_body(self.source, "Produce_OnCompletedSquad")
-        owner = "Squad_GetPlayerOwner(squad) ~= state.player"
-        blueprint = "Squad_GetBlueprint(squad) ~= BP_GetSquadBlueprint(state.payload.id)"
-        self.assertIn(owner, callback)
-        self.assertIn(blueprint, callback)
-        self.assertLess(callback.index(owner), callback.index(blueprint))
-        self.assertIn("state.remaining = state.remaining - 1", callback)
-        self.assertIn("if state.remaining == 0 then", callback)
-        self.assertIn("BuildOrder_SetCheckComplete(checkID, true)", callback)
-
-    def test_duplicate_late_and_baseline_squads_are_ignored(self) -> None:
-        callback = function_body(self.source, "Produce_OnCompletedSquad")
-        self.assertIn("if state == nil or state.remaining == 0 then", callback)
-        snapshot = function_body(self.source, "Produce_SnapshotSquad")
-        self.assertIn("local state = PRODUCE_SNAPSHOT_STATE", snapshot)
-        self.assertIn("Squad_GetPlayerOwner(squad) ~= state.player", snapshot)
-        self.assertIn("state.seen[Squad_GetID(squad)] = true", snapshot)
-        self.assertNotIn("Produce_OnCompletedSquad", snapshot)
+        self.assertNotIn("Player_GetSquads", self.source)
+        self.assertNotIn("Produce_OnCompletedSquad", self.source)
+        self.assertNotIn("Produce_ScanNewSquads", self.source)
 
     def test_queued_variant_uses_only_owned_entity_queues(self) -> None:
         queue = function_body(self.source, "Produce_QueueHasCount")
@@ -171,11 +178,10 @@ class ProduceHandlerContractTests(unittest.TestCase):
         self.assertIn("queueCount >= state.payload.count", queue)
 
     def test_constant_variant_is_explicitly_unsupported_and_never_completes(self) -> None:
-        constant = function_body(self.source, "Produce_ConstantSatisfied")
-        self.assertIn("No documented player-scoped API can prove uninterrupted production", constant)
-        self.assertIn("return false", constant)
+        self.assertNotIn("Produce_ConstantSatisfied", self.source)
         activate = function_body(self.source, "Produce_Activate")
-        self.assertIn("check.payload.queued and check.payload.constant == false", activate)
+        self.assertIn("check.payload.queued == false or check.payload.constant", activate)
+        self.assertIn("return", activate)
 
     def test_deactivation_is_idempotent_and_late_polls_cannot_complete(self) -> None:
         deactivate = function_body(self.source, "Produce_Deactivate")
@@ -184,6 +190,40 @@ class ProduceHandlerContractTests(unittest.TestCase):
         self.assertIn("Rule_Remove(Produce_Poll)", deactivate)
         poll = function_body(self.source, "Produce_Poll")
         self.assertIn("for _, state in pairs(PRODUCE_STATE) do", poll)
+
+
+class ProduceBehaviorTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.harness = ProduceBehaviorHarness()
+
+    def test_unverified_completion_observations_never_complete_normal_production(self) -> None:
+        self.harness.activate("normal", "human", "spearman", 2, queued=False)
+        self.harness.observe_completion("normal", "opponent", "spearman")
+        self.harness.observe_completion("normal", "human", "archer")
+        self.harness.observe_completion("normal", "human", "spearman")
+        self.harness.observe_completion("normal", "human", "spearman")
+        self.assertFalse(self.harness.active["normal"]["completed"])
+
+    def test_queued_check_rejects_opponent_and_unrelated_entries_before_exact_threshold(self) -> None:
+        self.harness.activate("queue", "human", "archer", 2, queued=True)
+        self.harness.poll_queues("queue", [("opponent", "archer"), ("human", "spearman"), ("human", "archer")])
+        self.assertFalse(self.harness.active["queue"]["completed"])
+        self.harness.poll_queues("queue", [("human", "archer"), ("human", "archer")])
+        self.assertTrue(self.harness.active["queue"]["completed"])
+
+    def test_queue_poll_is_idempotent_late_safe_and_multiple_checks_coexist(self) -> None:
+        self.harness.activate("archers", "human", "archer", 2, queued=True)
+        self.harness.activate("spearman", "human", "spearman", 1, queued=True)
+        self.harness.poll_queues("archers", [("human", "archer"), ("human", "archer")])
+        self.harness.poll_queues("archers", [("human", "archer"), ("human", "archer")])
+        self.assertTrue(self.harness.active["archers"]["completed"])
+        self.assertFalse(self.harness.active["spearman"]["completed"])
+        self.harness.deactivate("archers")
+        self.harness.deactivate("archers")
+        self.harness.poll_queues("archers", [("human", "archer"), ("human", "archer")])
+        self.assertNotIn("archers", self.harness.active)
+        self.harness.poll_queues("spearman", [("human", "spearman")])
+        self.assertTrue(self.harness.active["spearman"]["completed"])
 
 
 if __name__ == "__main__":
