@@ -130,11 +130,26 @@ def _check_descriptors(kind: str, value: Any, file: Path, path: str) -> list[Che
                 payload["queued"] = queued
             else:
                 payload["count"] = _positive(mapping.get("count", 1), file, f"{item_path}.count")
-                for flag in ("constant", "queued"):
-                    if flag in mapping:
-                        if not isinstance(mapping[flag], bool): _error(file, f"{item_path}.{flag}", "must be boolean")
-                        payload[flag] = mapping[flag]
-            result.append(CheckDescriptor(kind, identifier, optional, payload))
+                if kind == "produce":
+                    for flag in ("constant", "queued"):
+                        value = mapping.get(flag, False)
+                        if not isinstance(value, bool): _error(file, f"{item_path}.{flag}", "must be boolean")
+                        payload[flag] = value
+            if kind == "produce":
+                if payload["constant"]:
+                    title = f"Constantly produce {identifier} [unsupported: continuous production]"
+                    optional = True
+                elif payload["queued"]:
+                    title = (
+                        f"Queue {identifier} for production"
+                        if payload["count"] == 1
+                        else f"Have {payload['count']} {identifier} queued"
+                    )
+                else:
+                    title = f"Produce {payload['count']} {identifier}"
+            else:
+                title = identifier
+            result.append(CheckDescriptor(kind, title, optional, payload))
         return result
     if kind == "hints":
         return [CheckDescriptor(kind, _string(item, file, f"{path}[{index}]"), False, {"text": _string(item, file, f"{path}[{index}]")}) for index, item in enumerate(_list(value, file, path))]
