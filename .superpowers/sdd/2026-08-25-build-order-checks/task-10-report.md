@@ -108,3 +108,54 @@ Limitations: `Entity_GetRallyPointPositions` supplies positions only. It cannot
 prove a resource target, and available official source does not prove a stable
 construction order for `Player_GetEntities`; therefore no rally action may mark
 the check complete until a supported typed target/ordering API is found.
+
+## Review Fix Round 1
+
+The earlier handler still selected the configured TC ordinal using
+`Player_GetEntities` order and installed a per-check interval rule. Neither a
+documented construction-order signal nor a typed rally-resource target exists,
+so retaining that observation was not safe. This round removes all TC discovery,
+ownership queries, rally-position queries, completion calls, and rule
+registration from `rallypoint.scar`.
+
+Activation now creates one inert per-check record only when the ID is absent;
+duplicate activation returns without replacing state. Deactivation only removes
+that record, so repeated cleanup is idempotent and there is no late polling
+callback or stale rule to remove.
+
+The compiler now makes the capability gap visible in every title with the exact
+suffix ` [OPTIONAL: rally target resource cannot be verified]`, while retaining
+the one-/two-TC labels, payload index/count, and `optional=True` semantics.
+
+### RED to GREEN Evidence
+
+- RED: `python -m unittest tests.test_build_order_rallypoint -v` produced the
+  expected three failures: missing visible limitation suffixes and the old
+  handler's unsupported TC/rally/rule calls.
+- GREEN: the same focused command passed 6 tests. In addition to real compiler
+  output, an executable Python fallback model covers a matching opponent rally
+  never transitioning, two independent check IDs, duplicate activation,
+  idempotent cleanup, and a late poll remaining false. A narrow static safety
+  check confirms the SCAR fallback performs no selection or observation.
+- Full: `python -m unittest discover -s tests -v` passed 69 tests.
+- SCAR API: `check_code` on `assets/scar/build_orders/checks/rallypoint.scar`
+  reported 0 unknown calls, 0 low-confidence APIs, and 0 missing localization
+  IDs.
+- `git diff --check` passed; only Git's line-ending normalization warnings were
+  printed.
+
+### Updated Validation Request
+
+Fixture/selection: English one-TC `[food]` and two-TC `[wood, gold]` build
+orders.
+Human actions: Set each local TC rally to the displayed resource, change it,
+and reactivate/deactivate the same check through a step transition.
+Opponent guard: Set an opponent TC to the same resource before and after every
+local action; neither the opponent nor local action may transition a rally
+descriptor.
+Expected UI: `Rally new vils to food [OPTIONAL: rally target resource cannot be
+verified]`; for two TCs, the equivalent `Rally Main TC ...` and `Rally TC #2
+...` titles with the same suffix. They remain visible and do not block advance.
+Limitations: no typed resource target or documented stable construction-order
+API is available, so the handler intentionally performs no TC/rally observation
+until such a supported signal is found.

@@ -7,6 +7,7 @@ from .model import BuildOrder, Catalog, CheckDescriptor, Step, normalize_id
 
 RESOURCES = {"food", "gold", "stone", "wood"}
 CHECK_FIELDS = {"vils", "rallypoint", "built", "age_up", "upgrades", "produce", "resources", "buildings", "units", "hints"}
+RALLYPOINT_UNSUPPORTED_SUFFIX = " [OPTIONAL: rally target resource cannot be verified]"
 
 
 class BuildOrderValidationError(ValueError):
@@ -100,7 +101,7 @@ def _check_descriptors(kind: str, value: Any, file: Path, path: str) -> list[Che
                 title = f"Rally TC #{tc_index} to {resource}"
             checks.append(CheckDescriptor(
                 kind,
-                title,
+                title + RALLYPOINT_UNSUPPORTED_SUFFIX,
                 True,
                 {"resource": resource, "tc_index": tc_index, "tc_count": resource_count},
             ))

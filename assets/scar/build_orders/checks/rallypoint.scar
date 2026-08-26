@@ -2,58 +2,18 @@ local RALLYPOINT_STATE = {}
 
 local function Rallypoint_Activate(check, objectiveID, context)
 	local player = context.localPlayer
-	if player == nil then
+	if player == nil or RALLYPOINT_STATE[check.id] ~= nil then
 		return
 	end
 
-	local state = {
+	-- The supported SCAR rally API cannot identify the rally target resource or a
+	-- documented town-center construction order. The compiler presents this
+	-- descriptor as optional, so keep no polling state and never infer completion.
+	RALLYPOINT_STATE[check.id] = {
 		player = player,
 		objectiveID = objectiveID,
 		payload = check.payload,
 	}
-	RALLYPOINT_STATE[check.id] = state
-	state.rule = function()
-		local activeState = RALLYPOINT_STATE[check.id]
-		if activeState == nil then
-			return
-		end
-
-		local playerEntities = Player_GetEntities(player)
-		local matchedTownCenters = 0
-		local townCenter = nil
-		for entityIndex = 1, EGroup_Count(playerEntities) do
-			local entity = EGroup_GetEntityAt(playerEntities, entityIndex)
-			if entity ~= nil then
-				if Entity_GetPlayerOwner(entity) ~= player then
-					-- Explicitly ignore a transferred or otherwise foreign entity.
-				else
-					local blueprint = Entity_GetBlueprint(entity)
-					if Entity_IsEBPOfType(blueprint, "town_center_capital")
-						or Entity_IsEBPOfType(blueprint, "town_center") then
-						matchedTownCenters = matchedTownCenters + 1
-						if matchedTownCenters == activeState.payload.tc_index
-							and activeState.payload.tc_index <= activeState.payload.tc_count then
-							townCenter = entity
-							break
-						end
-					end
-				end
-			end
-		end
-
-		if townCenter ~= nil then
-			local rallyPositions = Entity_GetRallyPointPositions(townCenter)
-			activeState.lastRallyPosition = rallyPositions.position1
-		end
-
-		-- This group starts at context.localPlayer and rechecks every returned owner.
-		-- Its order is not documented as construction order, so selection is observation-only.
-		-- The supported rally query exposes positions only and cannot identify the rally target resource.
-		-- Do not infer a match from the TC, its index, or an opponent's rally: this remains optional.
-		BuildOrder_SetCheckComplete(check.id, false)
-	end
-	state.rule()
-	Rule_AddInterval(state.rule, 1)
 end
 
 local function Rallypoint_Deactivate(check, objectiveID, context)
@@ -62,7 +22,6 @@ local function Rallypoint_Deactivate(check, objectiveID, context)
 		return
 	end
 
-	Rule_Remove(state.rule)
 	RALLYPOINT_STATE[check.id] = nil
 end
 
