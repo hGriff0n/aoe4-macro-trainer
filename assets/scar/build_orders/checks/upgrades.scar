@@ -1,0 +1,81 @@
+UPGRADES_STATE = {}
+UPGRADES_POLLING = false
+
+local function Upgrades_IsCompletedResearch(state)
+	return Player_HasUpgrade(state.player, state.upgrade)
+end
+
+local function Upgrades_HasQueuedResearch(state)
+	local entities = Player_GetEntities(state.player)
+	for entityIndex = 1, EGroup_Count(entities) do
+		local entity = EGroup_GetEntityAt(entities, entityIndex)
+		-- Player_GetEntities is player-scoped, but retain the owner guard for converted entities.
+		if entity ~= nil and Entity_GetPlayerOwner(entity) == state.player then
+			for index = 0, Entity_GetProductionQueueSize(entity) - 1 do
+				local itemType = Entity_GetProductionQueueItemType(entity, index)
+				if (itemType == PITEM_Upgrade or itemType == PITEM_PlayerUpgrade)
+					and Entity_GetProductionQueueItem(entity, index) == state.upgrade then
+					return true
+				end
+			end
+		end
+	end
+	return false
+end
+
+local function Upgrades_TryComplete(state)
+	if state == nil or state.completed then
+		return
+	end
+
+	if Upgrades_IsCompletedResearch(state)
+		or (state.queued and Upgrades_HasQueuedResearch(state)) then
+		state.completed = true
+		BuildOrder_SetCheckComplete(state.checkID, true)
+	end
+end
+
+function Upgrades_Poll()
+	for _, state in pairs(UPGRADES_STATE) do
+		Upgrades_TryComplete(state)
+	end
+end
+
+local function Upgrades_Activate(check, objectiveID, context)
+	local player = context.localPlayer
+	if player == nil then
+		return
+	end
+
+	UPGRADES_STATE[check.id] = {
+		checkID = check.id,
+		objectiveID = objectiveID,
+		player = player,
+		upgrade = BP_GetUpgradeBlueprint(check.payload.id),
+		queued = check.payload.queued,
+		completed = false,
+	}
+	if not UPGRADES_POLLING then
+		UPGRADES_POLLING = true
+		Rule_Add(Upgrades_Poll)
+	end
+	Upgrades_TryComplete(UPGRADES_STATE[check.id])
+end
+
+local function Upgrades_Deactivate(check, objectiveID, context)
+	local state = UPGRADES_STATE[check.id]
+	if state == nil then
+		return
+	end
+
+	UPGRADES_STATE[check.id] = nil
+	if next(UPGRADES_STATE) == nil and UPGRADES_POLLING then
+		Rule_Remove(Upgrades_Poll)
+		UPGRADES_POLLING = false
+	end
+end
+
+BuildOrder_RegisterHandler("upgrades", {
+	activate = Upgrades_Activate,
+	deactivate = Upgrades_Deactivate,
+})

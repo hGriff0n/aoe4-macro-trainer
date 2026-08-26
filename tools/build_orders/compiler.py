@@ -128,13 +128,17 @@ def _check_descriptors(kind: str, value: Any, file: Path, path: str) -> list[Che
                 queued = mapping.get("queued", False)
                 if not isinstance(queued, bool): _error(file, f"{item_path}.queued", "must be boolean")
                 payload["queued"] = queued
+                title = f"Queue {identifier} for research" if queued else f"Research {identifier}"
+                if optional:
+                    title = f"[Optional] {title}"
             else:
                 payload["count"] = _positive(mapping.get("count", 1), file, f"{item_path}.count")
                 for flag in ("constant", "queued"):
                     if flag in mapping:
                         if not isinstance(mapping[flag], bool): _error(file, f"{item_path}.{flag}", "must be boolean")
                         payload[flag] = mapping[flag]
-            result.append(CheckDescriptor(kind, identifier, optional, payload))
+                title = identifier
+            result.append(CheckDescriptor(kind, title, optional, payload))
         return result
     if kind == "hints":
         return [CheckDescriptor(kind, _string(item, file, f"{path}[{index}]"), False, {"text": _string(item, file, f"{path}[{index}]")}) for index, item in enumerate(_list(value, file, path))]
