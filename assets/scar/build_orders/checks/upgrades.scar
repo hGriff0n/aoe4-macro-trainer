@@ -46,6 +46,9 @@ local function Upgrades_Activate(check, objectiveID, context)
 	if player == nil then
 		return
 	end
+	if UPGRADES_STATE[check.id] ~= nil then
+		return
+	end
 
 	UPGRADES_STATE[check.id] = {
 		checkID = check.id,

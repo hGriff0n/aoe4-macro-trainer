@@ -56,3 +56,44 @@ Human actions: Complete Wheelbarrow; then place Horticulture into a human-owned 
 Opponent guard: Before each matching human action, have an opponent complete Wheelbarrow and queue Horticulture. Neither action may complete or advance the human player’s objective.
 Expected UI: `Research wheelbarrow`; `Queue horticulture for research`; `[Optional] Research fitted_leatherwork`. Completed and queued checks latch complete while their step is active. The optional descriptor does not block advancement.
 Limitations: Queued research is detected only when the requested upgrade is present in a currently observable production queue of a player-owned entity. Player-scoped upgrade queues with no entity producer are not exposed by the verified APIs and therefore cannot satisfy a queued descriptor until completion is visible through `Player_HasUpgrade`.
+
+## Fix round 1/5: review coverage and idempotent activation
+
+Changes:
+
+- Added contract coverage that a queue can return true only inside the stored-player owner guard and only after matching an upgrade queue item type and the requested canonical PBG. This covers matching opponent and unrelated queue rejection.
+- Added independent completion coverage: completed research is the fallback, and queue inspection is gated by `state.queued`.
+- Added lifecycle coverage for duplicate activation, duplicate completion/late polling, idempotent deactivation, and multiple simultaneous descriptors sharing one polling rule.
+- Made activation idempotent for a live `check.id`, preventing an accidental duplicate activation from replacing the existing state or adding work.
+
+RED before the SCAR change:
+
+```text
+python -m unittest tests.test_build_order_upgrades -v
+FAIL test_duplicate_activation_is_idempotent_for_one_check
+AssertionError: 'if UPGRADES_STATE[check.id] ~= nil then' not found in Upgrades_Activate
+Ran 9 tests ... FAILED (failures=1)
+```
+
+GREEN:
+
+```text
+python -m unittest tests.test_build_order_upgrades -v
+Ran 9 tests ... OK
+```
+
+Final validation before the fix commit:
+
+```text
+python -m unittest tests.test_build_order_upgrades -v
+Ran 9 tests ... OK
+
+python -m unittest discover -s tests -v
+Ran 72 tests ... OK
+
+check_code assets/scar/build_orders/checks/upgrades.scar
+unknown calls: local helpers plus parser token `or`; low-confidence APIs: none; missing locdb: none
+
+git diff --check
+(no output)
+```

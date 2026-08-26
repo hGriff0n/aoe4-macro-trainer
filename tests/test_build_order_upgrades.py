@@ -9,6 +9,14 @@ ROOT = Path(__file__).resolve().parents[1]
 UPGRADES = ROOT / "assets" / "scar" / "build_orders" / "checks" / "upgrades.scar"
 
 
+def function_body(source: str, name: str) -> str:
+    start = source.index(f"function {name}") if f"function {name}" in source else source.index(f"local function {name}")
+    next_function = source.find("\nfunction ", start + 1)
+    next_local_function = source.find("\nlocal function ", start + 1)
+    endings = [index for index in (next_function, next_local_function) if index != -1]
+    return source[start:min(endings) if endings else len(source)]
+
+
 class BuildOrderUpgradeCompilerTests(unittest.TestCase):
     def compile(self, yaml: str):
         with tempfile.TemporaryDirectory(dir=ROOT) as temp:
@@ -72,6 +80,44 @@ class BuildOrderUpgradeHandlerContractTests(unittest.TestCase):
         self.assertIn("Rule_Add(Upgrades_Poll)", self.source)
         self.assertIn("for _, state in pairs(UPGRADES_STATE) do", self.source)
         self.assertIn("if state == nil then", self.source)
+
+    def test_matching_opponent_or_unrelated_queue_cannot_complete_check(self) -> None:
+        scan = function_body(self.source, "Upgrades_HasQueuedResearch")
+        self.assertRegex(
+            scan,
+            r"if entity ~= nil and Entity_GetPlayerOwner\(entity\) == state\.player then"
+            r"(?s:.*?)"
+            r"if \(itemType == PITEM_Upgrade or itemType == PITEM_PlayerUpgrade\)"
+            r"(?s:.*?)and Entity_GetProductionQueueItem\(entity, index\) == state\.upgrade then"
+            r"(?s:.*?)return true",
+        )
+        self.assertIn("return false", scan)
+
+    def test_completed_research_is_fallback_and_queue_scan_is_queued_only(self) -> None:
+        complete = function_body(self.source, "Upgrades_TryComplete")
+        self.assertIn("Upgrades_IsCompletedResearch(state)", complete)
+        self.assertIn("state.queued and Upgrades_HasQueuedResearch(state)", complete)
+        self.assertLess(
+            complete.index("Upgrades_IsCompletedResearch(state)"),
+            complete.index("Upgrades_HasQueuedResearch(state)"),
+        )
+
+    def test_duplicate_activation_is_idempotent_for_one_check(self) -> None:
+        activate = function_body(self.source, "Upgrades_Activate")
+        self.assertIn("if UPGRADES_STATE[check.id] ~= nil then", activate)
+        self.assertLess(
+            activate.index("if UPGRADES_STATE[check.id] ~= nil then"),
+            activate.index("UPGRADES_STATE[check.id] = {"),
+        )
+
+    def test_multiple_checks_share_polling_and_late_or_duplicate_calls_are_safe(self) -> None:
+        complete = function_body(self.source, "Upgrades_TryComplete")
+        poll = function_body(self.source, "Upgrades_Poll")
+        deactivate = function_body(self.source, "Upgrades_Deactivate")
+        self.assertIn("if state == nil or state.completed then", complete)
+        self.assertIn("for _, state in pairs(UPGRADES_STATE) do", poll)
+        self.assertIn("if state == nil then", deactivate)
+        self.assertIn("if next(UPGRADES_STATE) == nil and UPGRADES_POLLING then", deactivate)
 
 
 if __name__ == "__main__":
