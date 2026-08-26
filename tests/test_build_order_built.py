@@ -56,6 +56,20 @@ class BuiltCheckContractTests(unittest.TestCase):
         self.assertIn("state.seen[entityID] ~= true", scan)
         self.assertIn("Built_OnConstructionComplete(checkID, entity)", scan)
 
+    def test_baselines_existing_completed_buildings_without_counting_them(self) -> None:
+        snapshot = function_body(self.source, "Built_SnapshotEntity")
+        self.assertIn("Entity_GetPlayerOwner(entity) == state.player", snapshot)
+        self.assertIn("Entity_IsBuilding(entity)", snapshot)
+        self.assertIn("Entity_GetBuildingProgress(entity) >= 1.0", snapshot)
+        self.assertIn("state.seen[Entity_GetID(entity)] = true", snapshot)
+        self.assertNotIn("Built_OnConstructionComplete", snapshot)
+
+        activate = function_body(self.source, "Built_Activate")
+        snapshot_call = "EGroup_ForEach(Player_GetEntities(player), Built_SnapshotEntity)"
+        self.assertIn(snapshot_call, activate)
+        self.assertLess(activate.index("BUILT_STATE[check.id] = {"), activate.index(snapshot_call))
+        self.assertLess(activate.index(snapshot_call), activate.index("Rule_Add(Built_Update)"))
+
     def test_scans_only_the_stored_player_entities_and_unregisters_idempotently(self) -> None:
         update = function_body(self.source, "Built_Update")
         self.assertIn("Player_GetEntities(state.player)", update)

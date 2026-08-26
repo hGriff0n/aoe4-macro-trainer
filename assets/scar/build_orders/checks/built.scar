@@ -46,6 +46,20 @@ function Built_ScanEntity(groupID, entityIndex, entity)
 	return false
 end
 
+function Built_SnapshotEntity(groupID, entityIndex, entity)
+	for _, state in pairs(BUILT_STATE) do
+		if Entity_GetPlayerOwner(entity) == state.player then
+			if Entity_IsBuilding(entity) and Entity_GetBuildingProgress(entity) >= 1.0 then
+				local blueprint = Entity_GetBlueprint(entity)
+				if Built_Matches(state, blueprint) then
+					state.seen[Entity_GetID(entity)] = true
+				end
+			end
+		end
+	end
+	return false
+end
+
 function Built_Update()
 	for _, state in pairs(BUILT_STATE) do
 		EGroup_ForEach(Player_GetEntities(state.player), Built_ScanEntity)
@@ -66,6 +80,7 @@ function Built_Activate(check, objectiveID, context)
 		remaining = check.payload.count,
 		seen = {},
 	}
+	EGroup_ForEach(Player_GetEntities(player), Built_SnapshotEntity)
 	if addRule then
 		Rule_Add(Built_Update)
 	end
