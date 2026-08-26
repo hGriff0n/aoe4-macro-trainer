@@ -79,7 +79,7 @@ def _resource_checks(kind: str, value: Any, file: Path, path: str, no_collect: b
     return checks
 
 
-def _check_descriptors(kind: str, value: Any, file: Path, path: str) -> list[CheckDescriptor]:
+def _check_descriptors(kind: str, value: Any, file: Path, path: str, civ: str) -> list[CheckDescriptor]:
     if kind in {"vils", "resources"}:
         return _resource_checks(kind, value, file, path)
     if kind == "rallypoint":
@@ -107,8 +107,20 @@ def _check_descriptors(kind: str, value: Any, file: Path, path: str) -> list[Che
                 payload["vils"] = _positive(mapping["vils"], file, f"{item_path}.vils")
             if "location" in mapping:
                 payload["location"] = _string(mapping["location"], file, f"{item_path}.location")
-            label = payload["id"] if "id" in payload else " or ".join(payload["oneof"])
-            result.append(CheckDescriptor(kind, f"{kind.replace('_', ' ').title()}: {label}", False, dict(payload)))
+            label = payload["id"] if "id" in payload else " / ".join(payload["oneof"])
+            if kind == "age_up":
+                title = f"Age up: {label}"
+                if "vils" in payload:
+                    title += f" with {payload['vils']} vils"
+                if "location" in payload:
+                    title += f" on {payload['location']}"
+                unsupported_non_building = civ.casefold() == "golden horde"
+                if unsupported_non_building:
+                    title += " [unsupported: non-building progress]"
+            else:
+                title = f"Built: {label}"
+                unsupported_non_building = False
+            result.append(CheckDescriptor(kind, title, unsupported_non_building, dict(payload)))
         return result
     if kind in {"upgrades", "produce", "buildings", "units"}:
         result = []
@@ -162,7 +174,7 @@ def _compile_order(document: Any, file: Path, index: int | None) -> BuildOrder:
             step_title = _string(step_title, file, f"{step_path}.title")
         checks: list[CheckDescriptor] = []
         for key, entry in step.items():
-            if key != "title": checks.extend(_check_descriptors(key, entry, file, f"{step_path}.{key}"))
+            if key != "title": checks.extend(_check_descriptors(key, entry, file, f"{step_path}.{key}", civ))
         if not checks:
             _error(file, step_path, "must contain at least one check")
         compiled_steps.append(Step(step_title, tuple(checks)))

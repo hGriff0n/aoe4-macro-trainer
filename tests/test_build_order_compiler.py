@@ -71,6 +71,20 @@ steps:
         self.assertEqual(checks[2].payload, {"id": "wheelbarrow", "queued": True})
         self.assertEqual(checks[3].payload, {"id": "horticulture", "queued": False})
 
+    def test_compiles_age_up_presentation_suffixes_in_stable_order(self) -> None:
+        catalog = self.compile({"age-up.yaml": """civ: English
+title: Age Up
+steps:
+  - age_up: {oneof: [council_hall, kings_palace], vils: 4, location: gold}
+"""})
+        check = catalog.build_orders[0].steps[0].checks[0]
+        self.assertEqual(check.title, "Age up: council_hall / kings_palace with 4 vils on gold")
+        self.assertFalse(check.optional)
+        self.assertEqual(
+            check.payload,
+            {"oneof": ["council_hall", "kings_palace"], "vils": 4, "location": "gold"},
+        )
+
     def test_rejects_invalid_extended_built_and_upgrade_fields(self) -> None:
         self.assert_invalid("civ: english\ntitle: x\nsteps:\n  - built: [{id: a, count: 0}]\n", "file.yaml: steps[0].built[0].count: must be a positive integer")
         self.assert_invalid("civ: english\ntitle: x\nsteps:\n  - built: [{id: a, vils: false}]\n", "file.yaml: steps[0].built[0].vils: must be a positive integer")

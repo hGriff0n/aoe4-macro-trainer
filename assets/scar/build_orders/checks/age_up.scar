@@ -1,0 +1,101 @@
+AGE_UP_STATE = {}
+AGE_UP_POLLING = false
+AGE_UP_SCAN_STATE = nil
+
+local function AgeUp_MatchesID(payload, blueprint)
+
+	if payload.id ~= nil then
+		return blueprint == BP_GetEntityBlueprint(payload.id)
+	end
+
+	for _, identifier in ipairs(payload.oneof) do
+		if blueprint == BP_GetEntityBlueprint(identifier) then
+			return true
+		end
+	end
+	return false
+end
+
+function AgeUp_CheckLandmarkEntity(group, index, entity)
+	local state = AGE_UP_SCAN_STATE
+	if state == nil then
+		return true
+	end
+	if Entity_GetPlayerOwner(entity) ~= state.player then
+		-- Player_GetEntities is player-scoped, but retain the owner guard for converted entities.
+		return false
+	end
+	if AgeUp_MatchesID(state.payload, Entity_GetBlueprint(entity))
+		and Entity_GetBuildingProgress(entity) > 0 then
+		state.landmarkProgressStarted = true
+		return true
+	end
+	return false
+end
+
+local function AgeUp_LandmarkProgressStarted(state)
+	state.landmarkProgressStarted = false
+	local entities = Player_GetEntities(state.player)
+	AGE_UP_SCAN_STATE = state
+	EGroup_ForEach(entities, AgeUp_CheckLandmarkEntity)
+	AGE_UP_SCAN_STATE = nil
+	return state.landmarkProgressStarted
+end
+
+local function AgeUp_NonBuildingProgressStarted(state)
+	-- No documented player-scoped non-building age-up progress API exists. Production queues
+	-- only prove insertion, so this adapter deliberately remains non-completing.
+	return false
+end
+
+local function AgeUp_TryComplete(state)
+	if state == nil or state.completed then
+		return
+	end
+	if AgeUp_LandmarkProgressStarted(state) or AgeUp_NonBuildingProgressStarted(state) then
+		state.completed = true
+		BuildOrder_SetCheckComplete(state.checkID, true)
+	end
+end
+
+function AgeUp_Poll()
+	for _, state in pairs(AGE_UP_STATE) do
+		AgeUp_TryComplete(state)
+	end
+end
+
+local function AgeUp_Activate(check, objectiveID, context)
+	local player = context.localPlayer
+	if player == nil then
+		return
+	end
+
+	AGE_UP_STATE[check.id] = {
+		checkID = check.id,
+		objectiveID = objectiveID,
+		player = player,
+		payload = check.payload,
+		completed = false,
+	}
+	if not AGE_UP_POLLING then
+		AGE_UP_POLLING = true
+		Rule_Add(AgeUp_Poll)
+	end
+	AgeUp_TryComplete(AGE_UP_STATE[check.id])
+end
+
+local function AgeUp_Deactivate(check, objectiveID, context)
+	if AGE_UP_STATE[check.id] == nil then
+		return
+	end
+	AGE_UP_STATE[check.id] = nil
+	if next(AGE_UP_STATE) == nil and AGE_UP_POLLING then
+		Rule_Remove(AgeUp_Poll)
+		AGE_UP_POLLING = false
+	end
+end
+
+BuildOrder_RegisterHandler("age_up", {
+	activate = AgeUp_Activate,
+	deactivate = AgeUp_Deactivate,
+})
