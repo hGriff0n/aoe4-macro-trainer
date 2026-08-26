@@ -134,7 +134,8 @@ def _check_descriptors(kind: str, value: Any, file: Path, path: str) -> list[Che
                     if flag in mapping:
                         if not isinstance(mapping[flag], bool): _error(file, f"{item_path}.{flag}", "must be boolean")
                         payload[flag] = mapping[flag]
-            result.append(CheckDescriptor(kind, identifier, optional, payload))
+            title = f"Have {payload['count']} {identifier} active" if kind == "units" else identifier
+            result.append(CheckDescriptor(kind, title, optional, payload))
         return result
     if kind == "hints":
         return [CheckDescriptor(kind, _string(item, file, f"{path}[{index}]"), False, {"text": _string(item, file, f"{path}[{index}]")}) for index, item in enumerate(_list(value, file, path))]
