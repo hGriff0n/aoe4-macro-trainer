@@ -146,8 +146,7 @@ def _check_descriptors(kind: str, value: Any, file: Path, path: str) -> list[Che
                         else f"Have {payload['count']} {identifier} queued"
                     )
                 else:
-                    title = f"Produce {payload['count']} {identifier} [unsupported: production completion]"
-                    optional = True
+                    title = f"Produce {payload['count']} {identifier}"
             else:
                 title = identifier
             result.append(CheckDescriptor(kind, title, optional, payload))

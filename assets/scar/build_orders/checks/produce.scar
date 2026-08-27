@@ -1,6 +1,46 @@
 PRODUCE_STATE = {}
 PRODUCE_QUEUE_STATE = nil
 PRODUCE_POLLING = false
+PRODUCE_EVENT_REGISTERED = false
+
+local function Produce_BlueprintsEqual(left, right)
+	return left.PropertyBagGroupID == right.PropertyBagGroupID
+		and left.PropertyBagGroupModPackID == right.PropertyBagGroupModPackID
+		and left.PropertyBagGroupType == right.PropertyBagGroupType
+end
+
+function Produce_OnBuildItemComplete(context)
+	if context == nil or context.player == nil or context.pbg == nil
+		or context.spawnedSquad == nil then
+		return
+	end
+
+	for checkID, state in pairs(PRODUCE_STATE) do
+		if state ~= nil and state.payload.queued == false and state.remaining > 0 then
+			if context.player == state.player then
+				if Produce_BlueprintsEqual(state.blueprint, context.pbg) then
+					local squadID = context.spawnedSquad.SquadID
+					if state.seen[squadID] ~= true then
+						state.seen[squadID] = true
+						state.remaining = state.remaining - 1
+						if state.remaining == 0 then
+							BuildOrder_SetCheckComplete(checkID, true)
+						end
+					end
+				end
+			end
+		end
+	end
+end
+
+local function Produce_EnsureEventRegistered()
+	if PRODUCE_EVENT_REGISTERED then
+		return
+	end
+
+	Rule_AddGlobalEvent(Produce_OnBuildItemComplete, GE_BuildItemComplete)
+	PRODUCE_EVENT_REGISTERED = true
+end
 
 function Produce_ScanQueueEntity(groupID, entityIndex, entity)
 	local state = PRODUCE_QUEUE_STATE
@@ -17,14 +57,14 @@ function Produce_ScanQueueEntity(groupID, entityIndex, entity)
 	local queueSize = Entity_GetProductionQueueSize(entity)
 	for index = 0, queueSize - 1 do
 		if Entity_GetProductionQueueItemType(entity, index) == PITEM_Spawn
-			and Entity_GetProductionQueueItem(entity, index) == BP_GetSquadBlueprint(state.payload.id) then
+			and Produce_BlueprintsEqual(Entity_GetProductionQueueItem(entity, index), state.blueprint) then
 			state.queueCount = state.queueCount + 1
 		end
 	end
 	return false
 end
 
-function Produce_QueueHasCount(state)
+local function Produce_QueueHasCount(state)
 	state.queueCount = 0
 	PRODUCE_QUEUE_STATE = state
 	EGroup_ForEach(Player_GetEntities(state.player), Produce_ScanQueueEntity)
@@ -34,7 +74,36 @@ end
 
 function Produce_Poll()
 	for _, state in pairs(PRODUCE_STATE) do
-		BuildOrder_SetCheckComplete(state.checkID, Produce_QueueHasCount(state))
+		if state.payload.queued then
+			BuildOrder_SetCheckComplete(state.checkID, Produce_QueueHasCount(state))
+		end
+	end
+end
+
+local function Produce_UpdateObservers()
+	local needsPolling = false
+	local needsEvent = false
+	for _, state in pairs(PRODUCE_STATE) do
+		if state.payload.queued then
+			needsPolling = true
+		elseif state.remaining > 0 then
+			needsEvent = true
+		end
+	end
+
+	if needsPolling and not PRODUCE_POLLING then
+		PRODUCE_POLLING = true
+		Rule_Add(Produce_Poll)
+	elseif not needsPolling and PRODUCE_POLLING then
+		Rule_Remove(Produce_Poll)
+		PRODUCE_POLLING = false
+	end
+
+	if needsEvent then
+		Produce_EnsureEventRegistered()
+	elseif PRODUCE_EVENT_REGISTERED then
+		Rule_RemoveGlobalEvent(Produce_OnBuildItemComplete)
+		PRODUCE_EVENT_REGISTERED = false
 	end
 end
 
@@ -44,23 +113,24 @@ function Produce_Activate(check, objectiveID, context)
 		return
 	end
 
-	if check.payload.queued == false or check.payload.constant then
-		-- Normal completion and uninterrupted production lack a documented scoped signal.
+	if check.payload.constant then
+		-- No verified signal or API proves uninterrupted production across idle gaps.
 		return
 	end
 
-	local addRule = next(PRODUCE_STATE) == nil
 	PRODUCE_STATE[check.id] = {
 		checkID = check.id,
 		objectiveID = objectiveID,
 		player = player,
 		payload = check.payload,
+		blueprint = BP_GetSquadBlueprint(check.payload.id),
+		remaining = check.payload.count,
+		seen = {},
 	}
-	if addRule then
-		PRODUCE_POLLING = true
-		Rule_Add(Produce_Poll)
+	Produce_UpdateObservers()
+	if check.payload.queued then
+		BuildOrder_SetCheckComplete(check.id, Produce_QueueHasCount(PRODUCE_STATE[check.id]))
 	end
-	BuildOrder_SetCheckComplete(check.id, Produce_QueueHasCount(PRODUCE_STATE[check.id]))
 end
 
 function Produce_Deactivate(check, objectiveID, context)
@@ -70,10 +140,7 @@ function Produce_Deactivate(check, objectiveID, context)
 	end
 
 	PRODUCE_STATE[check.id] = nil
-	if next(PRODUCE_STATE) == nil and PRODUCE_POLLING then
-		Rule_Remove(Produce_Poll)
-		PRODUCE_POLLING = false
-	end
+	Produce_UpdateObservers()
 end
 
 BuildOrder_RegisterHandler("produce", {
