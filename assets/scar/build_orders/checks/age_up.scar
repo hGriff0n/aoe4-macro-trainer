@@ -1,8 +1,9 @@
 AGE_UP_STATE = {}
 AGE_UP_POLLING = false
+AGE_UP_WING_EVENTS = false
 AGE_UP_SCAN_STATE = nil
 
-local function AgeUp_MatchesID(payload, blueprint)
+local function AgeUp_MatchesLandmarkID(payload, blueprint)
 
 	if payload.id ~= nil then
 		return blueprint == BP_GetEntityBlueprint(payload.id)
@@ -10,6 +11,19 @@ local function AgeUp_MatchesID(payload, blueprint)
 
 	for _, identifier in ipairs(payload.oneof) do
 		if blueprint == BP_GetEntityBlueprint(identifier) then
+			return true
+		end
+	end
+	return false
+end
+
+local function AgeUp_MatchesUpgradeID(payload, upgrade)
+	if payload.id ~= nil then
+		return upgrade == BP_GetUpgradeBlueprint(payload.id)
+	end
+
+	for _, identifier in ipairs(payload.oneof) do
+		if upgrade == BP_GetUpgradeBlueprint(identifier) then
 			return true
 		end
 	end
@@ -25,12 +39,51 @@ function AgeUp_CheckLandmarkEntity(group, index, entity)
 		-- Player_GetEntities is player-scoped, but retain the owner guard for converted entities.
 		return false
 	end
-	if AgeUp_MatchesID(state.payload, Entity_GetBlueprint(entity))
+	if AgeUp_MatchesLandmarkID(state.payload, Entity_GetBlueprint(entity))
 		and Entity_GetBuildingProgress(entity) > 0 then
 		state.landmarkProgressStarted = true
 		return true
 	end
 	return false
+end
+
+local function AgeUp_AbbasidWingProgressStarted(state)
+	-- Activation can safely reconcile a completed wing. The event probe did not establish a
+	-- queue/progress API that can reconstruct an already-started wing before it completes.
+	if state.payload.id ~= nil then
+		return Player_HasUpgrade(state.player, BP_GetUpgradeBlueprint(state.payload.id))
+	end
+
+	for _, identifier in ipairs(state.payload.oneof) do
+		if Player_HasUpgrade(state.player, BP_GetUpgradeBlueprint(identifier)) then
+			return true
+		end
+	end
+	return false
+end
+
+function AgeUp_OnUpgradeStart(context)
+	if context == nil or context.executer == nil or context.pbg == nil then
+		return
+	end
+
+	local owner = Entity_GetPlayerOwner(context.executer)
+	for _, state in pairs(AGE_UP_STATE) do
+		if state.completed == false
+			and state.payload.capability == "abbasid_wing"
+			and owner == state.player
+			and AgeUp_MatchesUpgradeID(state.payload, context.pbg) then
+			-- GE_UpgradeStart is the best observed wing signal, but its positive-progress
+			-- versus queue-insertion timing is not yet proven.
+			state.completed = true
+			BuildOrder_SetCheckComplete(state.checkID, true)
+		end
+	end
+end
+
+function AgeUp_OnUpgradeComplete(context)
+	-- Reconcile a descriptor activated after GE_UpgradeStart without weakening identity or owner checks.
+	AgeUp_OnUpgradeStart(context)
 end
 
 local function AgeUp_LandmarkProgressStarted(state)
@@ -49,6 +102,9 @@ local function AgeUp_NonBuildingProgressStarted(state)
 end
 
 local function AgeUp_ProgressStarted(state)
+	if state.payload.capability == "abbasid_wing" then
+		return AgeUp_AbbasidWingProgressStarted(state)
+	end
 	if state.payload.capability == "non_building" then
 		return AgeUp_NonBuildingProgressStarted(state)
 	end
@@ -71,9 +127,44 @@ function AgeUp_Poll()
 	end
 end
 
+local function AgeUp_UpdateObservers()
+	local needsPolling = false
+	local needsWingEvents = false
+	for _, state in pairs(AGE_UP_STATE) do
+		if state.completed == false then
+			if state.payload.capability == "abbasid_wing" then
+				needsWingEvents = true
+			elseif state.payload.capability ~= "non_building" then
+				needsPolling = true
+			end
+		end
+	end
+
+	if needsPolling and not AGE_UP_POLLING then
+		AGE_UP_POLLING = true
+		Rule_Add(AgeUp_Poll)
+	elseif not needsPolling and AGE_UP_POLLING then
+		Rule_Remove(AgeUp_Poll)
+		AGE_UP_POLLING = false
+	end
+
+	if needsWingEvents and not AGE_UP_WING_EVENTS then
+		AGE_UP_WING_EVENTS = true
+		Rule_AddGlobalEvent(AgeUp_OnUpgradeStart, GE_UpgradeStart)
+		Rule_AddGlobalEvent(AgeUp_OnUpgradeComplete, GE_UpgradeComplete)
+	elseif not needsWingEvents and AGE_UP_WING_EVENTS then
+		Rule_RemoveGlobalEvent(AgeUp_OnUpgradeStart)
+		Rule_RemoveGlobalEvent(AgeUp_OnUpgradeComplete)
+		AGE_UP_WING_EVENTS = false
+	end
+end
+
 local function AgeUp_Activate(check, objectiveID, context)
 	local player = context.localPlayer
 	if player == nil then
+		return
+	end
+	if AGE_UP_STATE[check.id] ~= nil then
 		return
 	end
 
@@ -84,11 +175,8 @@ local function AgeUp_Activate(check, objectiveID, context)
 		payload = check.payload,
 		completed = false,
 	}
-	if not AGE_UP_POLLING then
-		AGE_UP_POLLING = true
-		Rule_Add(AgeUp_Poll)
-	end
 	AgeUp_TryComplete(AGE_UP_STATE[check.id])
+	AgeUp_UpdateObservers()
 end
 
 local function AgeUp_Deactivate(check, objectiveID, context)
@@ -96,10 +184,7 @@ local function AgeUp_Deactivate(check, objectiveID, context)
 		return
 	end
 	AGE_UP_STATE[check.id] = nil
-	if next(AGE_UP_STATE) == nil and AGE_UP_POLLING then
-		Rule_Remove(AgeUp_Poll)
-		AGE_UP_POLLING = false
-	end
+	AgeUp_UpdateObservers()
 end
 
 BuildOrder_RegisterHandler("age_up", {

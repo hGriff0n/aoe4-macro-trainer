@@ -77,7 +77,7 @@ class AgeUpCompilerTests(unittest.TestCase):
     def test_explicit_civilization_capability_scenarios(self) -> None:
         scenarios = (
             ("Knights Templar", "fortress-2", "landmark", False),
-            ("Abbasid", "house-of-wisdom-2", "landmark", False),
+            ("Abbasid", "upgrade_add_economy_wing", "abbasid_wing", False),
             ("Golden Horde", "golden_horde_age_2", "non_building", True),
         )
         for civ, identifier, capability, optional in scenarios:
@@ -87,6 +87,10 @@ class AgeUpCompilerTests(unittest.TestCase):
                 )
                 self.assertEqual(check.optional, optional)
                 self.assertEqual(check.payload["capability"], capability)
+
+    def test_rejects_unknown_age_up_capability(self) -> None:
+        with self.assertRaisesRegex(ValueError, "must be landmark, abbasid_wing, or non_building"):
+            self.compile_check("{id: upgrade_add_economy_wing, capability: generic_upgrade}")
 
 
 class AgeUpHandlerContractTests(unittest.TestCase):
@@ -107,7 +111,8 @@ class AgeUpHandlerContractTests(unittest.TestCase):
         self.assertIn("AgeUp_LandmarkProgressStarted", self.source)
 
     def test_matches_any_configured_id_only_after_human_progress_starts(self) -> None:
-        self.assertIn("AgeUp_MatchesID", self.source)
+        self.assertIn("AgeUp_MatchesLandmarkID", self.source)
+        self.assertIn("AgeUp_MatchesUpgradeID", self.source)
         self.assertIn("payload.oneof", self.source)
         self.assertIn("BuildOrder_SetCheckComplete(state.checkID, true)", self.source)
         self.assertNotIn("Entity_GetProductionQueue", self.source)
@@ -118,14 +123,42 @@ class AgeUpHandlerContractTests(unittest.TestCase):
         self.assertIn("return false", self.source)
 
     def test_dispatches_each_capability_to_its_matching_adapter(self) -> None:
+        self.assertIn('state.payload.capability == "abbasid_wing"', self.source)
+        self.assertIn("return AgeUp_AbbasidWingProgressStarted(state)", self.source)
         self.assertIn('state.payload.capability == "non_building"', self.source)
         self.assertIn("return AgeUp_NonBuildingProgressStarted(state)", self.source)
         self.assertIn("return AgeUp_LandmarkProgressStarted(state)", self.source)
 
+    def test_abbasid_wing_uses_upgrade_identity_not_house_of_wisdom_existence(self) -> None:
+        handler = self.source[
+            self.source.index("function AgeUp_OnUpgradeStart"):
+            self.source.index("local function AgeUp_ProgressStarted")
+        ]
+        owner = "Entity_GetPlayerOwner(context.executer)"
+        identity = "AgeUp_MatchesUpgradeID(state.payload, context.pbg)"
+        self.assertIn(owner, handler)
+        self.assertIn(identity, handler)
+        self.assertLess(handler.index(owner), handler.index(identity))
+        self.assertNotIn("Entity_GetBuildingProgress", handler)
+        self.assertNotIn("BP_GetEntityBlueprint", handler)
+        self.assertIn("BuildOrder_SetCheckComplete(state.checkID, true)", handler)
+
+    def test_abbasid_wing_listener_is_shared_and_removed_with_last_active_wing(self) -> None:
+        self.assertIn("Rule_AddGlobalEvent(AgeUp_OnUpgradeStart, GE_UpgradeStart)", self.source)
+        self.assertIn("Rule_AddGlobalEvent(AgeUp_OnUpgradeComplete, GE_UpgradeComplete)", self.source)
+        self.assertIn("Rule_RemoveGlobalEvent(AgeUp_OnUpgradeStart)", self.source)
+        self.assertIn("Rule_RemoveGlobalEvent(AgeUp_OnUpgradeComplete)", self.source)
+
+    def test_abbasid_activation_baseline_only_reconciles_completed_upgrade(self) -> None:
+        self.assertIn("AgeUp_AbbasidWingProgressStarted", self.source)
+        self.assertIn("Player_HasUpgrade(state.player, BP_GetUpgradeBlueprint", self.source)
+        self.assertIn("reconstruct an already-started wing", self.source)
+        self.assertNotIn("Entity_GetProductionQueue", self.source)
+
     def test_two_active_checks_share_polling_but_keep_independent_state(self) -> None:
         self.assertIn("for _, state in pairs(AGE_UP_STATE) do", self.source)
         self.assertIn("AGE_UP_STATE[check.id] = nil", self.source)
-        self.assertIn("if next(AGE_UP_STATE) == nil and AGE_UP_POLLING then", self.source)
+        self.assertIn("elseif not needsPolling and AGE_UP_POLLING then", self.source)
         self.assertIn("Rule_Remove(AgeUp_Poll)", self.source)
 
     def test_deactivation_cleans_up_and_late_polls_ignore_removed_state(self) -> None:

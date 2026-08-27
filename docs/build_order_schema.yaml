@@ -25,7 +25,7 @@ steps: # a list of build order steps, the intention is for each build order to d
     age_up: # Event to specify that an age up has been started as that moment often becomes a remacro point in build orders. May be useful to generalize for TCs but it is also difficult as Templar/Horde/Abassid age ups are akin to upgrades instead of buildings
       id: string # Only one of `id` or `oneof` may be set. If `id` is set, this is the in game id for the chosen age up option
       oneof: [ string ] # If `oneof` is set, the check will look for an age up using either of the provided ids
-      capability: landmark | non_building # Optional explicit mechanism capability; non_building remains visible and non-blocking when no verified positive-progress API exists
+      capability: landmark | abbasid_wing | non_building # Optional explicit mechanism capability; Abbasid wings match their upgrade event identity, while non_building remains visible and non-blocking
       vils: integer # Hint indicating how many villagers should be pulled (if building)
       location: string # Hint string describing where the age up should be placed
     upgrades: # An array of technologies that should be researched across all buildings with technology (ie. includes unit upgrades, military upgrades, and economic upgrades)

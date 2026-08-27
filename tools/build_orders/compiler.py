@@ -112,8 +112,12 @@ def _check_descriptors(kind: str, value: Any, file: Path, path: str, civ: str) -
             capability = mapping.get("capability")
             if kind == "age_up" and capability is not None:
                 capability = _string(capability, file, f"{item_path}.capability")
-                if capability not in {"landmark", "non_building"}:
-                    _error(file, f"{item_path}.capability", "must be landmark or non_building")
+                if capability not in {"landmark", "abbasid_wing", "non_building"}:
+                    _error(
+                        file,
+                        f"{item_path}.capability",
+                        "must be landmark, abbasid_wing, or non_building",
+                    )
                 payload["capability"] = capability
             label = payload["id"] if "id" in payload else " / ".join(payload["oneof"])
             if kind == "age_up":
