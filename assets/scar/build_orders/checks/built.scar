@@ -1,49 +1,58 @@
 BUILT_STATE = {}
+BUILT_EVENT_REGISTERED = false
 
-function Built_Matches(state, blueprint)
-	if state.payload.id ~= nil then
-		return state.payload.id == blueprint
+function Built_BlueprintsEqual(left, right)
+	return left.PropertyBagGroupID == right.PropertyBagGroupID
+		and left.PropertyBagGroupModPackID == right.PropertyBagGroupModPackID
+		and left.PropertyBagGroupType == right.PropertyBagGroupType
+end
+
+function Built_ResolveBlueprints(payload)
+	local blueprints = {}
+	if payload.id ~= nil then
+		table.insert(blueprints, BP_GetEntityBlueprint(payload.id))
+		return blueprints
 	end
 
-	for _, candidate in ipairs(state.payload.oneof) do
-		if candidate == blueprint then
+	for _, candidate in ipairs(payload.oneof) do
+		table.insert(blueprints, BP_GetEntityBlueprint(candidate))
+	end
+	return blueprints
+end
+
+function Built_Matches(state, blueprint)
+	for _, candidate in ipairs(state.blueprints) do
+		if Built_BlueprintsEqual(candidate, blueprint) then
 			return true
 		end
 	end
 	return false
 end
 
-function Built_OnConstructionComplete(checkID, entity)
-	local state = BUILT_STATE[checkID]
-	if state == nil or state.remaining == 0 then
-		return
-	end
-	if Entity_GetPlayerOwner(entity) ~= state.player then
-		return
-	end
-
-	local blueprint = Entity_GetBlueprint(entity)
-	if Built_Matches(state, blueprint) == false then
-		return
-	end
-
-	state.remaining = state.remaining - 1
-	if state.remaining == 0 then
-		BuildOrder_SetCheckComplete(checkID, true)
-	end
-end
-
-function Built_ScanEntity(groupID, entityIndex, entity)
+function Built_OnConstructionComplete(context)
 	for checkID, state in pairs(BUILT_STATE) do
-		if Entity_GetPlayerOwner(entity) == state.player then
-			local entityID = Entity_GetID(entity)
-			if Entity_IsBuilding(entity) and Entity_GetBuildingProgress(entity) >= 1.0 and state.seen[entityID] ~= true then
-				state.seen[entityID] = true
-				Built_OnConstructionComplete(checkID, entity)
+		if state ~= nil and state.remaining > 0 then
+			if context.player == state.player then
+				local entityID = context.entity.EntityID
+				if state.seen[entityID] ~= true and Built_Matches(state, context.pbg) then
+					state.seen[entityID] = true
+					state.remaining = state.remaining - 1
+					if state.remaining == 0 then
+						BuildOrder_SetCheckComplete(checkID, true)
+					end
+				end
 			end
 		end
 	end
-	return false
+end
+
+function Built_EnsureEventRegistered()
+	if BUILT_EVENT_REGISTERED then
+		return
+	end
+
+	Rule_AddGlobalEvent(Built_OnConstructionComplete, GE_ConstructionComplete)
+	BUILT_EVENT_REGISTERED = true
 end
 
 function Built_SnapshotEntity(groupID, entityIndex, entity)
@@ -60,30 +69,22 @@ function Built_SnapshotEntity(groupID, entityIndex, entity)
 	return false
 end
 
-function Built_Update()
-	for _, state in pairs(BUILT_STATE) do
-		EGroup_ForEach(Player_GetEntities(state.player), Built_ScanEntity)
-	end
-end
-
 function Built_Activate(check, objectiveID, context)
 	local player = context.localPlayer
 	if player == nil then
 		return
 	end
 
-	local addRule = next(BUILT_STATE) == nil
 	BUILT_STATE[check.id] = {
 		player = player,
 		objectiveID = objectiveID,
 		payload = check.payload,
+		blueprints = Built_ResolveBlueprints(check.payload),
 		remaining = check.payload.count,
 		seen = {},
 	}
+	Built_EnsureEventRegistered()
 	EGroup_ForEach(Player_GetEntities(player), Built_SnapshotEntity)
-	if addRule then
-		Rule_Add(Built_Update)
-	end
 end
 
 function Built_Deactivate(check, objectiveID, context)
@@ -93,8 +94,9 @@ function Built_Deactivate(check, objectiveID, context)
 	end
 
 	BUILT_STATE[check.id] = nil
-	if next(BUILT_STATE) == nil then
-		Rule_Remove(Built_Update)
+	if next(BUILT_STATE) == nil and BUILT_EVENT_REGISTERED then
+		Rule_RemoveGlobalEvent(Built_OnConstructionComplete)
+		BUILT_EVENT_REGISTERED = false
 	end
 end
 

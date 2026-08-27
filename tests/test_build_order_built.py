@@ -31,30 +31,49 @@ class BuiltCheckContractTests(unittest.TestCase):
         self.assertIn("remaining = check.payload.count", activate)
         self.assertIn("seen = {}", activate)
 
+    def test_registers_only_the_construction_complete_event_once(self) -> None:
+        register = function_body(self.source, "Built_EnsureEventRegistered")
+        self.assertIn("if BUILT_EVENT_REGISTERED then", register)
+        self.assertIn(
+            "Rule_AddGlobalEvent(Built_OnConstructionComplete, GE_ConstructionComplete)",
+            register,
+        )
+        self.assertIn("BUILT_EVENT_REGISTERED = true", register)
+        self.assertNotIn("GE_ConstructionStart", self.source)
+        self.assertNotIn("GE_ConstructionWorkerStart", self.source)
+        self.assertNotIn("GE_ConstructionCancelled", self.source)
+        self.assertNotIn("GE_EntityKilled", self.source)
+        self.assertNotIn("GE_BuildItemComplete", self.source)
+
     def test_checks_owner_before_blueprint_and_accepts_id_or_oneof(self) -> None:
         callback = function_body(self.source, "Built_OnConstructionComplete")
-        owner = "Entity_GetPlayerOwner(entity) ~= state.player"
-        blueprint = "Entity_GetBlueprint(entity)"
+        owner = "context.player == state.player"
+        blueprint = "Built_Matches(state, context.pbg)"
         self.assertIn(owner, callback)
         self.assertIn(blueprint, callback)
         self.assertLess(callback.index(owner), callback.index(blueprint))
         matcher = function_body(self.source, "Built_Matches")
-        self.assertIn("state.payload.id", matcher)
-        self.assertIn("state.payload.oneof", matcher)
-        self.assertIn("ipairs(state.payload.oneof)", matcher)
+        self.assertIn("ipairs(state.blueprints)", matcher)
+
+    def test_resolves_and_compares_the_complete_canonical_pbg_tuple(self) -> None:
+        resolve = function_body(self.source, "Built_ResolveBlueprints")
+        self.assertIn("BP_GetEntityBlueprint(payload.id)", resolve)
+        self.assertIn("BP_GetEntityBlueprint(candidate)", resolve)
+
+        equal = function_body(self.source, "Built_BlueprintsEqual")
+        self.assertIn("PropertyBagGroupID", equal)
+        self.assertIn("PropertyBagGroupModPackID", equal)
+        self.assertIn("PropertyBagGroupType", equal)
 
     def test_only_matching_human_completed_buildings_decrement_and_latch(self) -> None:
         callback = function_body(self.source, "Built_OnConstructionComplete")
+        self.assertIn("local entityID = context.entity.EntityID", callback)
+        self.assertIn("if state.seen[entityID] ~= true", callback)
+        self.assertIn("state.seen[entityID] = true", callback)
         self.assertIn("state.remaining = state.remaining - 1", callback)
         self.assertIn("if state.remaining == 0 then", callback)
         self.assertIn("BuildOrder_SetCheckComplete(checkID, true)", callback)
-        self.assertIn("if state == nil or state.remaining == 0 then", callback)
-
-        scan = function_body(self.source, "Built_ScanEntity")
-        self.assertIn("Entity_IsBuilding(entity)", scan)
-        self.assertIn("Entity_GetBuildingProgress(entity) >= 1.0", scan)
-        self.assertIn("state.seen[entityID] ~= true", scan)
-        self.assertIn("Built_OnConstructionComplete(checkID, entity)", scan)
+        self.assertIn("if state ~= nil and state.remaining > 0 then", callback)
 
     def test_baselines_existing_completed_buildings_without_counting_them(self) -> None:
         snapshot = function_body(self.source, "Built_SnapshotEntity")
@@ -68,18 +87,20 @@ class BuiltCheckContractTests(unittest.TestCase):
         snapshot_call = "EGroup_ForEach(Player_GetEntities(player), Built_SnapshotEntity)"
         self.assertIn(snapshot_call, activate)
         self.assertLess(activate.index("BUILT_STATE[check.id] = {"), activate.index(snapshot_call))
-        self.assertLess(activate.index(snapshot_call), activate.index("Rule_Add(Built_Update)"))
+        self.assertLess(activate.index("Built_EnsureEventRegistered()"), activate.index(snapshot_call))
 
-    def test_scans_only_the_stored_player_entities_and_unregisters_idempotently(self) -> None:
-        update = function_body(self.source, "Built_Update")
-        self.assertIn("Player_GetEntities(state.player)", update)
-        self.assertIn("EGroup_ForEach", update)
-
+    def test_deactivation_ignores_late_events_and_is_idempotent(self) -> None:
         deactivate = function_body(self.source, "Built_Deactivate")
         self.assertIn("if state == nil then", deactivate)
         self.assertIn("BUILT_STATE[check.id] = nil", deactivate)
-        self.assertIn("if next(BUILT_STATE) == nil then", deactivate)
-        self.assertIn("Rule_Remove(Built_Update)", deactivate)
+        self.assertIn("if next(BUILT_STATE) == nil and BUILT_EVENT_REGISTERED then", deactivate)
+        self.assertIn("Rule_RemoveGlobalEvent(Built_OnConstructionComplete)", deactivate)
+        self.assertIn("BUILT_EVENT_REGISTERED = false", deactivate)
+
+        callback = function_body(self.source, "Built_OnConstructionComplete")
+        self.assertIn("if state ~= nil and state.remaining > 0 then", callback)
+        self.assertNotIn("Built_Update", self.source)
+        self.assertNotIn("Rule_Add(", self.source)
 
 
 if __name__ == "__main__":
