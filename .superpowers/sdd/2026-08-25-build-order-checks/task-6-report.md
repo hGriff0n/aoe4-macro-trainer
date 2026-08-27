@@ -140,3 +140,70 @@ Ran 75 tests ... OK
 git diff --check
 (no output)
 ```
+
+## Event-audit follow-up: completion events and activation reconciliation
+
+The GRI-83 runtime probe established that completed research emits
+`GE_UpgradeComplete` with the canonical upgrade PBG. The executor is
+polymorphic: it can be a direct player (`executer.PlayerID`) or an entity
+(`executer.EntityID`) whose owner must be resolved. Both observed successful
+upgrades emitted `GE_UpgradeCancelled` immediately before completion, so the
+handler deliberately does not subscribe to cancellation and latches a matching
+completion.
+
+The handler now:
+
+- reconciles already-completed human research through `Player_HasUpgrade` when
+  the descriptor activates;
+- subscribes to `GE_UpgradeComplete` only while an incomplete upgrade descriptor
+  is active;
+- rejects opponent, unowned, pre-activation, and noncanonical-PBG signals;
+- compares all three PBG tuple fields after resolving ownership;
+- retains the existing player-owned production-queue query only for incomplete
+  descriptors with `queued: true`; and
+- never treats `GE_UpgradeStart` as proof of queue insertion.
+
+Actual user cancellation was not probed. The implementation therefore makes no
+claim about cancellation semantics beyond ensuring the observed paired
+Cancel-to-Complete sequence cannot undo or suppress completion.
+
+TDD RED before the handler change:
+
+```text
+python -m unittest tests.test_build_order_upgrades.BuildOrderUpgradeHandlerContractTests
+Ran 9 tests ... FAILED (failures=1, errors=4)
+```
+
+Focused GREEN after the event handler and executable ownership/event model:
+
+```text
+python -m unittest tests.test_build_order_upgrades -v
+Ran 22 tests ... OK
+```
+
+Final static validation (the mod was not built):
+
+```text
+python -m unittest discover -s tests -v
+Ran 85 tests ... OK
+
+check_code assets/scar/build_orders/checks/upgrades.scar
+low-confidence APIs: none; missing locdb: none
+
+git diff --check
+(no errors)
+```
+
+Updated main-task validation request:
+
+```text
+Issue: GRI-59
+Branch: codex/gri-59-upgrades-check
+Worktree: E:\Docs\github\aoemod\aoe4-macro-trainer\.worktrees\gri-59-upgrades-check
+Commit: supplied in the agent handoff after commit
+Fixture/selection: Human and opponent with the same completed upgrade objective; a separate queued upgrade behind another production item if the civilization permits it.
+Human actions: Let startup settle, activate the objective, complete the requested upgrade, and separately place a requested queued upgrade behind an existing item.
+Opponent guard: Have the opponent complete the same upgrade before the human. The human objective must remain incomplete.
+Expected UI: Pre-activation/startup signals do not complete the objective; the matching human completion latches once despite the observed paired cancellation event; already-completed human research reconciles immediately on activation.
+Limitations: GE_UpgradeStart is not used for queued semantics. Queue insertion behind another item and genuine cancellation remain unverified in-game; queued detection is limited to the existing player-owned entity production-queue query.
+```

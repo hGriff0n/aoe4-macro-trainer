@@ -1,5 +1,26 @@
 UPGRADES_STATE = {}
 UPGRADES_POLLING = false
+UPGRADES_EVENT_REGISTERED = false
+
+local function Upgrades_BlueprintsEqual(left, right)
+	return left ~= nil and right ~= nil
+		and left.PropertyBagGroupID == right.PropertyBagGroupID
+		and left.PropertyBagGroupModPackID == right.PropertyBagGroupModPackID
+		and left.PropertyBagGroupType == right.PropertyBagGroupType
+end
+
+local function Upgrades_GetExecuterOwner(context)
+	if context == nil or context.executer == nil then
+		return nil
+	end
+	if context.executer.PlayerID ~= nil then
+		return context.executer
+	end
+	if context.executer.EntityID ~= nil then
+		return Entity_GetPlayerOwner(context.executer)
+	end
+	return nil
+end
 
 local function Upgrades_IsCompletedResearch(state)
 	return Player_HasUpgrade(state.player, state.upgrade)
@@ -39,6 +60,57 @@ function Upgrades_Poll()
 	for _, state in pairs(UPGRADES_STATE) do
 		Upgrades_TryComplete(state)
 	end
+	Upgrades_UpdateObservers()
+end
+
+function Upgrades_OnUpgradeComplete(context)
+	if context == nil or context.pbg == nil then
+		return
+	end
+
+	local owner = Upgrades_GetExecuterOwner(context)
+	local completedCheckIDs = {}
+	for checkID, state in pairs(UPGRADES_STATE) do
+		if state ~= nil and state.completed == false
+			and owner == state.player
+			and Upgrades_BlueprintsEqual(state.upgrade, context.pbg) then
+			state.completed = true
+			table.insert(completedCheckIDs, checkID)
+		end
+	end
+	for _, completedCheckID in ipairs(completedCheckIDs) do
+		BuildOrder_SetCheckComplete(completedCheckID, true)
+	end
+	Upgrades_UpdateObservers()
+end
+
+function Upgrades_UpdateObservers()
+	local needsPolling = false
+	local needsCompletionEvent = false
+	for _, state in pairs(UPGRADES_STATE) do
+		if state ~= nil and state.completed == false then
+			needsCompletionEvent = true
+			if state.queued and not state.completed then
+				needsPolling = true
+			end
+		end
+	end
+
+	if needsPolling and not UPGRADES_POLLING then
+		UPGRADES_POLLING = true
+		Rule_Add(Upgrades_Poll)
+	elseif not needsPolling and UPGRADES_POLLING then
+		Rule_Remove(Upgrades_Poll)
+		UPGRADES_POLLING = false
+	end
+
+	if needsCompletionEvent and not UPGRADES_EVENT_REGISTERED then
+		Rule_AddGlobalEvent(Upgrades_OnUpgradeComplete, GE_UpgradeComplete)
+		UPGRADES_EVENT_REGISTERED = true
+	elseif not needsCompletionEvent and UPGRADES_EVENT_REGISTERED then
+		Rule_RemoveGlobalEvent(Upgrades_OnUpgradeComplete)
+		UPGRADES_EVENT_REGISTERED = false
+	end
 end
 
 local function Upgrades_Activate(check, objectiveID, context)
@@ -58,11 +130,8 @@ local function Upgrades_Activate(check, objectiveID, context)
 		queued = check.payload.queued,
 		completed = false,
 	}
-	if not UPGRADES_POLLING then
-		UPGRADES_POLLING = true
-		Rule_Add(Upgrades_Poll)
-	end
 	Upgrades_TryComplete(UPGRADES_STATE[check.id])
+	Upgrades_UpdateObservers()
 end
 
 local function Upgrades_Deactivate(check, objectiveID, context)
@@ -72,10 +141,7 @@ local function Upgrades_Deactivate(check, objectiveID, context)
 	end
 
 	UPGRADES_STATE[check.id] = nil
-	if next(UPGRADES_STATE) == nil and UPGRADES_POLLING then
-		Rule_Remove(Upgrades_Poll)
-		UPGRADES_POLLING = false
-	end
+	Upgrades_UpdateObservers()
 end
 
 BuildOrder_RegisterHandler("upgrades", {

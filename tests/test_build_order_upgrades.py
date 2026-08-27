@@ -82,18 +82,81 @@ class BuildOrderUpgradeHandlerContractTests(unittest.TestCase):
         self.assertIn("for _, state in pairs(UPGRADES_STATE) do", self.source)
         self.assertIn("if state == nil then", self.source)
 
+    def test_completed_research_uses_only_the_upgrade_complete_event(self) -> None:
+        register = function_body(self.source, "Upgrades_UpdateObservers")
+        self.assertIn(
+            "Rule_AddGlobalEvent(Upgrades_OnUpgradeComplete, GE_UpgradeComplete)",
+            register,
+        )
+        self.assertIn("Rule_RemoveGlobalEvent(Upgrades_OnUpgradeComplete)", register)
+        self.assertNotIn("GE_UpgradeStart", self.source)
+        self.assertNotIn("GE_UpgradeCancelled", self.source)
+
+    def test_completion_event_filters_polymorphic_owner_before_canonical_upgrade(self) -> None:
+        owner = function_body(self.source, "Upgrades_GetExecuterOwner")
+        self.assertIn("context.executer.PlayerID", owner)
+        self.assertIn("context.executer.EntityID", owner)
+        self.assertIn("Entity_GetPlayerOwner(context.executer)", owner)
+
+        callback = function_body(self.source, "Upgrades_OnUpgradeComplete")
+        owner_match = "owner == state.player"
+        upgrade_match = "Upgrades_BlueprintsEqual(state.upgrade, context.pbg)"
+        self.assertIn(owner_match, callback)
+        self.assertIn(upgrade_match, callback)
+        self.assertLess(callback.index(owner_match), callback.index(upgrade_match))
+
+        equality = function_body(self.source, "Upgrades_BlueprintsEqual")
+        self.assertIn("PropertyBagGroupID", equality)
+        self.assertIn("PropertyBagGroupModPackID", equality)
+        self.assertIn("PropertyBagGroupType", equality)
+
+    def test_activation_reconciles_completed_research_before_observer_update(self) -> None:
+        activate = function_body(self.source, "Upgrades_Activate")
+        reconcile = "Upgrades_TryComplete(UPGRADES_STATE[check.id])"
+        observers = "Upgrades_UpdateObservers()"
+        self.assertIn(reconcile, activate)
+        self.assertIn(observers, activate)
+        self.assertLess(activate.index(reconcile), activate.index(observers))
+
+    def test_only_incomplete_queued_checks_keep_the_limited_polling_fallback(self) -> None:
+        observers = function_body(self.source, "Upgrades_UpdateObservers")
+        self.assertIn("state.queued and not state.completed", observers)
+        self.assertIn("Rule_Add(Upgrades_Poll)", observers)
+        self.assertIn("Rule_Remove(Upgrades_Poll)", observers)
+
+    def test_matching_completion_latches_without_a_cancellation_path(self) -> None:
+        callback = function_body(self.source, "Upgrades_OnUpgradeComplete")
+        self.assertIn("state.completed == false", callback)
+        self.assertIn("state.completed = true", callback)
+        self.assertIn("local completedCheckIDs = {}", callback)
+        self.assertIn("table.insert(completedCheckIDs, checkID)", callback)
+        notify_loop = "for _, completedCheckID in ipairs(completedCheckIDs) do"
+        notification = "BuildOrder_SetCheckComplete(completedCheckID, true)"
+        self.assertIn(notify_loop, callback)
+        self.assertIn(notification, callback)
+        self.assertLess(callback.index("state.completed = true"), callback.index(notify_loop))
+        self.assertLess(callback.index(notify_loop), callback.index(notification))
+        self.assertIn("Upgrades_UpdateObservers()", callback)
+        self.assertNotIn("BuildOrder_SetCheckComplete(checkID, false)", self.source)
+
 
 @dataclass(frozen=True)
 class QueueEntity:
     owner: str
-    queue: tuple[tuple[str, str], ...]
+    queue: tuple[tuple[str, object], ...]
+
+
+@dataclass(frozen=True)
+class EventExecuter:
+    player: str | None = None
+    entity_id: str | None = None
 
 
 @dataclass
 class UpgradeCheckState:
     check_id: str
     player: str
-    upgrade: str
+    upgrade: object
     queued: bool
     completed: bool = False
 
@@ -103,34 +166,46 @@ class UpgradeHandlerModel:
 
     def __init__(self) -> None:
         self.entities: list[QueueEntity] = []
-        self.researched: set[tuple[str, str]] = set()
+        self.entity_owners: dict[str, str] = {}
+        self.researched: set[tuple[str, object]] = set()
         self.states: dict[str, UpgradeCheckState] = {}
         self.polling = False
+        self.event_registered = False
         self.rule_add_count = 0
         self.rule_remove_count = 0
 
-    def activate(self, check_id: str, player: str, upgrade: str, *, queued: bool) -> UpgradeCheckState:
+    def activate(self, check_id: str, player: str, upgrade: object, *, queued: bool) -> UpgradeCheckState:
         state = self.states.get(check_id)
         if state is not None:
             return state
         state = UpgradeCheckState(check_id, player, upgrade, queued)
         self.states[check_id] = state
-        if not self.polling:
-            self.polling = True
-            self.rule_add_count += 1
         self._try_complete(state)
+        self._update_observers()
         return state
 
     def deactivate(self, check_id: str) -> None:
         if self.states.pop(check_id, None) is None:
             return
-        if not self.states and self.polling:
-            self.polling = False
-            self.rule_remove_count += 1
+        self._update_observers()
 
     def poll(self) -> None:
         for state in list(self.states.values()):
             self._try_complete(state)
+        self._update_observers()
+
+    def dispatch_upgrade_event(
+        self, event: str, upgrade: object, executer: EventExecuter
+    ) -> None:
+        if event != "GE_UpgradeComplete" or not self.event_registered:
+            return
+        owner = executer.player
+        if owner is None and executer.entity_id is not None:
+            owner = self.entity_owners.get(executer.entity_id)
+        for state in list(self.states.values()):
+            if not state.completed and owner == state.player and upgrade == state.upgrade:
+                state.completed = True
+        self._update_observers()
 
     def is_complete(self, check_id: str) -> bool:
         state = self.states.get(check_id)
@@ -152,6 +227,16 @@ class UpgradeHandlerModel:
                 if item_type in {"PITEM_Upgrade", "PITEM_PlayerUpgrade"} and upgrade == state.upgrade:
                     return True
         return False
+
+    def _update_observers(self) -> None:
+        needs_polling = any(state.queued and not state.completed for state in self.states.values())
+        if needs_polling and not self.polling:
+            self.polling = True
+            self.rule_add_count += 1
+        elif not needs_polling and self.polling:
+            self.polling = False
+            self.rule_remove_count += 1
+        self.event_registered = any(not state.completed for state in self.states.values())
 
 
 class BuildOrderUpgradeBehaviorTests(unittest.TestCase):
@@ -212,6 +297,74 @@ class BuildOrderUpgradeBehaviorTests(unittest.TestCase):
         self.assertTrue(self.model.is_complete("second"))
         self.model.deactivate("second")
         self.assertTrue(self.model.polling)
+
+    def test_completion_accepts_direct_human_player_executor(self) -> None:
+        wheelbarrow = (171998, 0, 7)
+        self.model.activate("upgrade", "human", wheelbarrow, queued=False)
+
+        self.model.dispatch_upgrade_event(
+            "GE_UpgradeComplete", wheelbarrow, EventExecuter(player="human")
+        )
+
+        self.assertTrue(self.model.is_complete("upgrade"))
+
+    def test_completion_resolves_human_entity_executor(self) -> None:
+        wheelbarrow = (171998, 0, 7)
+        self.model.entity_owners["mill"] = "human"
+        self.model.activate("upgrade", "human", wheelbarrow, queued=False)
+
+        self.model.dispatch_upgrade_event(
+            "GE_UpgradeComplete", wheelbarrow, EventExecuter(entity_id="mill")
+        )
+
+        self.assertTrue(self.model.is_complete("upgrade"))
+
+    def test_opponent_unowned_and_noncanonical_completion_signals_are_rejected(self) -> None:
+        wheelbarrow = (171998, 0, 7)
+        self.model.entity_owners["enemy_mill"] = "opponent"
+        self.model.activate("upgrade", "human", wheelbarrow, queued=False)
+
+        self.model.dispatch_upgrade_event(
+            "GE_UpgradeComplete", wheelbarrow, EventExecuter(player="opponent")
+        )
+        self.model.dispatch_upgrade_event(
+            "GE_UpgradeComplete", wheelbarrow, EventExecuter(entity_id="enemy_mill")
+        )
+        self.model.dispatch_upgrade_event(
+            "GE_UpgradeComplete", wheelbarrow, EventExecuter(entity_id="unknown")
+        )
+        self.model.dispatch_upgrade_event(
+            "GE_UpgradeComplete", (171998, 99, 7), EventExecuter(player="human")
+        )
+
+        self.assertFalse(self.model.is_complete("upgrade"))
+
+    def test_startup_completion_before_activation_is_not_replayed(self) -> None:
+        wheelbarrow = (171998, 0, 7)
+        self.model.dispatch_upgrade_event(
+            "GE_UpgradeComplete", wheelbarrow, EventExecuter(player="human")
+        )
+
+        self.model.activate("upgrade", "human", wheelbarrow, queued=False)
+
+        self.assertFalse(self.model.is_complete("upgrade"))
+
+    def test_paired_cancel_then_complete_latches_matching_completion(self) -> None:
+        forestry = (171999, 0, 7)
+        self.model.entity_owners["lumber_camp"] = "human"
+        self.model.activate("upgrade", "human", forestry, queued=False)
+
+        self.model.dispatch_upgrade_event(
+            "GE_UpgradeCancelled", forestry, EventExecuter(player="human")
+        )
+        self.model.dispatch_upgrade_event(
+            "GE_UpgradeComplete", forestry, EventExecuter(entity_id="lumber_camp")
+        )
+        self.model.dispatch_upgrade_event(
+            "GE_UpgradeCancelled", forestry, EventExecuter(player="human")
+        )
+
+        self.assertTrue(self.model.is_complete("upgrade"))
 
 
 if __name__ == "__main__":
