@@ -8,7 +8,7 @@ from typing import Any, Mapping
 
 SCHEMA_VERSION = 1
 DEFAULT_IDENTITY_CATALOG = Path(__file__).with_name("data") / "game_identities.json"
-IDENTITY_ID = re.compile(r"^[a-z0-9]+(?:_[a-z0-9]+)*$")
+IDENTITY_ID = re.compile(r"^(?=.*[a-z])[a-z0-9]+(?:_[a-z0-9]+)*$")
 IDENTITY_CATEGORIES = frozenset({"entity", "squad", "upgrade"})
 
 
@@ -42,6 +42,8 @@ def _freeze_and_validate(value: Any, path: Path) -> Mapping[str, Mapping[str, Ma
                 _error(path, f"civilizations.{civilization}.{category} must be a mapping")
             frozen_identities: dict[str, str] = {}
             for identifier, canonical_id in identities.items():
+                if not isinstance(identifier, str) or not IDENTITY_ID.fullmatch(identifier):
+                    _error(path, f"civilizations.{civilization}.{category}.{identifier}: not a normalized official ID")
                 if not isinstance(canonical_id, str) or not canonical_id:
                     _error(path, f"civilizations.{civilization}.{category}.{identifier} must be a non-empty string")
                 frozen_identities[identifier] = canonical_id
@@ -62,6 +64,8 @@ class IdentityCatalog:
             raise IdentityCatalogError(f"{path}: unable to read identity catalog: {exc}") from exc
         if not isinstance(document, dict) or document.get("schema_version") != SCHEMA_VERSION:
             raise IdentityCatalogError(f"{path}: unsupported identity catalog schema version")
+        if document.get("source") != "official_base_data":
+            raise IdentityCatalogError(f"{path}: identity catalog source must be official_base_data")
         return cls(_freeze_and_validate(document.get("civilizations"), path))
 
     def resolve(self, civ: str, category: str, identifier: str) -> str:
