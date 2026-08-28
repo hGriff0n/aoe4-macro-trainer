@@ -3,10 +3,24 @@ from typing import Any
 
 import yaml
 
+from .identities import (
+    DEFAULT_IDENTITY_CATALOG,
+    IdentityCatalog,
+    IdentityCatalogError,
+    normalize_identity_id,
+)
 from .model import BuildOrder, Catalog, CheckDescriptor, Step, normalize_id
 
 RESOURCES = {"food", "gold", "stone", "wood"}
 CHECK_FIELDS = {"vils", "rallypoint", "built", "age_up", "upgrades", "produce", "resources", "buildings", "units", "hints"}
+CHECK_ID_CATEGORIES = {
+    "built": "entity",
+    "buildings": "entity",
+    "produce": "squad",
+    "units": "squad",
+    "upgrades": "upgrade",
+}
+UPGRADE_AGE_UP_CIVS = frozenset({"abbasid", "ayyubids", "templar", "golden_horde"})
 
 
 class BuildOrderValidationError(ValueError):
@@ -57,6 +71,39 @@ def _id_or_oneof(value: Any, file: Path, path: str, allowed: set[str]) -> dict[s
     return {"oneof": [_string(item, file, f"{path}.oneof[{index}]") for index, item in enumerate(choices)]}
 
 
+def _identity_category(kind: str, civ: str) -> str:
+    if kind == "age_up":
+        return "upgrade" if normalize_identity_id(civ) in UPGRADE_AGE_UP_CIVS else "entity"
+    return CHECK_ID_CATEGORIES[kind]
+
+
+def _resolve_identity_payload(
+    payload: dict[str, object],
+    *,
+    kind: str,
+    civ: str,
+    identities: IdentityCatalog,
+    file: Path,
+    path: str,
+) -> None:
+    category = _identity_category(kind, civ)
+    key = "id" if "id" in payload else "oneof"
+    human_ids = [payload[key]] if key == "id" else payload[key]
+    canonical = []
+    for index, item in enumerate(human_ids):
+        try:
+            canonical.append(identities.resolve(civ, category, item))
+        except IdentityCatalogError as exc:
+            identity_path = f"{path}.id" if key == "id" else f"{path}.oneof[{index}]"
+            _error(
+                file,
+                identity_path,
+                f"civilization '{normalize_identity_id(civ)}', {kind} check, "
+                f"expected {category} ID '{item}': {exc}",
+            )
+    payload[key] = canonical[0] if key == "id" else canonical
+
+
 def _resource_checks(kind: str, value: Any, file: Path, path: str, no_collect: bool = False) -> list[CheckDescriptor]:
     mapping = _mapping(value, file, path)
     checks: list[CheckDescriptor] = []
@@ -79,7 +126,14 @@ def _resource_checks(kind: str, value: Any, file: Path, path: str, no_collect: b
     return checks
 
 
-def _check_descriptors(kind: str, value: Any, file: Path, path: str, civ: str) -> list[CheckDescriptor]:
+def _check_descriptors(
+    kind: str,
+    value: Any,
+    file: Path,
+    path: str,
+    civ: str,
+    identities: IdentityCatalog,
+) -> list[CheckDescriptor]:
     if kind in {"vils", "resources"}:
         return _resource_checks(kind, value, file, path)
     if kind == "rallypoint":
@@ -97,8 +151,6 @@ def _check_descriptors(kind: str, value: Any, file: Path, path: str, civ: str) -
         for index, entry in enumerate(entries):
             item_path = path if kind == "age_up" else f"{path}[{index}]"
             permitted = {"id", "oneof", "vils", "location"}
-            if kind == "age_up":
-                permitted.add("capability")
             if kind == "built":
                 permitted.add("count")
             payload = _id_or_oneof(entry, file, item_path, permitted)
@@ -109,30 +161,16 @@ def _check_descriptors(kind: str, value: Any, file: Path, path: str, civ: str) -
                 payload["vils"] = _positive(mapping["vils"], file, f"{item_path}.vils")
             if "location" in mapping:
                 payload["location"] = _string(mapping["location"], file, f"{item_path}.location")
-            capability = mapping.get("capability")
-            if kind == "age_up" and capability is not None:
-                capability = _string(capability, file, f"{item_path}.capability")
-                if capability not in {"landmark", "abbasid_wing", "non_building"}:
-                    _error(
-                        file,
-                        f"{item_path}.capability",
-                        "must be landmark, abbasid_wing, or non_building",
-                    )
-                payload["capability"] = capability
-            label = payload["id"] if "id" in payload else " / ".join(payload["oneof"])
-            if kind == "age_up":
-                title = f"Age up: {label}"
-                if "vils" in payload:
-                    title += f" with {payload['vils']} vils"
-                if "location" in payload:
-                    title += f" on {payload['location']}"
-                unsupported_non_building = capability == "non_building"
-                if unsupported_non_building:
-                    title += " [unsupported: non-building progress]"
-            else:
-                title = f"Built: {label}"
-                unsupported_non_building = False
-            result.append(CheckDescriptor(kind, title, unsupported_non_building, dict(payload)))
+            label = payload["id"] if "id" in payload else " or ".join(payload["oneof"])
+            _resolve_identity_payload(
+                payload,
+                kind=kind,
+                civ=civ,
+                identities=identities,
+                file=file,
+                path=item_path,
+            )
+            result.append(CheckDescriptor(kind, f"{kind.replace('_', ' ').title()}: {label}", False, dict(payload)))
         return result
     if kind in {"upgrades", "produce", "buildings", "units"}:
         result = []
@@ -158,6 +196,14 @@ def _check_descriptors(kind: str, value: Any, file: Path, path: str, civ: str) -
                     if flag in mapping:
                         if not isinstance(mapping[flag], bool): _error(file, f"{item_path}.{flag}", "must be boolean")
                         payload[flag] = mapping[flag]
+            _resolve_identity_payload(
+                payload,
+                kind=kind,
+                civ=civ,
+                identities=identities,
+                file=file,
+                path=item_path,
+            )
             result.append(CheckDescriptor(kind, identifier, optional, payload))
         return result
     if kind == "hints":
@@ -165,7 +211,7 @@ def _check_descriptors(kind: str, value: Any, file: Path, path: str, civ: str) -
     _error(file, path, "unknown check")
 
 
-def _compile_order(document: Any, file: Path, index: int | None) -> BuildOrder:
+def _compile_order(document: Any, file: Path, index: int | None, identities: IdentityCatalog) -> BuildOrder:
     base = "" if index is None else f"[{index}]."
     order = _mapping(document, file, base.rstrip("."))
     unknown = set(order) - {"civ", "title", "steps"}
@@ -186,7 +232,17 @@ def _compile_order(document: Any, file: Path, index: int | None) -> BuildOrder:
             step_title = _string(step_title, file, f"{step_path}.title")
         checks: list[CheckDescriptor] = []
         for key, entry in step.items():
-            if key != "title": checks.extend(_check_descriptors(key, entry, file, f"{step_path}.{key}", civ))
+            if key != "title":
+                checks.extend(
+                    _check_descriptors(
+                        key,
+                        entry,
+                        file,
+                        f"{step_path}.{key}",
+                        civ,
+                        identities,
+                    )
+                )
         if not checks:
             _error(file, step_path, "must contain at least one check")
         compiled_steps.append(Step(step_title, tuple(checks)))
@@ -195,7 +251,9 @@ def _compile_order(document: Any, file: Path, index: int | None) -> BuildOrder:
     return BuildOrder(normalize_id(civ, title), civ, title, tuple(compiled_steps))
 
 
-def compile_directory(input_dir: Path) -> Catalog:
+def compile_directory(input_dir: Path, identities: IdentityCatalog | None = None) -> Catalog:
+    if identities is None:
+        identities = IdentityCatalog.load(DEFAULT_IDENTITY_CATALOG)
     orders: list[BuildOrder] = []
     for file in sorted((path for path in input_dir.rglob("*") if path.suffix.lower() in {".yaml", ".yml"}), key=lambda path: path.relative_to(input_dir).as_posix()):
         source = file.relative_to(input_dir).as_posix()
@@ -207,7 +265,14 @@ def compile_directory(input_dir: Path) -> Catalog:
         if not isinstance(document, (dict, list)):
             _error(source, "", "root must be a mapping or list of mappings")
         for index, item in enumerate(documents):
-            orders.append(_compile_order(item, source, index if isinstance(document, list) else None))
+            orders.append(
+                _compile_order(
+                    item,
+                    source,
+                    index if isinstance(document, list) else None,
+                    identities,
+                )
+            )
     seen: set[str] = set()
     for order in orders:
         if order.id in seen:
