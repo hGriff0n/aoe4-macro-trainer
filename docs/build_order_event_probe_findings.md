@@ -184,3 +184,20 @@ Periodic reconciliation handles pre-existing units, conversions, cancelled found
 6. Keep GRI-80 optional until target resource and Town Center identity can be safely resolved from the rally callback.
 7. Leave GRI-55, GRI-58, and GRI-63 unchanged: the probe supports their existing polling/presentation designs.
 8. Run a multiplayer probe before finalizing any global subscription, verifying that opponent actions are rejected by the same ownership predicates.
+
+## Focused queue and cancellation follow-up
+
+A second single-player probe session was recorded in:
+
+`E:\Docs\My Games\Age of Empires IV\LogFiles\AoE4_08_28_13h-25m-00s\scarlog.2026-08-28.13-25-00.txt`
+
+The human player queued and removed Scout, Villager, and Textiles entries after aging up. The probe captured each affected production queue synchronously inside the event callback and again on the next simulation tick.
+
+- Production additions and removals emitted `GE_EntityCommandIssued` for the producing entity. The synchronous queue was always the pre-command state; the next-tick queue contained the mutation.
+- Unit additions correlated with command type 3 and removals with type 5, but handlers must not encode those opaque enum values. Any command from a human-owned production entity can safely trigger a coalesced next-tick authoritative queue recount.
+- `GE_BuildItemStart`, `GE_BuildItemCancelled`, and `GE_SquadProductionQueue` still emitted no runtime callbacks, including genuine waiting and active unit cancellations.
+- `GE_BuildItemComplete` identifies the human player and product but not the producer entity. Queued production must therefore schedule a player-wide next-tick recount after a matching human completion as well as after human-owned entity commands.
+- `GE_UpgradeStart` fired for Textiles while it was third behind Scout and Villager. It therefore proves accepted queue insertion, not active research progress, and carries the product identity in `context.upgrade`.
+- A genuine Textiles cancellation emitted `GE_UpgradeCancelled` with a direct-player `context.executer`. Successful Textiles completion later emitted `GE_UpgradeCancelled` immediately followed by `GE_UpgradeComplete` at the same timestamp. Cancellation must be reconciled after event dispatch so completion wins.
+
+The focused session's human player was `PlayerID=1002`; implementations must compare runtime ownership with the handler-bound player and never hardcode this value. Opponent behavior remains a required validation scenario.
