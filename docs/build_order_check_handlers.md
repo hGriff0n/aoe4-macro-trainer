@@ -7,7 +7,7 @@ This guide explains how to add a production check to the GRI-83 build-order obje
 1. `tools/build_orders/compiler.py` converts one YAML check into one or more `CheckDescriptor` values.
 2. `tools/build_orders/emitters.py` writes those descriptors into `generated/build_orders.scar` with a stable check ID, localized title, optional flag, and typed payload.
 3. `BuildOrder_ActivateStep` creates every child objective and then calls the registered handler's `activate` function.
-4. The handler observes only `context.localPlayer` and reports state through the engine.
+4. The handler observes the engine-provided `context.localPlayer` and `context.civ`, then reports state through the engine.
 5. Before step transition or game shutdown, the engine calls `deactivate` and then deletes the objective hierarchy.
 
 ## Handler Shape
@@ -51,6 +51,8 @@ Use a per-check table keyed by `check.id`; one global Boolean or counter breaks 
 ## Human-Player Filter
 
 `context.localPlayer` is the authoritative gameplay player. Do not call `Game_GetLocalPlayer` inside a handler and do not search every player for a matching blueprint.
+
+`context.civ` is the authoritative normalized civilization ID for the selected build order. Use it for civilization-specific behavior such as choosing the appropriate event mechanism; do not derive it from an entity, the currently observed player race, or check payload data.
 
 For polling:
 

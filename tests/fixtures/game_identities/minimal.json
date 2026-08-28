@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "source": "official_base_data",
+  "civilizations": {
+    "abbasid": {
+      "squad": {
+        "scout": "unit_scout_1_abb"
+      },
+      "upgrade": {
+        "economic_wing": "upgrade_add_economy_wing"
+      }
+    },
+    "english": {
+      "entity": {
+        "council_hall": "building_council_hall_eng",
+        "town_center": "building_town_center_eng"
+      },
+      "squad": {
+        "scout": "unit_scout_1_eng"
+      },
+      "upgrade": {
+        "wheelbarrow": "upgrade_wheelbarrow_eng"
+      }
+    }
+  }
+}
