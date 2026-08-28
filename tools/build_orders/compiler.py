@@ -90,13 +90,14 @@ def _resolve_identity_payload(
     key = "id" if "id" in payload else "oneof"
     human_ids = [payload[key]] if key == "id" else payload[key]
     canonical = []
-    for item in human_ids:
+    for index, item in enumerate(human_ids):
         try:
             canonical.append(identities.resolve(civ, category, item))
         except IdentityCatalogError as exc:
+            identity_path = f"{path}.id" if key == "id" else f"{path}.oneof[{index}]"
             _error(
                 file,
-                path,
+                identity_path,
                 f"civilization '{normalize_identity_id(civ)}', {kind} check, "
                 f"expected {category} ID '{item}': {exc}",
             )

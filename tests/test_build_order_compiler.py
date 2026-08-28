@@ -92,9 +92,21 @@ steps:
             "civ: english\ntitle: x\nsteps:\n  - age_up: {id: council_hall, capability: landmark}\n",
             "steps[0].age_up.capability: unknown field",
         )
-        self.assert_invalid(
+
+    def test_reports_exact_scalar_identity_error_path(self) -> None:
+        self.assert_invalid_exact(
             "civ: english\ntitle: x\nsteps:\n  - units: [{id: economic_wing}]\n",
-            "civilization 'english', units check, expected squad ID 'economic_wing'",
+            "file.yaml: steps[0].units[0].id: civilization 'english', units check, "
+            "expected squad ID 'economic_wing': unknown squad ID 'economic_wing' "
+            "for civilization 'english'",
+        )
+
+    def test_reports_exact_second_oneof_identity_error_path(self) -> None:
+        self.assert_invalid_exact(
+            "civ: english\ntitle: x\nsteps:\n  - built: [{oneof: [stable, economic_wing]}]\n",
+            "file.yaml: steps[0].built[0].oneof[1]: civilization 'english', "
+            "built check, expected entity ID 'economic_wing': unknown entity ID "
+            "'economic_wing' for civilization 'english'",
         )
 
     def test_compiles_single_mapping_with_canonical_immutable_model(self) -> None:
@@ -183,6 +195,11 @@ steps:
         with self.assertRaises(BuildOrderValidationError) as caught:
             self.compile({"file.yaml": yaml})
         self.assertIn(fragment, str(caught.exception))
+
+    def assert_invalid_exact(self, yaml: str, message: str) -> None:
+        with self.assertRaises(BuildOrderValidationError) as caught:
+            self.compile({"file.yaml": yaml})
+        self.assertEqual(str(caught.exception), message)
 
     def test_rejects_invalid_schema_with_precise_paths(self) -> None:
         self.assert_invalid("civ: english\ntitle: x\nsteps:\n  - title: only\n", "file.yaml: steps[0]")
