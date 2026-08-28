@@ -124,11 +124,10 @@ def generate_identity_document(rows: Iterable[Mapping[str, object]]) -> dict[str
                 raise IdentityGenerationError(f"unknown translation-sentinel PBG ID {pbgid!r}")
             continue
 
-        normalized_base_id = _normalize_official_id(base_id, "baseId")
         normalized_item_id = _normalize_official_id(item_id, "item_id")
         for civilization in included_civilizations:
             identities = grouped_identities.setdefault(
-                (civilization, identity_category, normalized_base_id),
+                (civilization, identity_category, base_id),
                 {},
             )
             existing = identities.get(normalized_item_id)
@@ -144,7 +143,8 @@ def generate_identity_document(rows: Iterable[Mapping[str, object]]) -> dict[str
         output = civilizations.setdefault(civilization, {}).setdefault(category, {})
         canonical_ids = set(items.values())
         if len(canonical_ids) == 1:
-            _insert_identity(output, civilization, category, base_id, next(iter(canonical_ids)))
+            normalized_base_id = _normalize_official_id(base_id, "baseId")
+            _insert_identity(output, civilization, category, normalized_base_id, next(iter(canonical_ids)))
             continue
         for item_id, attrib_name in sorted(items.items()):
             _insert_identity(output, civilization, category, item_id, attrib_name)

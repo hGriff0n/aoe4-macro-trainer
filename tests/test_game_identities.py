@@ -81,11 +81,10 @@ class IdentityGeneratorTests(unittest.TestCase):
         self.assertEqual(upgrades["blade_inlaying_2"], "upgrade_damage_2")
         self.assertEqual(upgrades["blade_inlaying_4"], "upgrade_damage_4")
 
-    def test_generator_rejects_item_id_fallback_that_collides_with_another_base_id(self) -> None:
+    def test_generator_rejects_normalized_output_collision_between_distinct_raw_base_ids(self) -> None:
         rows = [
-            row("technologies", "same", "upgrade_one", ["en"], item_id="same-1"),
-            row("technologies", "same", "upgrade_two", ["en"], item_id="same-2"),
-            row("technologies", "same-1", "upgrade_three", ["en"], item_id="same-1-1"),
+            row("buildings", "town-center", "building_one", ["en"], item_id="town-center-a"),
+            row("buildings", "town_center", "building_two", ["en"], item_id="town_center-b"),
         ]
 
         with self.assertRaisesRegex(IdentityGenerationError, "conflicting identity"):
