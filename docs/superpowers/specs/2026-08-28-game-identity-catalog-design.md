@@ -41,6 +41,8 @@ steps:
 
 `id` and every value in `oneof` use the same catalog-backed validation. IDs are case-sensitive normalized slugs using lowercase ASCII and underscores. The compiler does not accept raw PBG integers or author-supplied canonical `attribName` values as a bypass.
 
+The compiler and catalog do not provide aliases for earlier guessed shorthand IDs. Existing build-order sources are migrated to normalized official base IDs; for example, `hospitallers` becomes `knights_hospitaller` and `antioch` becomes `principality_of_antioch`.
+
 The schema contains no `capability` field. A build order never describes whether its age-up is a landmark, an upgrade, or some other engine mechanism.
 
 ## Committed Catalog
@@ -116,7 +118,11 @@ The GRI-57 branch removes `capability` from:
 - runtime state and adapter dispatch; and
 - focused tests and fixtures.
 
-Existing human-readable IDs such as `economic_wing`, `hospitallers`, and `khan_and_torguuds` are resolved through the catalog using their build order's civilization. Incorrect test fixtures must set the intended civilization rather than override detection through YAML.
+Normalized human-readable IDs such as `economic_wing`, `knights_hospitaller`, and `khan_and_torguuds` are resolved through the catalog using their build order's civilization. Incorrect test fixtures must set the intended civilization rather than override detection through YAML.
+
+Any established shorthand that is not the normalized official base ID is updated at its source rather than retained as a catalog alias. GRI-57 fixtures therefore use `knights_hospitaller`, `principality_of_antioch`, and the other normalized IDs emitted by the catalog generator.
+
+Catalog validation also exposes category mistakes rather than masking them. Templar age selections such as `knights_hospitaller` are upgrades, not buildings, so redundant `built` checks for those selections are removed. A Templar `age_up` check previously used for `town_center` construction is migrated to a `built` check because `town_center` is an entity identity, not an upgrade identity.
 
 ## Error Handling
 
