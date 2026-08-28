@@ -20,6 +20,8 @@ class BuildOrderCompilerTests(unittest.TestCase):
                         "archery_range": "building_archery_range_eng",
                         "barracks": "building_barracks_eng",
                         "council_hall": "building_landmark_age2_eng",
+                        "house": "building_house_eng",
+                        "outpost": "building_outpost_eng",
                         "stable": "building_stable_eng",
                         "town_center": "building_town_center_eng",
                     },
@@ -85,7 +87,7 @@ steps:
             check.payload["oneof"],
             ["building_stable_eng", "building_archery_range_eng"],
         )
-        self.assertEqual(check.title, "Built: stable or archery_range")
+        self.assertEqual(check.title, "Build stable or archery_range")
 
     def test_rejects_capability_and_reports_catalog_context(self) -> None:
         self.assert_invalid(

@@ -7,22 +7,22 @@ function Built_BlueprintsEqual(left, right)
 		and left.PropertyBagGroupType == right.PropertyBagGroupType
 end
 
-function Built_ResolveBlueprints(payload)
-	local blueprints = {}
+function Built_ResolvePBGs(payload)
+	local pbgs = {}
 	if payload.id ~= nil then
-		table.insert(blueprints, BP_GetEntityBlueprint(payload.id))
-		return blueprints
+		table.insert(pbgs, BP_GetEntityBlueprint(payload.id))
+		return pbgs
 	end
 
 	for _, candidate in ipairs(payload.oneof) do
-		table.insert(blueprints, BP_GetEntityBlueprint(candidate))
+		table.insert(pbgs, BP_GetEntityBlueprint(candidate))
 	end
-	return blueprints
+	return pbgs
 end
 
-function Built_Matches(state, blueprint)
-	for _, candidate in ipairs(state.blueprints) do
-		if Built_BlueprintsEqual(candidate, blueprint) then
+function Built_MatchesPBG(pbgs, pbg)
+	for _, candidate in ipairs(pbgs) do
+		if Built_BlueprintsEqual(candidate, pbg) then
 			return true
 		end
 	end
@@ -34,7 +34,7 @@ function Built_OnConstructionComplete(context)
 		if state ~= nil and state.remaining > 0 then
 			if context.player == state.player then
 				local entityID = context.entity.EntityID
-				if state.seen[entityID] ~= true and Built_Matches(state, context.pbg) then
+				if state.seen[entityID] ~= true and Built_MatchesPBG(state.pbgs, context.pbg) then
 					state.seen[entityID] = true
 					state.remaining = state.remaining - 1
 					if state.remaining == 0 then
@@ -60,7 +60,7 @@ function Built_SnapshotEntity(groupID, entityIndex, entity)
 		if Entity_GetPlayerOwner(entity) == state.player then
 			if Entity_IsBuilding(entity) and Entity_GetBuildingProgress(entity) >= 1.0 then
 				local blueprint = Entity_GetBlueprint(entity)
-				if Built_Matches(state, blueprint) then
+				if Built_MatchesPBG(state.pbgs, blueprint) then
 					state.seen[Entity_GetID(entity)] = true
 				end
 			end
@@ -79,7 +79,7 @@ function Built_Activate(check, objectiveID, context)
 		player = player,
 		objectiveID = objectiveID,
 		payload = check.payload,
-		blueprints = Built_ResolveBlueprints(check.payload),
+		pbgs = Built_ResolvePBGs(check.payload),
 		remaining = check.payload.count,
 		seen = {},
 	}

@@ -48,15 +48,15 @@ class BuiltCheckContractTests(unittest.TestCase):
     def test_checks_owner_before_blueprint_and_accepts_id_or_oneof(self) -> None:
         callback = function_body(self.source, "Built_OnConstructionComplete")
         owner = "context.player == state.player"
-        blueprint = "Built_Matches(state, context.pbg)"
+        blueprint = "Built_MatchesPBG(state.pbgs, context.pbg)"
         self.assertIn(owner, callback)
         self.assertIn(blueprint, callback)
         self.assertLess(callback.index(owner), callback.index(blueprint))
-        matcher = function_body(self.source, "Built_Matches")
-        self.assertIn("ipairs(state.blueprints)", matcher)
+        matcher = function_body(self.source, "Built_MatchesPBG")
+        self.assertIn("ipairs(pbgs)", matcher)
 
     def test_resolves_and_compares_the_complete_canonical_pbg_tuple(self) -> None:
-        resolve = function_body(self.source, "Built_ResolveBlueprints")
+        resolve = function_body(self.source, "Built_ResolvePBGs")
         self.assertIn("BP_GetEntityBlueprint(payload.id)", resolve)
         self.assertIn("BP_GetEntityBlueprint(candidate)", resolve)
 
@@ -64,6 +64,14 @@ class BuiltCheckContractTests(unittest.TestCase):
         self.assertIn("PropertyBagGroupID", equal)
         self.assertIn("PropertyBagGroupModPackID", equal)
         self.assertIn("PropertyBagGroupType", equal)
+
+    def test_resolves_entity_blueprints_only_during_activation(self) -> None:
+        activate = function_body(self.source, "Built_Activate")
+        self.assertIn("pbgs = Built_ResolvePBGs(check.payload)", activate)
+
+        callback = function_body(self.source, "Built_OnConstructionComplete")
+        self.assertNotIn("BP_GetEntityBlueprint", callback)
+        self.assertIn("Built_MatchesPBG(state.pbgs, context.pbg)", callback)
 
     def test_only_matching_human_completed_buildings_decrement_and_latch(self) -> None:
         callback = function_body(self.source, "Built_OnConstructionComplete")
