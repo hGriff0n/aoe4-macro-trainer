@@ -1,7 +1,8 @@
+import tempfile
 import unittest
 from pathlib import Path
 
-from tools.build_orders.compiler import compile_directory
+from tools.build_orders.compiler import BuildOrderValidationError, compile_directory
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -9,88 +10,47 @@ AGE_UP_HANDLER = ROOT / "assets" / "scar" / "build_orders" / "checks" / "age_up.
 
 
 class AgeUpCompilerTests(unittest.TestCase):
-    def compile_check(self, check: str, civ: str = "English"):
-        directory = ROOT / "tests" / "fixtures" / "build_orders" / "age_up"
-        directory.mkdir(parents=True, exist_ok=True)
-        fixture = directory / "age_up.yaml"
-        self.addCleanup(fixture.unlink, missing_ok=True)
-        self.addCleanup(lambda: directory.rmdir() if directory.exists() and not any(directory.iterdir()) else None)
-        fixture.write_text(
-            f"civ: {civ}\n"
-            "title: Age Up\n"
-            "steps:\n"
-            f"  - age_up: {check}\n",
-            encoding="utf-8",
+    def compile_check(self, check: str, civ: str = "english"):
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = Path(temp) / "age_up.yaml"
+            fixture.write_text(
+                f"civ: {civ}\n"
+                "title: Age Up\n"
+                "steps:\n"
+                f"  - age_up: {check}\n",
+                encoding="utf-8",
+            )
+            return compile_directory(Path(temp)).build_orders[0].steps[0].checks[0]
+
+    def test_normalized_age_up_ids_compile_to_canonical_upgrade_ids(self) -> None:
+        cases = (
+            ("abbasid", "economic_wing", "upgrade_add_economy_wing"),
+            ("templar", "knights_hospitaller", "upgrade_age_dark_com_1_tem"),
+            ("golden_horde", "khan_and_torguuds", "upgrade_tent_dark_1_khan_mon_ha_gol"),
         )
-        return compile_directory(directory).build_orders[0].steps[0].checks[0]
-
-    def test_renders_single_age_up_id(self) -> None:
-        check = self.compile_check("{id: council_hall}")
-        self.assertEqual(check.title, "Age up: council_hall")
-        self.assertFalse(check.optional)
-        self.assertEqual(check.payload, {"id": "council_hall"})
-
-    def test_renders_oneof_with_slash_joined_ids(self) -> None:
-        check = self.compile_check("{oneof: [council_hall, kings_palace]}")
-        self.assertEqual(check.title, "Age up: council_hall / kings_palace")
-        self.assertEqual(check.payload, {"oneof": ["council_hall", "kings_palace"]})
-
-    def test_renders_villager_and_location_suffixes_in_order(self) -> None:
-        check = self.compile_check("{id: council_hall, vils: 4, location: gold}")
-        self.assertEqual(check.title, "Age up: council_hall with 4 vils on gold")
-        self.assertEqual(check.payload, {"id": "council_hall", "vils": 4, "location": "gold"})
-
-    def test_marks_golden_horde_non_building_age_up_as_visible_non_blocking_limitation(self) -> None:
-        directory = ROOT / "tests" / "fixtures" / "build_orders" / "age_up_golden_horde"
-        directory.mkdir(parents=True, exist_ok=True)
-        fixture = directory / "age_up.yaml"
-        self.addCleanup(fixture.unlink, missing_ok=True)
-        self.addCleanup(lambda: directory.rmdir() if directory.exists() and not any(directory.iterdir()) else None)
-        fixture.write_text(
-            "civ: Golden Horde\n"
-            "title: Age Up\n"
-            "steps:\n"
-            "  - age_up: {id: golden_horde_age_2, capability: non_building}\n",
-            encoding="utf-8",
-        )
-        check = compile_directory(directory).build_orders[0].steps[0].checks[0]
-        self.assertTrue(check.optional)
-        self.assertEqual(check.title, "Age up: golden_horde_age_2 [unsupported: non-building progress]")
-
-    def test_golden_horde_landmark_id_remains_required_without_capability_override(self) -> None:
-        directory = ROOT / "tests" / "fixtures" / "build_orders" / "age_up_golden_horde_landmark"
-        directory.mkdir(parents=True, exist_ok=True)
-        fixture = directory / "age_up.yaml"
-        self.addCleanup(fixture.unlink, missing_ok=True)
-        self.addCleanup(lambda: directory.rmdir() if directory.exists() and not any(directory.iterdir()) else None)
-        fixture.write_text(
-            "civ: Golden Horde\n"
-            "title: Age Up\n"
-            "steps:\n"
-            "  - age_up: {id: golden_horde_landmark}\n",
-            encoding="utf-8",
-        )
-        check = compile_directory(directory).build_orders[0].steps[0].checks[0]
-        self.assertFalse(check.optional)
-        self.assertEqual(check.title, "Age up: golden_horde_landmark")
-
-    def test_explicit_civilization_capability_scenarios(self) -> None:
-        scenarios = (
-            ("Knights Templar", "fortress-2", "landmark", False),
-            ("Abbasid", "upgrade_add_economy_wing", "abbasid_wing", False),
-            ("Golden Horde", "golden_horde_age_2", "non_building", True),
-        )
-        for civ, identifier, capability, optional in scenarios:
+        for civ, human_id, canonical in cases:
             with self.subTest(civ=civ):
-                check = self.compile_check(
-                    f"{{id: {identifier}, capability: {capability}}}", civ=civ
-                )
-                self.assertEqual(check.optional, optional)
-                self.assertEqual(check.payload["capability"], capability)
+                check = self.compile_check(f"{{id: {human_id}}}", civ=civ)
+                self.assertFalse(check.optional)
+                self.assertEqual(check.payload, {"id": canonical})
 
-    def test_rejects_unknown_age_up_capability(self) -> None:
-        with self.assertRaisesRegex(ValueError, "must be landmark, abbasid_wing, or non_building"):
-            self.compile_check("{id: upgrade_add_economy_wing, capability: generic_upgrade}")
+    def test_ayyubid_age_up_uses_upgrade_catalog_category(self) -> None:
+        check = self.compile_check("{id: feudal_economic_wing_growth}", civ="ayyubids")
+        self.assertEqual(
+            check.payload,
+            {"id": "upgrade_add_economy_wing_dark_a_abb_ha_01"},
+        )
+
+    def test_conventional_age_up_uses_entity_catalog_category(self) -> None:
+        check = self.compile_check("{id: council_hall}", civ="english")
+        self.assertEqual(
+            check.payload,
+            {"id": "building_landmark_age1_westminster_hall_eng"},
+        )
+
+    def test_rejects_removed_capability_field(self) -> None:
+        with self.assertRaisesRegex(BuildOrderValidationError, "age_up.capability: unknown field"):
+            self.compile_check("{id: council_hall, capability: landmark}")
 
 
 class AgeUpHandlerContractTests(unittest.TestCase):
@@ -98,73 +58,56 @@ class AgeUpHandlerContractTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.source = AGE_UP_HANDLER.read_text(encoding="utf-8")
 
-    def test_registers_a_handler_and_keeps_per_check_state(self) -> None:
-        self.assertIn('BuildOrder_RegisterHandler("age_up"', self.source)
-        self.assertIn("AGE_UP_STATE[check.id]", self.source)
-        self.assertIn("local player = context.localPlayer", self.source)
+    def test_runtime_dispatches_on_context_civ_without_capability(self) -> None:
+        self.assertIn("civ = context.civ", self.source)
+        self.assertIn("AgeUp_UsesUpgradeEvent(state.civ)", self.source)
+        self.assertNotIn("capability", self.source)
 
-    def test_landmark_adapter_requires_owned_positive_construction_progress(self) -> None:
-        self.assertIn("Player_GetEntities(state.player)", self.source)
-        self.assertIn("EGroup_ForEach(entities, AgeUp_CheckLandmarkEntity)", self.source)
-        self.assertIn("Entity_GetPlayerOwner(entity) ~= state.player", self.source)
-        self.assertIn("Entity_GetBuildingProgress(entity) > 0", self.source)
-        self.assertIn("AgeUp_LandmarkProgressStarted", self.source)
+    def test_upgrade_civilizations_are_explicit(self) -> None:
+        for civ in ("abbasid", "ayyubids", "templar", "golden_horde"):
+            self.assertIn(f"{civ} = true", self.source)
 
-    def test_matches_any_configured_id_only_after_human_progress_starts(self) -> None:
-        self.assertIn("AgeUp_MatchesLandmarkID", self.source)
-        self.assertIn("AgeUp_MatchesUpgradeID", self.source)
-        self.assertIn("payload.oneof", self.source)
-        self.assertIn("BuildOrder_SetCheckComplete(state.checkID, true)", self.source)
-        self.assertNotIn("Entity_GetProductionQueue", self.source)
+    def test_activation_caches_pbg_tuples_using_civilization_selected_resolver(self) -> None:
+        self.assertIn("AgeUp_ResolvePBGs(check.payload, civ)", self.source)
+        self.assertIn("pbgs =", self.source)
+        self.assertIn("BP_GetUpgradeBlueprint", self.source)
+        self.assertIn("BP_GetEntityBlueprint", self.source)
+        self.assertNotIn("BP_GetUpgradeBlueprint(state.payload", self.source)
+        self.assertNotIn("BP_GetEntityBlueprint(state.payload", self.source)
 
-    def test_non_building_adapter_is_explicitly_unsupported_and_never_completes(self) -> None:
-        self.assertIn("AgeUp_NonBuildingProgressStarted", self.source)
-        self.assertIn("No documented player-scoped non-building age-up progress API", self.source)
-        self.assertIn("return false", self.source)
-
-    def test_dispatches_each_capability_to_its_matching_adapter(self) -> None:
-        self.assertIn('state.payload.capability == "abbasid_wing"', self.source)
-        self.assertIn("return AgeUp_AbbasidWingProgressStarted(state)", self.source)
-        self.assertIn('state.payload.capability == "non_building"', self.source)
-        self.assertIn("return AgeUp_NonBuildingProgressStarted(state)", self.source)
-        self.assertIn("return AgeUp_LandmarkProgressStarted(state)", self.source)
-
-    def test_abbasid_wing_uses_upgrade_identity_not_house_of_wisdom_existence(self) -> None:
+    def test_construction_callback_filters_to_human_owner_before_cached_identity(self) -> None:
         handler = self.source[
-            self.source.index("function AgeUp_OnUpgradeStart"):
-            self.source.index("local function AgeUp_ProgressStarted")
+            self.source.index("function AgeUp_OnConstructionComplete"):
+            self.source.index("function AgeUp_OnUpgradeComplete")
         ]
-        owner = "Entity_GetPlayerOwner(context.executer)"
-        identity = "AgeUp_MatchesUpgradeID(state.payload, context.pbg)"
+        owner = "Entity_GetPlayerOwner(context.entity) ~= state.player"
+        identity = "AgeUp_MatchesPBG(state.pbgs, Entity_GetBlueprint(context.entity))"
         self.assertIn(owner, handler)
         self.assertIn(identity, handler)
         self.assertLess(handler.index(owner), handler.index(identity))
-        self.assertNotIn("Entity_GetBuildingProgress", handler)
-        self.assertNotIn("BP_GetEntityBlueprint", handler)
-        self.assertIn("BuildOrder_SetCheckComplete(state.checkID, true)", handler)
 
-    def test_abbasid_wing_listener_is_shared_and_removed_with_last_active_wing(self) -> None:
-        self.assertIn("Rule_AddGlobalEvent(AgeUp_OnUpgradeStart, GE_UpgradeStart)", self.source)
+    def test_upgrade_callback_filters_to_human_owner_before_cached_identity(self) -> None:
+        handler = self.source[self.source.index("function AgeUp_OnUpgradeComplete"):]
+        owner = "Entity_GetPlayerOwner(context.executer) ~= state.player"
+        identity = "AgeUp_MatchesPBG(state.pbgs, context.pbg)"
+        self.assertIn(owner, handler)
+        self.assertIn(identity, handler)
+        self.assertLess(handler.index(owner), handler.index(identity))
+
+    def test_baselines_are_player_scoped(self) -> None:
+        self.assertIn("Player_HasUpgrade(state.player, pbg)", self.source)
+        self.assertIn("Player_GetEntities(state.player)", self.source)
+        self.assertIn("Entity_GetPlayerOwner(entity) ~= state.player", self.source)
+
+    def test_registers_only_needed_events_and_removes_last_listener(self) -> None:
+        self.assertIn("Rule_AddGlobalEvent(AgeUp_OnConstructionComplete, GE_ConstructionComplete)", self.source)
         self.assertIn("Rule_AddGlobalEvent(AgeUp_OnUpgradeComplete, GE_UpgradeComplete)", self.source)
-        self.assertIn("Rule_RemoveGlobalEvent(AgeUp_OnUpgradeStart)", self.source)
+        self.assertIn("Rule_RemoveGlobalEvent(AgeUp_OnConstructionComplete)", self.source)
         self.assertIn("Rule_RemoveGlobalEvent(AgeUp_OnUpgradeComplete)", self.source)
 
-    def test_abbasid_activation_baseline_only_reconciles_completed_upgrade(self) -> None:
-        self.assertIn("AgeUp_AbbasidWingProgressStarted", self.source)
-        self.assertIn("Player_HasUpgrade(state.player, BP_GetUpgradeBlueprint", self.source)
-        self.assertIn("reconstruct an already-started wing", self.source)
-        self.assertNotIn("Entity_GetProductionQueue", self.source)
-
-    def test_two_active_checks_share_polling_but_keep_independent_state(self) -> None:
-        self.assertIn("for _, state in pairs(AGE_UP_STATE) do", self.source)
-        self.assertIn("AGE_UP_STATE[check.id] = nil", self.source)
-        self.assertIn("elseif not needsPolling and AGE_UP_POLLING then", self.source)
-        self.assertIn("Rule_Remove(AgeUp_Poll)", self.source)
-
-    def test_deactivation_cleans_up_and_late_polls_ignore_removed_state(self) -> None:
-        self.assertIn("AGE_UP_STATE[check.id] = nil", self.source)
-        self.assertIn("Rule_Remove(AgeUp_Poll)", self.source)
-        self.assertIn("if state == nil or state.completed then", self.source)
+    def test_unsupported_civilization_logs_and_remains_incomplete(self) -> None:
+        self.assertIn("AgeUp: unsupported civilization", self.source)
+        self.assertIn("return nil", self.source)
 
 
 if __name__ == "__main__":

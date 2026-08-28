@@ -186,14 +186,18 @@ steps:
         catalog = self.compile({"age-up.yaml": """civ: English
 title: Age Up
 steps:
-  - age_up: {oneof: [council_hall, kings_palace], vils: 4, location: gold}
+  - age_up: {oneof: [council_hall, town_center], vils: 4, location: gold}
 """})
         check = catalog.build_orders[0].steps[0].checks[0]
-        self.assertEqual(check.title, "Age up: council_hall / kings_palace with 4 vils on gold")
+        self.assertEqual(check.title, "Age Up: council_hall or town_center")
         self.assertFalse(check.optional)
         self.assertEqual(
             check.payload,
-            {"oneof": ["council_hall", "kings_palace"], "vils": 4, "location": "gold"},
+            {
+                "oneof": ["building_landmark_age2_eng", "building_town_center_eng"],
+                "vils": 4,
+                "location": "gold",
+            },
         )
 
     def test_rejects_invalid_extended_built_and_upgrade_fields(self) -> None:

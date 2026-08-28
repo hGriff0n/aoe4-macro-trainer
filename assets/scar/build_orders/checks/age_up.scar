@@ -1,29 +1,80 @@
 AGE_UP_STATE = {}
-AGE_UP_POLLING = false
-AGE_UP_WING_EVENTS = false
+AGE_UP_CONSTRUCTION_EVENTS = false
+AGE_UP_UPGRADE_EVENTS = false
 AGE_UP_SCAN_STATE = nil
 
-local function AgeUp_MatchesLandmarkID(payload, blueprint)
+AGE_UP_UPGRADE_CIVS = {
+	abbasid = true,
+	ayyubids = true,
+	templar = true,
+	golden_horde = true,
+}
 
-	if payload.id ~= nil then
-		return blueprint == BP_GetEntityBlueprint(payload.id)
-	end
+AGE_UP_SUPPORTED_CIVS = {
+	abbasid = true,
+	ayyubids = true,
+	byzantines = true,
+	chinese = true,
+	delhi = true,
+	english = true,
+	french = true,
+	golden_horde = true,
+	house_of_lancaster = true,
+	hre = true,
+	japanese = true,
+	jeanne_darc = true,
+	jin_dynasty = true,
+	macedonian_dynasty = true,
+	malians = true,
+	mongols = true,
+	order_of_the_dragon = true,
+	ottomans = true,
+	rus = true,
+	sengoku_daimyo = true,
+	templar = true,
+	tughlaq_dynasty = true,
+	zhu_xi = true,
+}
 
-	for _, identifier in ipairs(payload.oneof) do
-		if blueprint == BP_GetEntityBlueprint(identifier) then
-			return true
-		end
-	end
-	return false
+function AgeUp_PBGsEqual(left, right)
+	return left ~= nil and right ~= nil
+		and left.PropertyBagGroupID == right.PropertyBagGroupID
+		and left.PropertyBagGroupModPackID == right.PropertyBagGroupModPackID
+		and left.PropertyBagGroupType == right.PropertyBagGroupType
 end
 
-local function AgeUp_MatchesUpgradeID(payload, upgrade)
-	if payload.id ~= nil then
-		return upgrade == BP_GetUpgradeBlueprint(payload.id)
+function AgeUp_UsesUpgradeEvent(civ)
+	if civ == nil or AGE_UP_SUPPORTED_CIVS[civ] ~= true then
+		return nil
+	end
+	return AGE_UP_UPGRADE_CIVS[civ] == true
+end
+
+local function AgeUp_ResolvePBGs(payload, civ)
+	local usesUpgradeEvent = AgeUp_UsesUpgradeEvent(civ)
+	if usesUpgradeEvent == nil then
+		return nil
 	end
 
-	for _, identifier in ipairs(payload.oneof) do
-		if upgrade == BP_GetUpgradeBlueprint(identifier) then
+	local resolver = BP_GetEntityBlueprint
+	if usesUpgradeEvent then
+		resolver = BP_GetUpgradeBlueprint
+	end
+
+	local pbgs = {}
+	if payload.id ~= nil then
+		table.insert(pbgs, resolver(payload.id))
+	else
+		for _, identifier in ipairs(payload.oneof) do
+			table.insert(pbgs, resolver(identifier))
+		end
+	end
+	return pbgs
+end
+
+function AgeUp_MatchesPBG(pbgs, pbg)
+	for _, candidate in ipairs(pbgs) do
+		if AgeUp_PBGsEqual(candidate, pbg) then
 			return true
 		end
 	end
@@ -33,146 +84,155 @@ end
 function AgeUp_CheckLandmarkEntity(group, index, entity)
 	local state = AGE_UP_SCAN_STATE
 	if state == nil then
-		return true
-	end
-	if Entity_GetPlayerOwner(entity) ~= state.player then
-		-- Player_GetEntities is player-scoped, but retain the owner guard for converted entities.
 		return false
 	end
-	if AgeUp_MatchesLandmarkID(state.payload, Entity_GetBlueprint(entity))
-		and Entity_GetBuildingProgress(entity) > 0 then
-		state.landmarkProgressStarted = true
+	-- Player_GetEntities is player-scoped, but retain the owner guard for converted entities.
+	if Entity_GetPlayerOwner(entity) ~= state.player then
+		return false
+	end
+	if Entity_IsBuilding(entity)
+		and Entity_GetBuildingProgress(entity) >= 1.0
+		and AgeUp_MatchesPBG(state.pbgs, Entity_GetBlueprint(entity)) then
+		state.baselineComplete = true
 		return true
 	end
 	return false
 end
 
-local function AgeUp_AbbasidWingProgressStarted(state)
-	-- Activation can safely reconcile a completed wing. The event probe did not establish a
-	-- queue/progress API that can reconstruct an already-started wing before it completes.
-	if state.payload.id ~= nil then
-		return Player_HasUpgrade(state.player, BP_GetUpgradeBlueprint(state.payload.id))
-	end
-
-	for _, identifier in ipairs(state.payload.oneof) do
-		if Player_HasUpgrade(state.player, BP_GetUpgradeBlueprint(identifier)) then
+local function AgeUp_HasCompletedUpgrade(state)
+	for _, pbg in ipairs(state.pbgs) do
+		if Player_HasUpgrade(state.player, pbg) then
 			return true
 		end
 	end
 	return false
 end
 
-function AgeUp_OnUpgradeStart(context)
-	if context == nil or context.executer == nil or context.pbg == nil then
-		return
-	end
-
-	local owner = Entity_GetPlayerOwner(context.executer)
-	for _, state in pairs(AGE_UP_STATE) do
-		if state.completed == false
-			and state.payload.capability == "abbasid_wing"
-			and owner == state.player
-			and AgeUp_MatchesUpgradeID(state.payload, context.pbg) then
-			-- GE_UpgradeStart is the best observed wing signal, but its positive-progress
-			-- versus queue-insertion timing is not yet proven.
-			state.completed = true
-			BuildOrder_SetCheckComplete(state.checkID, true)
-		end
-	end
-end
-
-function AgeUp_OnUpgradeComplete(context)
-	-- Reconcile a descriptor activated after GE_UpgradeStart without weakening identity or owner checks.
-	AgeUp_OnUpgradeStart(context)
-end
-
-local function AgeUp_LandmarkProgressStarted(state)
-	state.landmarkProgressStarted = false
-	local entities = Player_GetEntities(state.player)
+local function AgeUp_HasCompletedLandmark(state)
+	state.baselineComplete = false
 	AGE_UP_SCAN_STATE = state
-	EGroup_ForEach(entities, AgeUp_CheckLandmarkEntity)
+	EGroup_ForEach(Player_GetEntities(state.player), AgeUp_CheckLandmarkEntity)
 	AGE_UP_SCAN_STATE = nil
-	return state.landmarkProgressStarted
-end
-
-local function AgeUp_NonBuildingProgressStarted(state)
-	-- No documented player-scoped non-building age-up progress API exists. Production queues
-	-- only prove insertion, so this adapter deliberately remains non-completing.
-	return false
-end
-
-local function AgeUp_ProgressStarted(state)
-	if state.payload.capability == "abbasid_wing" then
-		return AgeUp_AbbasidWingProgressStarted(state)
-	end
-	if state.payload.capability == "non_building" then
-		return AgeUp_NonBuildingProgressStarted(state)
-	end
-	return AgeUp_LandmarkProgressStarted(state)
+	return state.baselineComplete
 end
 
 local function AgeUp_TryComplete(state)
-	if state == nil or state.completed then
+	if state == nil or state.completed or state.unsupported then
 		return
 	end
-	if AgeUp_ProgressStarted(state) then
+
+	local complete = false
+	if AgeUp_UsesUpgradeEvent(state.civ) then
+		complete = AgeUp_HasCompletedUpgrade(state)
+	else
+		complete = AgeUp_HasCompletedLandmark(state)
+	end
+	if complete then
 		state.completed = true
 		BuildOrder_SetCheckComplete(state.checkID, true)
 	end
 end
 
-function AgeUp_Poll()
-	for _, state in pairs(AGE_UP_STATE) do
-		AgeUp_TryComplete(state)
+function AgeUp_OnConstructionComplete(context)
+	if context == nil or context.entity == nil then
+		return
 	end
+
+	local completedCheckIDs = {}
+	for checkID, state in pairs(AGE_UP_STATE) do
+		if state.completed == false and state.unsupported == false
+			and AgeUp_UsesUpgradeEvent(state.civ) == false then
+			if Entity_GetPlayerOwner(context.entity) ~= state.player then
+				-- Never allow opponent construction to satisfy a local-player objective.
+			elseif AgeUp_MatchesPBG(state.pbgs, Entity_GetBlueprint(context.entity)) then
+				state.completed = true
+				table.insert(completedCheckIDs, checkID)
+			end
+		end
+	end
+	for _, checkID in ipairs(completedCheckIDs) do
+		BuildOrder_SetCheckComplete(checkID, true)
+	end
+	AgeUp_UpdateObservers()
 end
 
-local function AgeUp_UpdateObservers()
-	local needsPolling = false
-	local needsWingEvents = false
+function AgeUp_OnUpgradeComplete(context)
+	if context == nil or context.executer == nil or context.pbg == nil then
+		return
+	end
+
+	local completedCheckIDs = {}
+	for checkID, state in pairs(AGE_UP_STATE) do
+		if state.completed == false and state.unsupported == false
+			and AgeUp_UsesUpgradeEvent(state.civ) then
+			if Entity_GetPlayerOwner(context.executer) ~= state.player then
+				-- Never allow opponent research to satisfy a local-player objective.
+			elseif AgeUp_MatchesPBG(state.pbgs, context.pbg) then
+				state.completed = true
+				table.insert(completedCheckIDs, checkID)
+			end
+		end
+	end
+	for _, checkID in ipairs(completedCheckIDs) do
+		BuildOrder_SetCheckComplete(checkID, true)
+	end
+	AgeUp_UpdateObservers()
+end
+
+function AgeUp_UpdateObservers()
+	local needsConstructionEvents = false
+	local needsUpgradeEvents = false
 	for _, state in pairs(AGE_UP_STATE) do
-		if state.completed == false then
-			if state.payload.capability == "abbasid_wing" then
-				needsWingEvents = true
-			elseif state.payload.capability ~= "non_building" then
-				needsPolling = true
+		if state.completed == false and state.unsupported == false then
+			if AgeUp_UsesUpgradeEvent(state.civ) then
+				needsUpgradeEvents = true
+			else
+				needsConstructionEvents = true
 			end
 		end
 	end
 
-	if needsPolling and not AGE_UP_POLLING then
-		AGE_UP_POLLING = true
-		Rule_Add(AgeUp_Poll)
-	elseif not needsPolling and AGE_UP_POLLING then
-		Rule_Remove(AgeUp_Poll)
-		AGE_UP_POLLING = false
+	if needsConstructionEvents and not AGE_UP_CONSTRUCTION_EVENTS then
+		Rule_AddGlobalEvent(AgeUp_OnConstructionComplete, GE_ConstructionComplete)
+		AGE_UP_CONSTRUCTION_EVENTS = true
+	elseif not needsConstructionEvents and AGE_UP_CONSTRUCTION_EVENTS then
+		Rule_RemoveGlobalEvent(AgeUp_OnConstructionComplete)
+		AGE_UP_CONSTRUCTION_EVENTS = false
 	end
 
-	if needsWingEvents and not AGE_UP_WING_EVENTS then
-		AGE_UP_WING_EVENTS = true
-		Rule_AddGlobalEvent(AgeUp_OnUpgradeStart, GE_UpgradeStart)
+	if needsUpgradeEvents and not AGE_UP_UPGRADE_EVENTS then
 		Rule_AddGlobalEvent(AgeUp_OnUpgradeComplete, GE_UpgradeComplete)
-	elseif not needsWingEvents and AGE_UP_WING_EVENTS then
-		Rule_RemoveGlobalEvent(AgeUp_OnUpgradeStart)
+		AGE_UP_UPGRADE_EVENTS = true
+	elseif not needsUpgradeEvents and AGE_UP_UPGRADE_EVENTS then
 		Rule_RemoveGlobalEvent(AgeUp_OnUpgradeComplete)
-		AGE_UP_WING_EVENTS = false
+		AGE_UP_UPGRADE_EVENTS = false
 	end
 end
 
 local function AgeUp_Activate(check, objectiveID, context)
-	local player = context.localPlayer
-	if player == nil then
+	if context == nil or context.localPlayer == nil then
 		return
 	end
 	if AGE_UP_STATE[check.id] ~= nil then
 		return
 	end
 
+	local civ = context.civ
+	local usesUpgradeEvent = AgeUp_UsesUpgradeEvent(civ)
+	local pbgs = AgeUp_ResolvePBGs(check.payload, civ)
+	local unsupported = usesUpgradeEvent == nil or pbgs == nil
+	if unsupported then
+		print("AgeUp: unsupported civilization " .. tostring(civ))
+	end
+
 	AGE_UP_STATE[check.id] = {
 		checkID = check.id,
 		objectiveID = objectiveID,
-		player = player,
-		payload = check.payload,
+		civ = civ,
+		player = context.localPlayer,
+		pbgs = pbgs,
+		usesUpgradeEvent = usesUpgradeEvent,
+		unsupported = unsupported,
 		completed = false,
 	}
 	AgeUp_TryComplete(AGE_UP_STATE[check.id])
