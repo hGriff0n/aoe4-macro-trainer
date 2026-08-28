@@ -88,11 +88,36 @@ class AgeUpHandlerContractTests(unittest.TestCase):
 
     def test_upgrade_callback_filters_to_human_owner_before_cached_identity(self) -> None:
         handler = self.source[self.source.index("function AgeUp_OnUpgradeComplete"):]
-        owner = "Entity_GetPlayerOwner(context.executer) ~= state.player"
+        owner = "owner ~= state.player"
         identity = "AgeUp_MatchesPBG(state.pbgs, context.pbg)"
         self.assertIn(owner, handler)
         self.assertIn(identity, handler)
         self.assertLess(handler.index(owner), handler.index(identity))
+
+    def test_upgrade_executor_resolver_accepts_direct_player_shape(self) -> None:
+        resolver = self.source[
+            self.source.index("function AgeUp_GetExecuterOwner"):
+            self.source.index("function AgeUp_OnUpgradeComplete")
+        ]
+        self.assertIn("context.executer.PlayerID ~= nil", resolver)
+        self.assertIn("return context.executer", resolver)
+
+    def test_upgrade_executor_resolver_accepts_entity_shape(self) -> None:
+        resolver = self.source[
+            self.source.index("function AgeUp_GetExecuterOwner"):
+            self.source.index("function AgeUp_OnUpgradeComplete")
+        ]
+        self.assertIn("context.executer.EntityID ~= nil", resolver)
+        self.assertIn("return Entity_GetPlayerOwner(context.executer)", resolver)
+
+    def test_upgrade_callback_rejects_opponent_executor_before_identity_match(self) -> None:
+        handler = self.source[self.source.index("function AgeUp_OnUpgradeComplete"):]
+        self.assertIn("local owner = AgeUp_GetExecuterOwner(context)", handler)
+        self.assertIn("if owner ~= state.player then", handler)
+        self.assertLess(
+            handler.index("if owner ~= state.player then"),
+            handler.index("AgeUp_MatchesPBG(state.pbgs, context.pbg)"),
+        )
 
     def test_baselines_are_player_scoped(self) -> None:
         self.assertIn("Player_HasUpgrade(state.player, pbg)", self.source)

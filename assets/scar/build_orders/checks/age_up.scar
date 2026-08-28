@@ -156,16 +156,30 @@ function AgeUp_OnConstructionComplete(context)
 	AgeUp_UpdateObservers()
 end
 
+local function AgeUp_GetExecuterOwner(context)
+	if context == nil or context.executer == nil then
+		return nil
+	end
+	if context.executer.PlayerID ~= nil then
+		return context.executer
+	end
+	if context.executer.EntityID ~= nil then
+		return Entity_GetPlayerOwner(context.executer)
+	end
+	return nil
+end
+
 function AgeUp_OnUpgradeComplete(context)
 	if context == nil or context.executer == nil or context.pbg == nil then
 		return
 	end
 
+	local owner = AgeUp_GetExecuterOwner(context)
 	local completedCheckIDs = {}
 	for checkID, state in pairs(AGE_UP_STATE) do
 		if state.completed == false and state.unsupported == false
 			and AgeUp_UsesUpgradeEvent(state.civ) then
-			if Entity_GetPlayerOwner(context.executer) ~= state.player then
+			if owner ~= state.player then
 				-- Never allow opponent research to satisfy a local-player objective.
 			elseif AgeUp_MatchesPBG(state.pbgs, context.pbg) then
 				state.completed = true
