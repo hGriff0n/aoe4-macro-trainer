@@ -110,6 +110,7 @@ class UnitsHandlerContractTests(unittest.TestCase):
         self.assertIn("UNITS_STATE[check.id]", activate)
         self.assertIn("unitBlueprint = BP_GetSquadBlueprint(check.payload.id)", activate)
         self.assertIn("Rule_AddInterval(Units_Poll", activate)
+        self.assertIn("Units_Poll()", activate)
 
     def test_recomputes_human_owned_living_canonical_squads_before_each_threshold(self) -> None:
         scan = function_body(self.source, "Units_ScanSquad")

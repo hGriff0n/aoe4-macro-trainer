@@ -50,6 +50,7 @@ function Units_Activate(check, objectiveID, context)
 		UNITS_POLLING = true
 		Rule_AddInterval(Units_Poll, UNITS_POLL_INTERVAL_SECONDS)
 	end
+	Units_Poll()
 end
 
 function Units_Deactivate(check, objectiveID, context)
