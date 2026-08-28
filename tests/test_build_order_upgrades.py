@@ -11,7 +11,9 @@ UPGRADES = ROOT / "assets" / "scar" / "build_orders" / "checks" / "upgrades.scar
 
 
 def function_body(source: str, name: str) -> str:
-    start = source.index(f"function {name}") if f"function {name}" in source else source.index(f"local function {name}")
+    declaration = f"function {name}("
+    local_declaration = f"local function {name}("
+    start = source.index(declaration) if declaration in source else source.index(local_declaration)
     next_function = source.find("\nfunction ", start + 1)
     next_local_function = source.find("\nlocal function ", start + 1)
     endings = [index for index in (next_function, next_local_function) if index != -1]
@@ -62,7 +64,7 @@ class BuildOrderUpgradeHandlerContractTests(unittest.TestCase):
         activate = self.source[self.source.index("local function Upgrades_Activate"):self.source.index("local function Upgrades_Deactivate")]
         self.assertIn("local player = context.localPlayer", activate)
         self.assertIn("BP_GetUpgradeBlueprint(check.payload.id)", activate)
-        self.assertIn("Player_HasUpgrade(state.player, state.pbg)", completed)
+        self.assertIn("Player_HasUpgrade(state.player, state.upgrade)", completed)
         self.assertIn("queued = check.payload.queued", activate)
 
     def test_resolves_upgrade_blueprint_once_at_activation(self) -> None:
@@ -70,9 +72,9 @@ class BuildOrderUpgradeHandlerContractTests(unittest.TestCase):
         callback = function_body(self.source, "Upgrades_OnUpgradeComplete")
         queued = function_body(self.source, "Upgrades_HasQueuedResearch")
 
-        self.assertIn("pbg = BP_GetUpgradeBlueprint(check.payload.id)", activate)
-        self.assertIn("context.pbg == state.pbg", callback)
-        self.assertIn("state.pbg", queued)
+        self.assertIn("upgrade = BP_GetUpgradeBlueprint(check.payload.id)", activate)
+        self.assertIn("Upgrades_PBGsEqual(context.upgrade, state.upgrade)", callback)
+        self.assertIn("state.upgrade", queued)
         self.assertNotIn("BP_GetUpgradeBlueprint", callback)
         self.assertNotIn("BP_GetUpgradeBlueprint", queued)
 
@@ -82,26 +84,23 @@ class BuildOrderUpgradeHandlerContractTests(unittest.TestCase):
         self.assertIn("Entity_GetPlayerOwner(entity) == state.player", scan)
         self.assertIn("Entity_GetProductionQueueSize(entity)", scan)
         self.assertIn("Entity_GetProductionQueueItemType(entity, index)", scan)
-        self.assertIn("Entity_GetProductionQueueItem(entity, index) == state.pbg", scan)
+        self.assertIn("Upgrades_PBGsEqual(Entity_GetProductionQueueItem(entity, index), state.upgrade)", scan)
         self.assertIn("PITEM_Upgrade", scan)
         self.assertIn("PITEM_PlayerUpgrade", scan)
 
-    def test_poll_latches_completion_and_cleanup_removes_its_shared_rule(self) -> None:
-        self.assertIn("BuildOrder_SetCheckComplete(state.checkID, true)", self.source)
-        self.assertIn("Rule_Remove(Upgrades_Poll)", self.source)
-        self.assertIn("Rule_Add(Upgrades_Poll)", self.source)
-        self.assertIn("for _, state in pairs(UPGRADES_STATE) do", self.source)
-        self.assertIn("if state == nil then", self.source)
-
-    def test_completed_research_uses_only_the_upgrade_complete_event(self) -> None:
+    def test_event_driven_state_registers_start_cancel_and_complete_without_periodic_polling(self) -> None:
         register = function_body(self.source, "Upgrades_UpdateObservers")
         self.assertIn(
             "Rule_AddGlobalEvent(Upgrades_OnUpgradeComplete, GE_UpgradeComplete)",
             register,
         )
+        self.assertIn("Rule_AddGlobalEvent(Upgrades_OnUpgradeStart, GE_UpgradeStart)", register)
+        self.assertIn("Rule_AddGlobalEvent(Upgrades_OnUpgradeCancelled, GE_UpgradeCancelled)", register)
         self.assertIn("Rule_RemoveGlobalEvent(Upgrades_OnUpgradeComplete)", register)
-        self.assertNotIn("GE_UpgradeStart", self.source)
-        self.assertNotIn("GE_UpgradeCancelled", self.source)
+        self.assertIn("Rule_RemoveGlobalEvent(Upgrades_OnUpgradeStart)", register)
+        self.assertIn("Rule_RemoveGlobalEvent(Upgrades_OnUpgradeCancelled)", register)
+        self.assertNotIn("Rule_Add(Upgrades_Poll)", self.source)
+        self.assertNotIn("Rule_Remove(Upgrades_Poll)", self.source)
 
     def test_completion_event_filters_polymorphic_owner_before_canonical_upgrade(self) -> None:
         owner = function_body(self.source, "Upgrades_GetExecuterOwner")
@@ -110,8 +109,8 @@ class BuildOrderUpgradeHandlerContractTests(unittest.TestCase):
         self.assertIn("Entity_GetPlayerOwner(context.executer)", owner)
 
         callback = function_body(self.source, "Upgrades_OnUpgradeComplete")
-        owner_match = "owner == state.player"
-        upgrade_match = "context.pbg == state.pbg"
+        owner_match = "owner ~= state.player"
+        upgrade_match = "Upgrades_PBGsEqual(context.upgrade, state.upgrade)"
         self.assertIn(owner_match, callback)
         self.assertIn(upgrade_match, callback)
         self.assertLess(callback.index(owner_match), callback.index(upgrade_match))
@@ -119,32 +118,34 @@ class BuildOrderUpgradeHandlerContractTests(unittest.TestCase):
 
     def test_activation_reconciles_completed_research_before_observer_update(self) -> None:
         activate = function_body(self.source, "Upgrades_Activate")
-        reconcile = "Upgrades_TryComplete(UPGRADES_STATE[check.id])"
+        reconcile = "Upgrades_ActivateBaseline(UPGRADES_STATE[check.id])"
         observers = "Upgrades_UpdateObservers()"
         self.assertIn(reconcile, activate)
         self.assertIn(observers, activate)
         self.assertLess(activate.index(reconcile), activate.index(observers))
 
-    def test_only_incomplete_queued_checks_keep_the_limited_polling_fallback(self) -> None:
+    def test_queued_upgrade_state_stays_observed_after_start_and_uses_named_next_tick_reconciliation(self) -> None:
         observers = function_body(self.source, "Upgrades_UpdateObservers")
-        self.assertIn("state.queued and not state.completed", observers)
-        self.assertIn("Rule_Add(Upgrades_Poll)", observers)
-        self.assertIn("Rule_Remove(Upgrades_Poll)", observers)
+        schedule = function_body(self.source, "Upgrades_ScheduleReconciliation")
+        reconcile = function_body(self.source, "Upgrades_ReconcileNextTick")
+        self.assertIn("state.completed == false", observers)
+        self.assertIn("Rule_Add(Upgrades_ReconcileNextTick)", schedule)
+        self.assertIn("Rule_Remove(Upgrades_ReconcileNextTick)", reconcile)
+        self.assertIn("UPGRADES_RECONCILIATION_PENDING", self.source)
+        self.assertIn("if Upgrades_IsCompletedResearch(state)", reconcile)
+        self.assertIn("Upgrades_HasQueuedResearch(state)", reconcile)
 
-    def test_matching_completion_latches_without_a_cancellation_path(self) -> None:
+    def test_matching_completion_latches_and_cancellation_defers_to_next_tick(self) -> None:
         callback = function_body(self.source, "Upgrades_OnUpgradeComplete")
+        cancel = function_body(self.source, "Upgrades_OnUpgradeCancelled")
         self.assertIn("state.completed == false", callback)
-        self.assertIn("state.completed = true", callback)
-        self.assertIn("local completedCheckIDs = {}", callback)
-        self.assertIn("table.insert(completedCheckIDs, checkID)", callback)
-        notify_loop = "for _, completedCheckID in ipairs(completedCheckIDs) do"
-        notification = "BuildOrder_SetCheckComplete(completedCheckID, true)"
-        self.assertIn(notify_loop, callback)
-        self.assertIn(notification, callback)
-        self.assertLess(callback.index("state.completed = true"), callback.index(notify_loop))
-        self.assertLess(callback.index(notify_loop), callback.index(notification))
+        self.assertIn("Upgrades_Complete(state)", callback)
         self.assertIn("Upgrades_UpdateObservers()", callback)
-        self.assertNotIn("BuildOrder_SetCheckComplete(checkID, false)", self.source)
+        self.assertIn("state.cancelPending = true", cancel)
+        self.assertIn("Upgrades_ScheduleReconciliation()", cancel)
+        self.assertIn("Upgrades_SetCheckComplete(state, Upgrades_HasQueuedResearch(state))", self.source)
+        self.assertNotIn("context.pbg", callback)
+        self.assertNotIn("context.pbg", cancel)
 
 
 @dataclass(frozen=True)
@@ -166,6 +167,8 @@ class UpgradeCheckState:
     upgrade: object
     queued: bool
     completed: bool = False
+    check_complete: bool = False
+    cancel_pending: bool = False
 
 
 class UpgradeHandlerModel:
@@ -176,8 +179,8 @@ class UpgradeHandlerModel:
         self.entity_owners: dict[str, str] = {}
         self.researched: set[tuple[str, object]] = set()
         self.states: dict[str, UpgradeCheckState] = {}
-        self.polling = False
         self.event_registered = False
+        self.reconciliation_pending = False
         self.rule_add_count = 0
         self.rule_remove_count = 0
 
@@ -187,44 +190,64 @@ class UpgradeHandlerModel:
             return state
         state = UpgradeCheckState(check_id, player, upgrade, queued)
         self.states[check_id] = state
-        self._try_complete(state)
+        self._activate_baseline(state)
         self._update_observers()
         return state
 
     def deactivate(self, check_id: str) -> None:
         if self.states.pop(check_id, None) is None:
             return
+        if not self.states and self.reconciliation_pending:
+            self.reconciliation_pending = False
+            self.rule_remove_count += 1
         self._update_observers()
 
-    def poll(self) -> None:
+    def reconcile_next_tick(self) -> None:
+        self.reconciliation_pending = False
         for state in list(self.states.values()):
-            self._try_complete(state)
+            if not state.cancel_pending or state.completed:
+                continue
+            state.cancel_pending = False
+            if (state.player, state.upgrade) in self.researched:
+                state.completed = True
+                state.check_complete = True
+            elif state.queued:
+                state.check_complete = self._has_queued_research(state)
         self._update_observers()
 
     def dispatch_upgrade_event(
         self, event: str, upgrade: object, executer: EventExecuter
     ) -> None:
-        if event != "GE_UpgradeComplete" or not self.event_registered:
+        if not self.event_registered:
             return
         owner = executer.player
         if owner is None and executer.entity_id is not None:
             owner = self.entity_owners.get(executer.entity_id)
         for state in list(self.states.values()):
-            if not state.completed and owner == state.player and upgrade == state.upgrade:
+            if state.completed or owner != state.player or upgrade != state.upgrade:
+                continue
+            if event == "GE_UpgradeStart" and state.queued:
+                state.check_complete = True
+            elif event == "GE_UpgradeCancelled" and state.queued:
+                state.cancel_pending = True
+                if not self.reconciliation_pending:
+                    self.reconciliation_pending = True
+                    self.rule_add_count += 1
+            elif event == "GE_UpgradeComplete":
                 state.completed = True
+                state.check_complete = True
         self._update_observers()
 
     def is_complete(self, check_id: str) -> bool:
         state = self.states.get(check_id)
-        return state is not None and state.completed
+        return state is not None and state.check_complete
 
-    def _try_complete(self, state: UpgradeCheckState) -> None:
-        if state.completed:
-            return
-        if (state.player, state.upgrade) in self.researched or (
-            state.queued and self._has_queued_research(state)
-        ):
+    def _activate_baseline(self, state: UpgradeCheckState) -> None:
+        if (state.player, state.upgrade) in self.researched:
             state.completed = True
+            state.check_complete = True
+        elif state.queued:
+            state.check_complete = self._has_queued_research(state)
 
     def _has_queued_research(self, state: UpgradeCheckState) -> bool:
         for entity in self.entities:
@@ -236,13 +259,6 @@ class UpgradeHandlerModel:
         return False
 
     def _update_observers(self) -> None:
-        needs_polling = any(state.queued and not state.completed for state in self.states.values())
-        if needs_polling and not self.polling:
-            self.polling = True
-            self.rule_add_count += 1
-        elif not needs_polling and self.polling:
-            self.polling = False
-            self.rule_remove_count += 1
         self.event_registered = any(not state.completed for state in self.states.values())
 
 
@@ -283,14 +299,17 @@ class BuildOrderUpgradeBehaviorTests(unittest.TestCase):
 
         self.assertIs(first, second)
         self.assertEqual((second.player, second.upgrade, second.queued), ("human", "wheelbarrow", True))
-        self.assertEqual(self.model.rule_add_count, 1)
+        self.assertEqual(self.model.rule_add_count, 0)
 
-    def test_repeated_deactivation_and_late_poll_cannot_complete_removed_check(self) -> None:
+    def test_repeated_deactivation_and_late_reconciliation_cannot_complete_removed_check(self) -> None:
         self.model.activate("queued", "human", "wheelbarrow", queued=True)
+        self.model.dispatch_upgrade_event(
+            "GE_UpgradeCancelled", "wheelbarrow", EventExecuter(player="human")
+        )
         self.model.deactivate("queued")
         self.model.deactivate("queued")
         self.model.researched.add(("human", "wheelbarrow"))
-        self.model.poll()
+        self.model.reconcile_next_tick()
 
         self.assertFalse(self.model.is_complete("queued"))
         self.assertEqual(self.model.rule_remove_count, 1)
@@ -303,7 +322,7 @@ class BuildOrderUpgradeBehaviorTests(unittest.TestCase):
         self.assertFalse(self.model.is_complete("first"))
         self.assertTrue(self.model.is_complete("second"))
         self.model.deactivate("second")
-        self.assertTrue(self.model.polling)
+        self.assertTrue(self.model.event_registered)
 
     def test_completion_accepts_direct_human_player_executor(self) -> None:
         wheelbarrow = (171998, 0, 7)
@@ -372,6 +391,121 @@ class BuildOrderUpgradeBehaviorTests(unittest.TestCase):
         )
 
         self.assertTrue(self.model.is_complete("upgrade"))
+
+    def test_start_marks_queued_upgrade_complete_behind_unit_queue_entries(self) -> None:
+        textiles = (123, 0, 7)
+        self.model.activate("upgrade", "human", textiles, queued=True)
+
+        self.model.dispatch_upgrade_event(
+            "GE_UpgradeStart", textiles, EventExecuter(player="human")
+        )
+
+        self.assertTrue(self.model.is_complete("upgrade"))
+        self.assertFalse(self.model.states["upgrade"].completed)
+        self.assertTrue(self.model.event_registered)
+
+    def test_genuine_cancel_reconciles_to_false_when_upgrade_leaves_human_queue(self) -> None:
+        textiles = (123, 0, 7)
+        self.model.entities = [QueueEntity("human", (("PITEM_Upgrade", textiles),))]
+        self.model.activate("upgrade", "human", textiles, queued=True)
+        self.model.entities = [QueueEntity("human", ())]
+
+        self.model.dispatch_upgrade_event(
+            "GE_UpgradeCancelled", textiles, EventExecuter(player="human")
+        )
+        self.assertTrue(self.model.is_complete("upgrade"))
+        self.assertTrue(self.model.reconciliation_pending)
+
+        self.model.reconcile_next_tick()
+
+        self.assertFalse(self.model.is_complete("upgrade"))
+        self.assertFalse(self.model.states["upgrade"].completed)
+
+    def test_cancel_then_complete_is_terminal_and_never_reverts_false(self) -> None:
+        textiles = (123, 0, 7)
+        self.model.activate("upgrade", "human", textiles, queued=True)
+
+        self.model.dispatch_upgrade_event(
+            "GE_UpgradeCancelled", textiles, EventExecuter(player="human")
+        )
+        self.model.dispatch_upgrade_event(
+            "GE_UpgradeComplete", textiles, EventExecuter(player="human")
+        )
+        self.model.reconcile_next_tick()
+
+        self.assertTrue(self.model.is_complete("upgrade"))
+        self.assertTrue(self.model.states["upgrade"].completed)
+
+    def test_requeue_after_cancel_marks_check_complete_again(self) -> None:
+        textiles = (123, 0, 7)
+        self.model.activate("upgrade", "human", textiles, queued=True)
+        self.model.dispatch_upgrade_event(
+            "GE_UpgradeCancelled", textiles, EventExecuter(player="human")
+        )
+        self.model.reconcile_next_tick()
+        self.assertFalse(self.model.is_complete("upgrade"))
+
+        self.model.dispatch_upgrade_event(
+            "GE_UpgradeStart", textiles, EventExecuter(player="human")
+        )
+
+        self.assertTrue(self.model.is_complete("upgrade"))
+
+    def test_start_cancel_and_complete_reject_wrong_player(self) -> None:
+        textiles = (123, 0, 7)
+        self.model.activate("upgrade", "human", textiles, queued=True)
+        for event in ("GE_UpgradeStart", "GE_UpgradeCancelled", "GE_UpgradeComplete"):
+            self.model.dispatch_upgrade_event(event, textiles, EventExecuter(player="opponent"))
+        self.model.reconcile_next_tick()
+
+        self.assertFalse(self.model.is_complete("upgrade"))
+        self.assertFalse(self.model.states["upgrade"].completed)
+
+    def test_activation_scans_queue_once_without_scheduling_periodic_polling(self) -> None:
+        textiles = (123, 0, 7)
+        self.model.entities = [QueueEntity("human", (("PITEM_PlayerUpgrade", textiles),))]
+
+        self.model.activate("upgrade", "human", textiles, queued=True)
+
+        self.assertTrue(self.model.is_complete("upgrade"))
+        self.assertEqual(self.model.rule_add_count, 0)
+        self.assertTrue(self.model.event_registered)
+
+    def test_cancellation_reconciliation_is_coalesced_and_removed_when_last_state_deactivates(self) -> None:
+        textiles = (123, 0, 7)
+        horticulture = (124, 0, 7)
+        self.model.activate("textiles", "human", textiles, queued=True)
+        self.model.activate("horticulture", "human", horticulture, queued=True)
+
+        self.model.dispatch_upgrade_event(
+            "GE_UpgradeCancelled", textiles, EventExecuter(player="human")
+        )
+        self.model.dispatch_upgrade_event(
+            "GE_UpgradeCancelled", horticulture, EventExecuter(player="human")
+        )
+        self.model.deactivate("textiles")
+        self.model.deactivate("horticulture")
+
+        self.assertEqual(self.model.rule_add_count, 1)
+        self.assertEqual(self.model.rule_remove_count, 1)
+        self.assertFalse(self.model.reconciliation_pending)
+
+    def test_start_accepts_entity_executor_and_cancel_accepts_direct_player_executor(self) -> None:
+        textiles = (123, 0, 7)
+        self.model.entity_owners["lumber_camp"] = "human"
+        self.model.activate("upgrade", "human", textiles, queued=True)
+
+        self.model.dispatch_upgrade_event(
+            "GE_UpgradeStart", textiles, EventExecuter(entity_id="lumber_camp")
+        )
+        self.assertTrue(self.model.is_complete("upgrade"))
+
+        self.model.dispatch_upgrade_event(
+            "GE_UpgradeCancelled", textiles, EventExecuter(player="human")
+        )
+        self.model.reconcile_next_tick()
+
+        self.assertFalse(self.model.is_complete("upgrade"))
 
 
 if __name__ == "__main__":
