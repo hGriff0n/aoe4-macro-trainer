@@ -21,10 +21,26 @@ def function_body(source: str, name: str) -> str:
 
 
 class ProduceBehaviorHarness:
-    """Executable contract model for audited production-completion semantics."""
+    """Executable contract model for event-triggered production reconciliation."""
 
     def __init__(self) -> None:
         self.active: dict[str, dict[str, object]] = {}
+        self.entities: dict[str, dict[str, object]] = {}
+        self.pending_players: set[str] = set()
+        self.next_tick_scheduled = False
+
+    def set_queue(
+        self,
+        entity: str,
+        owner: str,
+        entries: list[tuple[int, int, int]],
+        has_production_queue: bool = True,
+    ) -> None:
+        self.entities[entity] = {
+            "owner": owner,
+            "entries": entries,
+            "has_production_queue": has_production_queue,
+        }
 
     def activate(
         self,
@@ -43,6 +59,40 @@ class ProduceBehaviorHarness:
             "seen": set(),
             "completed": False,
         }
+        if queued:
+            self.reconcile(player)
+
+    def schedule_reconciliation(self, player: str) -> None:
+        self.pending_players.add(player)
+        self.next_tick_scheduled = True
+
+    def observe_command(self, entity: str | None) -> None:
+        if entity is None:
+            return
+        source = self.entities.get(entity)
+        if source is None or not source["has_production_queue"]:
+            return
+        owner = source["owner"]
+        if any(state["queued"] and state["player"] == owner for state in self.active.values()):
+            self.schedule_reconciliation(owner)
+
+    def run_next_tick(self) -> None:
+        pending = self.pending_players
+        self.pending_players = set()
+        self.next_tick_scheduled = False
+        for player in pending:
+            self.reconcile(player)
+
+    def reconcile(self, player: str) -> None:
+        for state in self.active.values():
+            if not state["queued"] or state["player"] != player:
+                continue
+            matching = sum(
+                entity["owner"] == player and unit == state["unit"]
+                for entity in self.entities.values()
+                for unit in entity["entries"]
+            )
+            state["completed"] = matching >= state["count"]
 
     def observe_completion(
         self,
@@ -51,7 +101,11 @@ class ProduceBehaviorHarness:
         spawned_squad_id: int,
     ) -> None:
         for state in self.active.values():
-            if state["queued"] or state["completed"]:
+            if state["queued"]:
+                if player == state["player"]:
+                    self.schedule_reconciliation(player)
+                continue
+            if state["completed"]:
                 continue
             if player != state["player"]:
                 continue
@@ -63,20 +117,6 @@ class ProduceBehaviorHarness:
             seen.add(spawned_squad_id)
             state["remaining"] -= 1
             state["completed"] = state["remaining"] == 0
-
-    def poll_queues(
-        self,
-        check_id: str,
-        entries: list[tuple[str, tuple[int, int, int]]],
-    ) -> None:
-        state = self.active.get(check_id)
-        if state is None or not state["queued"]:
-            return
-        matching = sum(
-            owner == state["player"] and unit == state["unit"]
-            for owner, unit in entries
-        )
-        state["completed"] = matching >= state["count"]
 
     def deactivate(self, check_id: str) -> None:
         self.active.pop(check_id, None)
@@ -195,20 +235,24 @@ class ProduceHandlerContractTests(unittest.TestCase):
     def test_resolves_produced_squad_blueprint_once_at_activation(self) -> None:
         self.assertIn("pbg = BP_GetSquadBlueprint(check.payload.id)", self.source)
         start = self.source.index("function Produce_OnBuildItemComplete")
-        end = self.source.index("local function Produce_EnsureEventRegistered", start + 1)
+        end = self.source.index("local function Produce_EnsureCommandEventRegistered", start + 1)
         callback = self.source[start:end]
         self.assertIn("Produce_BlueprintsEqual(context.pbg, state.pbg)", callback)
         self.assertNotIn("context.pbg == state.pbg", callback)
         self.assertNotIn("BP_GetSquadBlueprint", callback)
 
-    def test_registers_only_the_audited_completion_event_once(self) -> None:
-        register = function_body(self.source, "Produce_EnsureEventRegistered")
-        self.assertIn("if PRODUCE_EVENT_REGISTERED then", register)
+    def test_registers_only_the_proven_command_and_completion_events_once(self) -> None:
+        completion = function_body(self.source, "Produce_EnsureCompletionEventRegistered")
+        command = function_body(self.source, "Produce_EnsureCommandEventRegistered")
+        self.assertIn("if PRODUCE_COMPLETION_EVENT_REGISTERED then", completion)
         self.assertIn(
             "Rule_AddGlobalEvent(Produce_OnBuildItemComplete, GE_BuildItemComplete)",
-            register,
+            completion,
         )
-        self.assertIn("PRODUCE_EVENT_REGISTERED = true", register)
+        self.assertIn("Rule_AddGlobalEvent(Produce_OnEntityCommandIssued, GE_EntityCommandIssued)", command)
+        self.assertNotIn("EntityCommandType(3)", self.source)
+        self.assertNotIn("EntityCommandType(5)", self.source)
+        self.assertNotIn("EntityCommandType(16)", self.source)
         self.assertNotIn("GE_BuildItemStart", self.source)
         self.assertNotIn("GE_BuildItemCancelled", self.source)
         self.assertNotIn("GE_SquadProductionQueue", self.source)
@@ -258,17 +302,48 @@ class ProduceHandlerContractTests(unittest.TestCase):
         self.assertIn("No verified signal or API proves uninterrupted production", activate)
         self.assertIn("return", activate)
 
-    def test_deactivation_is_idempotent_and_late_polls_cannot_complete(self) -> None:
+    def test_commands_validate_source_owner_before_scheduling_next_tick_reconciliation(self) -> None:
+        callback = function_body(self.source, "Produce_OnEntityCommandIssued")
+        self.assertIn("context.entity == nil or context.entity.EntityID == nil", callback)
+        self.assertIn("Entity_GetPlayerOwner(context.entity)", callback)
+        self.assertIn("Entity_HasProductionQueue(context.entity) == false", callback)
+        self.assertIn("Produce_ScheduleQueueReconciliation(owner)", callback)
+        self.assertLess(
+            callback.index("Entity_GetPlayerOwner(context.entity)"),
+            callback.index("Produce_ScheduleQueueReconciliation(owner)"),
+        )
+
+    def test_completion_reconciles_queued_human_state_without_a_producer_entity(self) -> None:
+        callback = function_body(self.source, "Produce_OnBuildItemComplete")
+        self.assertIn("context.player == state.player", callback)
+        self.assertIn("Produce_ScheduleQueueReconciliation(context.player)", callback)
+        self.assertLess(
+            callback.index("context.player == state.player"),
+            callback.index("Produce_ScheduleQueueReconciliation(context.player)"),
+        )
+
+    def test_queued_reconciliation_is_one_shot_coalesced_and_not_periodic(self) -> None:
+        schedule = function_body(self.source, "Produce_ScheduleQueueReconciliation")
+        next_tick = function_body(self.source, "Produce_ReconcileQueuedNextTick")
+        self.assertIn("PRODUCE_RECOUNT_PENDING[player] == true", schedule)
+        self.assertIn("Rule_Add(Produce_ReconcileQueuedNextTick)", schedule)
+        self.assertIn("Rule_RemoveMe()", next_tick)
+        self.assertIn("PRODUCE_RECOUNT_PENDING = {}", next_tick)
+        self.assertIn("Produce_QueueHasCount(state)", next_tick)
+        self.assertNotIn("Produce_Poll", self.source)
+        self.assertNotIn("Rule_Add(Produce_Poll)", self.source)
+
+    def test_deactivation_is_idempotent_and_cleans_mixed_observers(self) -> None:
         deactivate = function_body(self.source, "Produce_Deactivate")
         self.assertIn("if state == nil then", deactivate)
         self.assertIn("PRODUCE_STATE[check.id] = nil", deactivate)
         self.assertIn("Produce_UpdateObservers()", deactivate)
         observers = function_body(self.source, "Produce_UpdateObservers")
-        self.assertIn("Rule_Remove(Produce_Poll)", observers)
+        self.assertIn("Rule_Remove(Produce_ReconcileQueuedNextTick)", observers)
+        self.assertIn("Rule_RemoveGlobalEvent(Produce_OnEntityCommandIssued)", observers)
         self.assertIn("Rule_RemoveGlobalEvent(Produce_OnBuildItemComplete)", observers)
-        self.assertIn("PRODUCE_EVENT_REGISTERED = false", observers)
-        poll = function_body(self.source, "Produce_Poll")
-        self.assertIn("for _, state in pairs(PRODUCE_STATE) do", poll)
+        self.assertIn("PRODUCE_COMMAND_EVENT_REGISTERED = false", observers)
+        self.assertIn("PRODUCE_COMPLETION_EVENT_REGISTERED = false", observers)
 
 
 class ProduceBehaviorTests(unittest.TestCase):
@@ -296,30 +371,76 @@ class ProduceBehaviorTests(unittest.TestCase):
         self.harness.observe_completion("human", villager, 50048)
         self.assertTrue(self.harness.active["normal"]["completed"])
 
-    def test_queued_check_rejects_opponent_and_unrelated_entries_before_exact_threshold(self) -> None:
-        self.harness.activate("queue", "human", (1, 0, 1), 2, queued=True)
+    def test_activation_baseline_counts_across_multiple_human_producers(self) -> None:
         archer = (1, 0, 1)
-        spearman = (2, 0, 1)
-        self.harness.poll_queues("queue", [("opponent", archer), ("human", spearman), ("human", archer)])
-        self.assertFalse(self.harness.active["queue"]["completed"])
-        self.harness.poll_queues("queue", [("human", archer), ("human", archer)])
+        self.harness.set_queue("tc", "human", [archer])
+        self.harness.set_queue("barracks", "human", [archer])
+        self.harness.set_queue("enemy-tc", "opponent", [archer, archer])
+        self.harness.activate("queue", "human", archer, 2, queued=True)
         self.assertTrue(self.harness.active["queue"]["completed"])
 
-    def test_queue_poll_is_idempotent_late_safe_and_multiple_checks_coexist(self) -> None:
-        self.harness.activate("archers", "human", (1, 0, 1), 2, queued=True)
-        self.harness.activate("spearman", "human", (2, 0, 1), 1, queued=True)
+    def test_command_reconciles_next_tick_after_sync_pre_mutation_queue_add(self) -> None:
         archer = (1, 0, 1)
-        spearman = (2, 0, 1)
-        self.harness.poll_queues("archers", [("human", archer), ("human", archer)])
-        self.harness.poll_queues("archers", [("human", archer), ("human", archer)])
+        self.harness.set_queue("tc", "human", [])
+        self.harness.activate("archers", "human", archer, 1, queued=True)
+        self.harness.observe_command("tc")
+        self.assertFalse(self.harness.active["archers"]["completed"])
+        self.harness.set_queue("tc", "human", [archer])
+        self.harness.run_next_tick()
         self.assertTrue(self.harness.active["archers"]["completed"])
-        self.assertFalse(self.harness.active["spearman"]["completed"])
-        self.harness.deactivate("archers")
-        self.harness.deactivate("archers")
-        self.harness.poll_queues("archers", [("human", archer), ("human", archer)])
-        self.assertNotIn("archers", self.harness.active)
-        self.harness.poll_queues("spearman", [("human", spearman)])
-        self.assertTrue(self.harness.active["spearman"]["completed"])
+
+    def test_command_reconciles_waiting_item_removal_and_active_cancellation(self) -> None:
+        archer = (1, 0, 1)
+        self.harness.set_queue("tc", "human", [archer, archer])
+        self.harness.activate("archers", "human", archer, 2, queued=True)
+        self.harness.observe_command("tc")
+        self.harness.set_queue("tc", "human", [archer])
+        self.harness.run_next_tick()
+        self.assertFalse(self.harness.active["archers"]["completed"])
+        self.harness.set_queue("tc", "human", [archer, archer])
+        self.harness.reconcile("human")
+        self.assertTrue(self.harness.active["archers"]["completed"])
+        self.harness.observe_command("tc")
+        self.harness.set_queue("tc", "human", [])
+        self.harness.run_next_tick()
+        self.assertFalse(self.harness.active["archers"]["completed"])
+
+    def test_completion_reconciles_active_item_removal_and_rejects_opponent_completion(self) -> None:
+        villager = (199747, 0, 1)
+        self.harness.set_queue("tc", "human", [villager])
+        self.harness.activate("villagers", "human", villager, 1, queued=True)
+        self.assertTrue(self.harness.active["villagers"]["completed"])
+        self.harness.observe_completion("opponent", villager, 900)
+        self.assertFalse(self.harness.next_tick_scheduled)
+        self.harness.observe_completion("human", villager, 901)
+        self.harness.set_queue("tc", "human", [])
+        self.harness.run_next_tick()
+        self.assertFalse(self.harness.active["villagers"]["completed"])
+
+    def test_unrelated_or_opponent_commands_are_harmless(self) -> None:
+        archer = (1, 0, 1)
+        self.harness.set_queue("barracks", "human", [archer])
+        self.harness.set_queue("villager", "human", [], has_production_queue=False)
+        self.harness.set_queue("enemy-barracks", "opponent", [archer])
+        self.harness.activate("archers", "human", archer, 2, queued=True)
+        self.harness.observe_command("villager")
+        self.harness.observe_command("enemy-barracks")
+        self.assertFalse(self.harness.next_tick_scheduled)
+
+    def test_coalesces_distinct_players_and_deactivation_is_late_safe(self) -> None:
+        archer = (1, 0, 1)
+        self.harness.set_queue("human-tc", "human", [])
+        self.harness.set_queue("ally-tc", "ally", [])
+        self.harness.activate("human", "human", archer, 1, queued=True)
+        self.harness.activate("ally", "ally", archer, 1, queued=True)
+        self.harness.observe_command("human-tc")
+        self.harness.observe_command("ally-tc")
+        self.assertEqual(self.harness.pending_players, {"human", "ally"})
+        self.harness.deactivate("human")
+        self.harness.set_queue("ally-tc", "ally", [archer])
+        self.harness.run_next_tick()
+        self.assertNotIn("human", self.harness.active)
+        self.assertTrue(self.harness.active["ally"]["completed"])
 
 
 if __name__ == "__main__":

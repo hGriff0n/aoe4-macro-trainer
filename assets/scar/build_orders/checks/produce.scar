@@ -1,45 +1,14 @@
 PRODUCE_STATE = {}
 PRODUCE_QUEUE_STATE = nil
-PRODUCE_POLLING = false
-PRODUCE_EVENT_REGISTERED = false
+PRODUCE_RECOUNT_PENDING = {}
+PRODUCE_RECOUNT_RULE_ACTIVE = false
+PRODUCE_COMMAND_EVENT_REGISTERED = false
+PRODUCE_COMPLETION_EVENT_REGISTERED = false
 
 local function Produce_BlueprintsEqual(left, right)
 	return left.PropertyBagGroupID == right.PropertyBagGroupID
 		and left.PropertyBagGroupModPackID == right.PropertyBagGroupModPackID
 		and left.PropertyBagGroupType == right.PropertyBagGroupType
-end
-
-function Produce_OnBuildItemComplete(context)
-	if context == nil or context.player == nil or context.pbg == nil
-		or context.spawnedSquad == nil then
-		return
-	end
-
-	for checkID, state in pairs(PRODUCE_STATE) do
-		if state ~= nil and state.payload.queued == false and state.remaining > 0 then
-			if context.player == state.player then
-				if Produce_BlueprintsEqual(context.pbg, state.pbg) then
-					local squadID = context.spawnedSquad.SquadID
-					if state.seen[squadID] ~= true then
-						state.seen[squadID] = true
-						state.remaining = state.remaining - 1
-						if state.remaining == 0 then
-							BuildOrder_SetCheckComplete(checkID, true)
-						end
-					end
-				end
-			end
-		end
-	end
-end
-
-local function Produce_EnsureEventRegistered()
-	if PRODUCE_EVENT_REGISTERED then
-		return
-	end
-
-	Rule_AddGlobalEvent(Produce_OnBuildItemComplete, GE_BuildItemComplete)
-	PRODUCE_EVENT_REGISTERED = true
 end
 
 function Produce_ScanQueueEntity(groupID, entityIndex, entity)
@@ -72,38 +41,128 @@ local function Produce_QueueHasCount(state)
 	return state.queueCount >= state.payload.count
 end
 
-function Produce_Poll()
+function Produce_ReconcileQueuedNextTick()
+	Rule_RemoveMe()
+	PRODUCE_RECOUNT_RULE_ACTIVE = false
+
+	local pending = PRODUCE_RECOUNT_PENDING
+	PRODUCE_RECOUNT_PENDING = {}
 	for _, state in pairs(PRODUCE_STATE) do
-		if state.payload.queued then
+		if state ~= nil and state.payload.queued and pending[state.player] == true then
 			BuildOrder_SetCheckComplete(state.checkID, Produce_QueueHasCount(state))
 		end
 	end
 end
 
+function Produce_ScheduleQueueReconciliation(player)
+	if player == nil or PRODUCE_RECOUNT_PENDING[player] == true then
+		return
+	end
+
+	PRODUCE_RECOUNT_PENDING[player] = true
+	if PRODUCE_RECOUNT_RULE_ACTIVE == false then
+		PRODUCE_RECOUNT_RULE_ACTIVE = true
+		Rule_Add(Produce_ReconcileQueuedNextTick)
+	end
+end
+
+function Produce_OnEntityCommandIssued(context)
+	if context == nil or context.entity == nil or context.entity.EntityID == nil then
+		return
+	end
+
+	local owner = Entity_GetPlayerOwner(context.entity)
+	if owner == nil then
+		return
+	end
+	if Entity_HasProductionQueue(context.entity) == false then
+		return
+	end
+
+	for _, state in pairs(PRODUCE_STATE) do
+		if state ~= nil and state.payload.queued and owner == state.player then
+			Produce_ScheduleQueueReconciliation(owner)
+			return
+		end
+	end
+end
+
+function Produce_OnBuildItemComplete(context)
+	if context == nil or context.player == nil then
+		return
+	end
+
+	for checkID, state in pairs(PRODUCE_STATE) do
+		if state ~= nil and context.player == state.player then
+			if state.payload.queued then
+				-- Completion does not identify the producer; recount every human queue next tick.
+				Produce_ScheduleQueueReconciliation(context.player)
+			elseif state.remaining > 0 and context.pbg ~= nil and context.spawnedSquad ~= nil then
+				if Produce_BlueprintsEqual(context.pbg, state.pbg) then
+					local squadID = context.spawnedSquad.SquadID
+					if state.seen[squadID] ~= true then
+						state.seen[squadID] = true
+						state.remaining = state.remaining - 1
+						if state.remaining == 0 then
+							BuildOrder_SetCheckComplete(checkID, true)
+						end
+					end
+				end
+			end
+		end
+	end
+end
+
+local function Produce_EnsureCommandEventRegistered()
+	if PRODUCE_COMMAND_EVENT_REGISTERED then
+		return
+	end
+
+	Rule_AddGlobalEvent(Produce_OnEntityCommandIssued, GE_EntityCommandIssued)
+	PRODUCE_COMMAND_EVENT_REGISTERED = true
+end
+
+local function Produce_EnsureCompletionEventRegistered()
+	if PRODUCE_COMPLETION_EVENT_REGISTERED then
+		return
+	end
+
+	Rule_AddGlobalEvent(Produce_OnBuildItemComplete, GE_BuildItemComplete)
+	PRODUCE_COMPLETION_EVENT_REGISTERED = true
+end
+
 local function Produce_UpdateObservers()
-	local needsPolling = false
-	local needsEvent = false
+	local needsQueuedCommands = false
+	local needsCompletion = false
 	for _, state in pairs(PRODUCE_STATE) do
 		if state.payload.queued then
-			needsPolling = true
+			needsQueuedCommands = true
+			needsCompletion = true
 		elseif state.remaining > 0 then
-			needsEvent = true
+			needsCompletion = true
 		end
 	end
 
-	if needsPolling and not PRODUCE_POLLING then
-		PRODUCE_POLLING = true
-		Rule_Add(Produce_Poll)
-	elseif not needsPolling and PRODUCE_POLLING then
-		Rule_Remove(Produce_Poll)
-		PRODUCE_POLLING = false
+	if needsQueuedCommands then
+		Produce_EnsureCommandEventRegistered()
+	elseif PRODUCE_COMMAND_EVENT_REGISTERED then
+		Rule_RemoveGlobalEvent(Produce_OnEntityCommandIssued)
+		PRODUCE_COMMAND_EVENT_REGISTERED = false
 	end
 
-	if needsEvent then
-		Produce_EnsureEventRegistered()
-	elseif PRODUCE_EVENT_REGISTERED then
+	if needsCompletion then
+		Produce_EnsureCompletionEventRegistered()
+	elseif PRODUCE_COMPLETION_EVENT_REGISTERED then
 		Rule_RemoveGlobalEvent(Produce_OnBuildItemComplete)
-		PRODUCE_EVENT_REGISTERED = false
+		PRODUCE_COMPLETION_EVENT_REGISTERED = false
+	end
+
+	if needsQueuedCommands == false then
+		PRODUCE_RECOUNT_PENDING = {}
+		if PRODUCE_RECOUNT_RULE_ACTIVE then
+			Rule_Remove(Produce_ReconcileQueuedNextTick)
+			PRODUCE_RECOUNT_RULE_ACTIVE = false
+		end
 	end
 end
 
