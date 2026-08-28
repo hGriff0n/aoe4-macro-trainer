@@ -12,7 +12,7 @@ function Units_ScanSquad(groupID, squadIndex, squad)
 	if Squad_GetPlayerOwner(squad) ~= state.player then
 		return false
 	end
-	if Squad_GetBlueprint(squad) ~= state.unitBlueprint then
+	if Squad_GetBlueprint(squad) ~= state.pbg then
 		return false
 	end
 	if Squad_IsAlive(squad) == false then
@@ -25,8 +25,10 @@ end
 function Units_Poll()
 	for _, state in pairs(UNITS_STATE) do
 		state.count = 0
-		UNITS_SCAN_STATE = state
-		SGroup_ForEach(Player_GetSquads(state.player), Units_ScanSquad)
+		if state.pbg ~= nil then
+			UNITS_SCAN_STATE = state
+			SGroup_ForEach(Player_GetSquads(state.player), Units_ScanSquad)
+		end
 		UNITS_SCAN_STATE = nil
 		BuildOrder_SetCheckComplete(state.checkID, state.count >= state.payload.count)
 	end
@@ -43,7 +45,7 @@ function Units_Activate(check, objectiveID, context)
 		player = player,
 		objectiveID = objectiveID,
 		payload = check.payload,
-		unitBlueprint = BP_GetSquadBlueprint(check.payload.id),
+		pbg = BP_GetSquadBlueprint(check.payload.id),
 		count = 0,
 	}
 	if UNITS_POLLING == false then

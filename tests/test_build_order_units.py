@@ -87,12 +87,12 @@ class UnitsCompilerTests(unittest.TestCase):
             return compile_directory(path.parent).build_orders[0].steps[0].checks
 
     def test_renders_each_active_unit_threshold_with_its_exact_payload(self) -> None:
-        checks = self.compile("[{id: spearman, count: 3}, {id: archer}]")
+        checks = self.compile("[{id: spearman_2, count: 3}, {id: longbowman_2}]")
         self.assertEqual(
             [(check.title, check.optional, check.payload) for check in checks],
             [
-                ("Have 3 spearman active", False, {"id": "spearman", "count": 3}),
-                ("Have 1 archer active", False, {"id": "archer", "count": 1}),
+                ("Have 3 spearman_2 active", False, {"id": "unit_spearman_2_eng", "count": 3}),
+                ("Have 1 longbowman_2 active", False, {"id": "unit_archer_2_eng", "count": 1}),
             ],
         )
 
@@ -108,14 +108,22 @@ class UnitsHandlerContractTests(unittest.TestCase):
         activate = function_body(self.source, "Units_Activate")
         self.assertIn("local player = context.localPlayer", activate)
         self.assertIn("UNITS_STATE[check.id]", activate)
-        self.assertIn("unitBlueprint = BP_GetSquadBlueprint(check.payload.id)", activate)
+        self.assertIn("pbg = BP_GetSquadBlueprint(check.payload.id)", activate)
         self.assertIn("Rule_AddInterval(Units_Poll", activate)
         self.assertIn("Units_Poll()", activate)
+
+    def test_resolves_unit_blueprint_at_activation_not_each_poll(self) -> None:
+        self.assertIn("pbg = BP_GetSquadBlueprint(check.payload.id)", self.source)
+        start = self.source.index("function Units_Poll")
+        end = self.source.index("function Units_Activate", start + 1)
+        poll = self.source[start:end]
+        self.assertNotIn("BP_GetSquadBlueprint", poll)
+        self.assertIn("state.pbg", poll)
 
     def test_recomputes_human_owned_living_canonical_squads_before_each_threshold(self) -> None:
         scan = function_body(self.source, "Units_ScanSquad")
         owner = "Squad_GetPlayerOwner(squad) ~= state.player"
-        blueprint = "Squad_GetBlueprint(squad) ~= state.unitBlueprint"
+        blueprint = "Squad_GetBlueprint(squad) ~= state.pbg"
         alive = "Squad_IsAlive(squad) == false"
         self.assertIn(owner, scan)
         self.assertIn(blueprint, scan)
