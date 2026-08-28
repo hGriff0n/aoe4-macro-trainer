@@ -103,12 +103,12 @@ class ProduceCompilerTests(unittest.TestCase):
         return compile_directory(directory).build_orders[0].steps[0].checks
 
     def test_renders_normal_production_with_explicit_defaults(self) -> None:
-        check = self.compile_checks("[{id: spearman, count: 3}]")[0]
-        self.assertEqual(check.title, "Produce 3 spearman")
+        check = self.compile_checks("[{id: spearman_2, count: 3}]")[0]
+        self.assertEqual(check.title, "Produce 3 spearman_2")
         self.assertFalse(check.optional)
         self.assertEqual(
             check.payload,
-            {"id": "spearman", "count": 3, "constant": False, "queued": False},
+            {"id": "unit_spearman_2_eng", "count": 3, "constant": False, "queued": False},
         )
 
     def test_renders_constant_production_as_an_explicit_non_blocking_limitation(self) -> None:
@@ -120,25 +120,25 @@ class ProduceCompilerTests(unittest.TestCase):
         self.assertTrue(check.optional)
         self.assertEqual(
             check.payload,
-            {"id": "villager", "count": 1, "constant": True, "queued": False},
+            {"id": "unit_villager_1_nomad_eng", "count": 1, "constant": True, "queued": False},
         )
 
     def test_renders_single_queued_unit(self) -> None:
-        check = self.compile_checks("[{id: archer, queued: true}]")[0]
-        self.assertEqual(check.title, "Queue archer for production")
+        check = self.compile_checks("[{id: longbowman_2, queued: true}]")[0]
+        self.assertEqual(check.title, "Queue longbowman_2 for production")
         self.assertFalse(check.optional)
         self.assertEqual(
             check.payload,
-            {"id": "archer", "count": 1, "constant": False, "queued": True},
+            {"id": "unit_archer_2_eng", "count": 1, "constant": False, "queued": True},
         )
 
     def test_renders_requested_queued_count(self) -> None:
-        check = self.compile_checks("[{id: knight, count: 2, queued: true}]")[0]
-        self.assertEqual(check.title, "Have 2 knight queued")
+        check = self.compile_checks("[{id: knight_3, count: 2, queued: true}]")[0]
+        self.assertEqual(check.title, "Have 2 knight_3 queued")
         self.assertFalse(check.optional)
         self.assertEqual(
             check.payload,
-            {"id": "knight", "count": 2, "constant": False, "queued": True},
+            {"id": "unit_knight_3_eng", "count": 2, "constant": False, "queued": True},
         )
 
     def test_constant_precedes_queued_when_both_flags_are_set(self) -> None:
@@ -150,7 +150,7 @@ class ProduceCompilerTests(unittest.TestCase):
         self.assertTrue(check.optional)
         self.assertEqual(
             check.payload,
-            {"id": "villager", "count": 2, "constant": True, "queued": True},
+            {"id": "unit_villager_1_nomad_eng", "count": 2, "constant": True, "queued": True},
         )
 
     def test_produce_defaults_do_not_leak_into_other_counted_check_payloads(self) -> None:
@@ -167,13 +167,13 @@ class ProduceCompilerTests(unittest.TestCase):
             "civ: English\n"
             "title: Payload isolation\n"
             "steps:\n"
-            "  - units: [{id: spearman, count: 2}]\n"
+            "  - units: [{id: spearman_2, count: 2}]\n"
             "    buildings: [{id: barracks, count: 1}]\n",
             encoding="utf-8",
         )
         checks = compile_directory(directory).build_orders[0].steps[0].checks
-        self.assertEqual(checks[0].payload, {"id": "spearman", "count": 2})
-        self.assertEqual(checks[1].payload, {"id": "barracks", "count": 1})
+        self.assertEqual(checks[0].payload, {"id": "unit_spearman_2_eng", "count": 2})
+        self.assertEqual(checks[1].payload, {"id": "building_unit_infantry_control_eng", "count": 1})
 
 
 class ProduceHandlerContractTests(unittest.TestCase):
@@ -191,6 +191,14 @@ class ProduceHandlerContractTests(unittest.TestCase):
         self.assertIn("seen = {}", activate)
         self.assertNotIn("Player_GetSquads", self.source)
         self.assertNotIn("Produce_ScanNewSquads", self.source)
+
+    def test_resolves_produced_squad_blueprint_once_at_activation(self) -> None:
+        self.assertIn("pbg = BP_GetSquadBlueprint(check.payload.id)", self.source)
+        start = self.source.index("function Produce_OnBuildItemComplete")
+        end = self.source.index("local function Produce_EnsureEventRegistered", start + 1)
+        callback = self.source[start:end]
+        self.assertIn("context.pbg == state.pbg", callback)
+        self.assertNotIn("BP_GetSquadBlueprint", callback)
 
     def test_registers_only_the_audited_completion_event_once(self) -> None:
         register = function_body(self.source, "Produce_EnsureEventRegistered")
@@ -211,7 +219,7 @@ class ProduceHandlerContractTests(unittest.TestCase):
     def test_completion_filters_owner_before_full_canonical_identity(self) -> None:
         callback = function_body(self.source, "Produce_OnBuildItemComplete")
         owner = "context.player == state.player"
-        identity = "Produce_BlueprintsEqual(state.blueprint, context.pbg)"
+        identity = "context.pbg == state.pbg"
         self.assertIn(owner, callback)
         self.assertIn(identity, callback)
         self.assertLess(callback.index(owner), callback.index(identity))

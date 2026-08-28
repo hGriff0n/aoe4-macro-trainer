@@ -18,7 +18,7 @@ function Produce_OnBuildItemComplete(context)
 	for checkID, state in pairs(PRODUCE_STATE) do
 		if state ~= nil and state.payload.queued == false and state.remaining > 0 then
 			if context.player == state.player then
-				if Produce_BlueprintsEqual(state.blueprint, context.pbg) then
+				if context.pbg == state.pbg then
 					local squadID = context.spawnedSquad.SquadID
 					if state.seen[squadID] ~= true then
 						state.seen[squadID] = true
@@ -57,7 +57,7 @@ function Produce_ScanQueueEntity(groupID, entityIndex, entity)
 	local queueSize = Entity_GetProductionQueueSize(entity)
 	for index = 0, queueSize - 1 do
 		if Entity_GetProductionQueueItemType(entity, index) == PITEM_Spawn
-			and Produce_BlueprintsEqual(Entity_GetProductionQueueItem(entity, index), state.blueprint) then
+			and Produce_BlueprintsEqual(Entity_GetProductionQueueItem(entity, index), state.pbg) then
 			state.queueCount = state.queueCount + 1
 		end
 	end
@@ -123,7 +123,7 @@ function Produce_Activate(check, objectiveID, context)
 		objectiveID = objectiveID,
 		player = player,
 		payload = check.payload,
-		blueprint = BP_GetSquadBlueprint(check.payload.id),
+		pbg = BP_GetSquadBlueprint(check.payload.id),
 		remaining = check.payload.count,
 		seen = {},
 	}
