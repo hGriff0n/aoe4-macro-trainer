@@ -162,6 +162,19 @@ class BuildOrderObjectiveContractTests(unittest.TestCase):
         self.assert_order(start, "BuildOrder_Stop()", "BuildOrder_ActivateStep(1)")
         self.assert_order(advance, "BuildOrder_ClearActiveHierarchy()", "BuildOrder_ActivateStep(nextStepIndex)")
 
+    def test_engine_exposes_selected_build_civilization_to_handlers(self) -> None:
+        self.assertIn("civ = nil", self.engine)
+        self.assertIn("BUILD_ORDER_STATE.civ = string.lower(buildOrder.civ)", self.engine)
+        activation = self.engine[self.engine.index("function BuildOrder_Start"):]
+        self.assertLess(
+            activation.index("BUILD_ORDER_STATE.civ = string.lower(buildOrder.civ)"),
+            activation.index("BuildOrder_ActivateStep(1)"),
+        )
+
+    def test_stop_clears_civilization_context(self) -> None:
+        stop = function_body(self.engine, "BuildOrder_Stop")
+        self.assertIn("BUILD_ORDER_STATE.civ = nil", stop)
+
     def test_fake_handler_fixture_exercises_public_lifecycle_without_shipping_one(self) -> None:
         self.assertIn("BuildOrder_RegisterHandler(\"fake\", fakeHandler)", FAKE_HANDLER_FIXTURE)
         self.assertIn("BuildOrder_NotifyComplete(check.id)", FAKE_HANDLER_FIXTURE)

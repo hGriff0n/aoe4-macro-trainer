@@ -1,5 +1,6 @@
 BUILD_ORDER_STATE = {
 	localPlayer = nil,
+	civ = nil,
 	selectedBuild = nil,
 	activeStepIndex = nil,
 	primaryObjectiveID = nil,
@@ -38,6 +39,7 @@ function BuildOrder_Stop()
 	BUILD_ORDER_STATE.advancing = true
 	BuildOrder_ClearActiveHierarchy()
 	BUILD_ORDER_STATE.localPlayer = nil
+	BUILD_ORDER_STATE.civ = nil
 	BUILD_ORDER_STATE.selectedBuild = nil
 	BUILD_ORDER_STATE.activeStepIndex = nil
 	BUILD_ORDER_STATE.activatingHandlers = false
@@ -51,6 +53,7 @@ function BuildOrder_Start(buildOrder, player)
 	end
 
 	BUILD_ORDER_STATE.localPlayer = player
+	BUILD_ORDER_STATE.civ = string.lower(buildOrder.civ)
 	BUILD_ORDER_STATE.selectedBuild = buildOrder
 	BuildOrder_ActivateStep(1)
 end
