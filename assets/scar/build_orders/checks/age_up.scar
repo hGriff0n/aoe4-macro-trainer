@@ -133,8 +133,12 @@ local function AgeUp_TryComplete(state)
 	end
 end
 
-function AgeUp_OnConstructionComplete(context)
-	if context == nil or context.entity == nil then
+function AgeUp_OnConstructionStart(context)
+	if context == nil or context.player == nil or context.pbg == nil or context.entity == nil then
+		return
+	end
+	local entityID = context.entity.EntityID
+	if entityID == nil then
 		return
 	end
 
@@ -142,9 +146,11 @@ function AgeUp_OnConstructionComplete(context)
 	for checkID, state in pairs(AGE_UP_STATE) do
 		if state.completed == false and state.unsupported == false
 			and AgeUp_UsesUpgradeEvent(state.civ) == false then
-			if Entity_GetPlayerOwner(context.entity) ~= state.player then
+			if context.player ~= state.player then
 				-- Never allow opponent construction to satisfy a local-player objective.
-			elseif AgeUp_MatchesPBG(state.pbgs, Entity_GetBlueprint(context.entity)) then
+			elseif AgeUp_MatchesPBG(state.pbgs, context.pbg)
+				and state.seenFoundations[entityID] ~= true then
+				state.seenFoundations[entityID] = true
 				state.completed = true
 				table.insert(completedCheckIDs, checkID)
 			end
@@ -169,8 +175,8 @@ local function AgeUp_GetExecuterOwner(context)
 	return nil
 end
 
-function AgeUp_OnUpgradeComplete(context)
-	if context == nil or context.executer == nil or context.pbg == nil then
+function AgeUp_OnUpgradeStart(context)
+	if context == nil or context.executer == nil or context.upgrade == nil then
 		return
 	end
 
@@ -181,7 +187,7 @@ function AgeUp_OnUpgradeComplete(context)
 			and AgeUp_UsesUpgradeEvent(state.civ) then
 			if owner ~= state.player then
 				-- Never allow opponent research to satisfy a local-player objective.
-			elseif AgeUp_MatchesPBG(state.pbgs, context.pbg) then
+			elseif AgeUp_MatchesPBG(state.pbgs, context.upgrade) then
 				state.completed = true
 				table.insert(completedCheckIDs, checkID)
 			end
@@ -207,18 +213,18 @@ function AgeUp_UpdateObservers()
 	end
 
 	if needsConstructionEvents and not AGE_UP_CONSTRUCTION_EVENTS then
-		Rule_AddGlobalEvent(AgeUp_OnConstructionComplete, GE_ConstructionComplete)
+		Rule_AddGlobalEvent(AgeUp_OnConstructionStart, GE_ConstructionStart)
 		AGE_UP_CONSTRUCTION_EVENTS = true
 	elseif not needsConstructionEvents and AGE_UP_CONSTRUCTION_EVENTS then
-		Rule_RemoveGlobalEvent(AgeUp_OnConstructionComplete)
+		Rule_RemoveGlobalEvent(AgeUp_OnConstructionStart)
 		AGE_UP_CONSTRUCTION_EVENTS = false
 	end
 
 	if needsUpgradeEvents and not AGE_UP_UPGRADE_EVENTS then
-		Rule_AddGlobalEvent(AgeUp_OnUpgradeComplete, GE_UpgradeComplete)
+		Rule_AddGlobalEvent(AgeUp_OnUpgradeStart, GE_UpgradeStart)
 		AGE_UP_UPGRADE_EVENTS = true
 	elseif not needsUpgradeEvents and AGE_UP_UPGRADE_EVENTS then
-		Rule_RemoveGlobalEvent(AgeUp_OnUpgradeComplete)
+		Rule_RemoveGlobalEvent(AgeUp_OnUpgradeStart)
 		AGE_UP_UPGRADE_EVENTS = false
 	end
 end
@@ -248,6 +254,7 @@ local function AgeUp_Activate(check, objectiveID, context)
 		usesUpgradeEvent = usesUpgradeEvent,
 		unsupported = unsupported,
 		completed = false,
+		seenFoundations = {},
 	}
 	AgeUp_TryComplete(AGE_UP_STATE[check.id])
 	AgeUp_UpdateObservers()

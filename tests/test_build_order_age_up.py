@@ -75,48 +75,70 @@ class AgeUpHandlerContractTests(unittest.TestCase):
         self.assertNotIn("BP_GetUpgradeBlueprint(state.payload", self.source)
         self.assertNotIn("BP_GetEntityBlueprint(state.payload", self.source)
 
-    def test_construction_callback_filters_to_human_owner_before_cached_identity(self) -> None:
+    def test_construction_start_uses_observed_context_fields_and_filters_human_first(self) -> None:
+        self.assertIn("function AgeUp_OnConstructionStart", self.source)
+        self.assertIn("function AgeUp_OnUpgradeStart", self.source)
         handler = self.source[
-            self.source.index("function AgeUp_OnConstructionComplete"):
-            self.source.index("function AgeUp_OnUpgradeComplete")
+            self.source.index("function AgeUp_OnConstructionStart"):
+            self.source.index("function AgeUp_OnUpgradeStart")
         ]
-        owner = "Entity_GetPlayerOwner(context.entity) ~= state.player"
-        identity = "AgeUp_MatchesPBG(state.pbgs, Entity_GetBlueprint(context.entity))"
+        owner = "context.player ~= state.player"
+        identity = "AgeUp_MatchesPBG(state.pbgs, context.pbg)"
+        self.assertIn("context.player", handler)
+        self.assertIn("context.pbg", handler)
+        self.assertIn("context.entity", handler)
         self.assertIn(owner, handler)
         self.assertIn(identity, handler)
         self.assertLess(handler.index(owner), handler.index(identity))
 
-    def test_upgrade_callback_filters_to_human_owner_before_cached_identity(self) -> None:
-        handler = self.source[self.source.index("function AgeUp_OnUpgradeComplete"):]
+    def test_construction_start_latches_one_foundation_once_by_entity_id(self) -> None:
+        self.assertIn("function AgeUp_OnConstructionStart", self.source)
+        self.assertIn("function AgeUp_OnUpgradeStart", self.source)
+        handler = self.source[
+            self.source.index("function AgeUp_OnConstructionStart"):
+            self.source.index("function AgeUp_OnUpgradeStart")
+        ]
+        self.assertIn("context.entity.EntityID", handler)
+        self.assertIn("state.seenFoundations", handler)
+        self.assertIn("state.seenFoundations[entityID]", handler)
+
+    def test_upgrade_start_uses_upgrade_context_and_filters_human_first(self) -> None:
+        self.assertIn("function AgeUp_OnUpgradeStart", self.source)
+        handler = self.source[self.source.index("function AgeUp_OnUpgradeStart"):]
         owner = "owner ~= state.player"
-        identity = "AgeUp_MatchesPBG(state.pbgs, context.pbg)"
+        identity = "AgeUp_MatchesPBG(state.pbgs, context.upgrade)"
+        self.assertIn("context.upgrade", handler)
+        self.assertNotIn("context.pbg", handler)
         self.assertIn(owner, handler)
         self.assertIn(identity, handler)
         self.assertLess(handler.index(owner), handler.index(identity))
 
     def test_upgrade_executor_resolver_accepts_direct_player_shape(self) -> None:
+        self.assertIn("function AgeUp_OnUpgradeStart", self.source)
         resolver = self.source[
             self.source.index("function AgeUp_GetExecuterOwner"):
-            self.source.index("function AgeUp_OnUpgradeComplete")
+            self.source.index("function AgeUp_OnUpgradeStart")
         ]
         self.assertIn("context.executer.PlayerID ~= nil", resolver)
         self.assertIn("return context.executer", resolver)
 
     def test_upgrade_executor_resolver_accepts_entity_shape(self) -> None:
+        self.assertIn("function AgeUp_OnUpgradeStart", self.source)
         resolver = self.source[
             self.source.index("function AgeUp_GetExecuterOwner"):
-            self.source.index("function AgeUp_OnUpgradeComplete")
+            self.source.index("function AgeUp_OnUpgradeStart")
         ]
         self.assertIn("context.executer.EntityID ~= nil", resolver)
         self.assertIn("return Entity_GetPlayerOwner(context.executer)", resolver)
 
     def test_upgrade_callback_rejects_opponent_executor_before_identity_match(self) -> None:
-        handler = self.source[self.source.index("function AgeUp_OnUpgradeComplete"):]
+        self.assertIn("function AgeUp_OnUpgradeStart", self.source)
+        handler = self.source[self.source.index("function AgeUp_OnUpgradeStart"):]
         self.assertIn("local owner = AgeUp_GetExecuterOwner(context)", handler)
         self.assertIn("if owner ~= state.player then", handler)
         self.assertLess(
             handler.index("if owner ~= state.player then"),
-            handler.index("AgeUp_MatchesPBG(state.pbgs, context.pbg)"),
+            handler.index("AgeUp_MatchesPBG(state.pbgs, context.upgrade)"),
         )
 
     def test_baselines_are_player_scoped(self) -> None:
@@ -125,10 +147,13 @@ class AgeUpHandlerContractTests(unittest.TestCase):
         self.assertIn("Entity_GetPlayerOwner(entity) ~= state.player", self.source)
 
     def test_registers_only_needed_events_and_removes_last_listener(self) -> None:
-        self.assertIn("Rule_AddGlobalEvent(AgeUp_OnConstructionComplete, GE_ConstructionComplete)", self.source)
-        self.assertIn("Rule_AddGlobalEvent(AgeUp_OnUpgradeComplete, GE_UpgradeComplete)", self.source)
-        self.assertIn("Rule_RemoveGlobalEvent(AgeUp_OnConstructionComplete)", self.source)
-        self.assertIn("Rule_RemoveGlobalEvent(AgeUp_OnUpgradeComplete)", self.source)
+        self.assertIn("Rule_AddGlobalEvent(AgeUp_OnConstructionStart, GE_ConstructionStart)", self.source)
+        self.assertIn("Rule_AddGlobalEvent(AgeUp_OnUpgradeStart, GE_UpgradeStart)", self.source)
+        self.assertIn("Rule_RemoveGlobalEvent(AgeUp_OnConstructionStart)", self.source)
+        self.assertIn("Rule_RemoveGlobalEvent(AgeUp_OnUpgradeStart)", self.source)
+        self.assertNotIn("GE_ConstructionWorkerStart", self.source)
+        self.assertNotIn("GE_ConstructionComplete", self.source)
+        self.assertNotIn("GE_UpgradeComplete", self.source)
 
     def test_unsupported_civilization_logs_and_remains_incomplete(self) -> None:
         self.assertIn("AgeUp: unsupported civilization", self.source)
