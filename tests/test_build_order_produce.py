@@ -197,7 +197,8 @@ class ProduceHandlerContractTests(unittest.TestCase):
         start = self.source.index("function Produce_OnBuildItemComplete")
         end = self.source.index("local function Produce_EnsureEventRegistered", start + 1)
         callback = self.source[start:end]
-        self.assertIn("context.pbg == state.pbg", callback)
+        self.assertIn("Produce_BlueprintsEqual(context.pbg, state.pbg)", callback)
+        self.assertNotIn("context.pbg == state.pbg", callback)
         self.assertNotIn("BP_GetSquadBlueprint", callback)
 
     def test_registers_only_the_audited_completion_event_once(self) -> None:
@@ -219,7 +220,7 @@ class ProduceHandlerContractTests(unittest.TestCase):
     def test_completion_filters_owner_before_full_canonical_identity(self) -> None:
         callback = function_body(self.source, "Produce_OnBuildItemComplete")
         owner = "context.player == state.player"
-        identity = "context.pbg == state.pbg"
+        identity = "Produce_BlueprintsEqual(context.pbg, state.pbg)"
         self.assertIn(owner, callback)
         self.assertIn(identity, callback)
         self.assertLess(callback.index(owner), callback.index(identity))

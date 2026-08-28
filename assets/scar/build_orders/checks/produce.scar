@@ -18,7 +18,7 @@ function Produce_OnBuildItemComplete(context)
 	for checkID, state in pairs(PRODUCE_STATE) do
 		if state ~= nil and state.payload.queued == false and state.remaining > 0 then
 			if context.player == state.player then
-				if context.pbg == state.pbg then
+				if Produce_BlueprintsEqual(context.pbg, state.pbg) then
 					local squadID = context.spawnedSquad.SquadID
 					if state.seen[squadID] ~= true then
 						state.seen[squadID] = true
