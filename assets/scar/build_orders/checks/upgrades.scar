@@ -2,13 +2,6 @@ UPGRADES_STATE = {}
 UPGRADES_POLLING = false
 UPGRADES_EVENT_REGISTERED = false
 
-local function Upgrades_BlueprintsEqual(left, right)
-	return left ~= nil and right ~= nil
-		and left.PropertyBagGroupID == right.PropertyBagGroupID
-		and left.PropertyBagGroupModPackID == right.PropertyBagGroupModPackID
-		and left.PropertyBagGroupType == right.PropertyBagGroupType
-end
-
 local function Upgrades_GetExecuterOwner(context)
 	if context == nil or context.executer == nil then
 		return nil
@@ -23,7 +16,7 @@ local function Upgrades_GetExecuterOwner(context)
 end
 
 local function Upgrades_IsCompletedResearch(state)
-	return Player_HasUpgrade(state.player, state.upgrade)
+	return Player_HasUpgrade(state.player, state.pbg)
 end
 
 local function Upgrades_HasQueuedResearch(state)
@@ -35,7 +28,7 @@ local function Upgrades_HasQueuedResearch(state)
 			for index = 0, Entity_GetProductionQueueSize(entity) - 1 do
 				local itemType = Entity_GetProductionQueueItemType(entity, index)
 				if (itemType == PITEM_Upgrade or itemType == PITEM_PlayerUpgrade)
-					and Entity_GetProductionQueueItem(entity, index) == state.upgrade then
+					and Entity_GetProductionQueueItem(entity, index) == state.pbg then
 					return true
 				end
 			end
@@ -73,7 +66,7 @@ function Upgrades_OnUpgradeComplete(context)
 	for checkID, state in pairs(UPGRADES_STATE) do
 		if state ~= nil and state.completed == false
 			and owner == state.player
-			and Upgrades_BlueprintsEqual(state.upgrade, context.pbg) then
+			and context.pbg == state.pbg then
 			state.completed = true
 			table.insert(completedCheckIDs, checkID)
 		end
@@ -126,7 +119,7 @@ local function Upgrades_Activate(check, objectiveID, context)
 		checkID = check.id,
 		objectiveID = objectiveID,
 		player = player,
-		upgrade = BP_GetUpgradeBlueprint(check.payload.id),
+		pbg = BP_GetUpgradeBlueprint(check.payload.id),
 		queued = check.payload.queued,
 		completed = false,
 	}

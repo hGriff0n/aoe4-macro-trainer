@@ -40,9 +40,9 @@ steps:
         self.assertEqual(
             [(check.title, check.optional, check.payload) for check in checks],
             [
-                ("Research wheelbarrow", False, {"id": "wheelbarrow", "queued": False}),
-                ("[Optional] Research horticulture", True, {"id": "horticulture", "queued": False}),
-                ("Queue fitted_leatherwork for research", False, {"id": "fitted_leatherwork", "queued": True}),
+                ("Research wheelbarrow", False, {"id": "upgrade_unit_town_center_wheelbarrow_1", "queued": False}),
+                ("[Optional] Research horticulture", True, {"id": "upgrade_econ_resource_food_harvest_rate_2", "queued": False}),
+                ("Queue fitted_leatherwork for research", False, {"id": "upgrade_melee_armor_i", "queued": True}),
             ],
         )
 
@@ -62,8 +62,19 @@ class BuildOrderUpgradeHandlerContractTests(unittest.TestCase):
         activate = self.source[self.source.index("local function Upgrades_Activate"):self.source.index("local function Upgrades_Deactivate")]
         self.assertIn("local player = context.localPlayer", activate)
         self.assertIn("BP_GetUpgradeBlueprint(check.payload.id)", activate)
-        self.assertIn("Player_HasUpgrade(state.player, state.upgrade)", completed)
+        self.assertIn("Player_HasUpgrade(state.player, state.pbg)", completed)
         self.assertIn("queued = check.payload.queued", activate)
+
+    def test_resolves_upgrade_blueprint_once_at_activation(self) -> None:
+        activate = function_body(self.source, "Upgrades_Activate")
+        callback = function_body(self.source, "Upgrades_OnUpgradeComplete")
+        queued = function_body(self.source, "Upgrades_HasQueuedResearch")
+
+        self.assertIn("pbg = BP_GetUpgradeBlueprint(check.payload.id)", activate)
+        self.assertIn("context.pbg == state.pbg", callback)
+        self.assertIn("state.pbg", queued)
+        self.assertNotIn("BP_GetUpgradeBlueprint", callback)
+        self.assertNotIn("BP_GetUpgradeBlueprint", queued)
 
     def test_queued_research_only_scans_producers_owned_by_stored_player(self) -> None:
         scan = self.source[self.source.index("local function Upgrades_HasQueuedResearch"):self.source.index("local function Upgrades_Activate")]
@@ -71,7 +82,7 @@ class BuildOrderUpgradeHandlerContractTests(unittest.TestCase):
         self.assertIn("Entity_GetPlayerOwner(entity) == state.player", scan)
         self.assertIn("Entity_GetProductionQueueSize(entity)", scan)
         self.assertIn("Entity_GetProductionQueueItemType(entity, index)", scan)
-        self.assertIn("Entity_GetProductionQueueItem(entity, index) == state.upgrade", scan)
+        self.assertIn("Entity_GetProductionQueueItem(entity, index) == state.pbg", scan)
         self.assertIn("PITEM_Upgrade", scan)
         self.assertIn("PITEM_PlayerUpgrade", scan)
 
@@ -100,15 +111,11 @@ class BuildOrderUpgradeHandlerContractTests(unittest.TestCase):
 
         callback = function_body(self.source, "Upgrades_OnUpgradeComplete")
         owner_match = "owner == state.player"
-        upgrade_match = "Upgrades_BlueprintsEqual(state.upgrade, context.pbg)"
+        upgrade_match = "context.pbg == state.pbg"
         self.assertIn(owner_match, callback)
         self.assertIn(upgrade_match, callback)
         self.assertLess(callback.index(owner_match), callback.index(upgrade_match))
 
-        equality = function_body(self.source, "Upgrades_BlueprintsEqual")
-        self.assertIn("PropertyBagGroupID", equality)
-        self.assertIn("PropertyBagGroupModPackID", equality)
-        self.assertIn("PropertyBagGroupType", equality)
 
     def test_activation_reconciles_completed_research_before_observer_update(self) -> None:
         activate = function_body(self.source, "Upgrades_Activate")
