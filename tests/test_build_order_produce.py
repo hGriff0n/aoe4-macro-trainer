@@ -1,8 +1,10 @@
 import re
 import unittest
+import json
 from pathlib import Path
 
-from tools.build_orders.compiler import compile_directory
+from tools.build_orders.compiler import _display_produced_unit, _pluralize_unit, compile_directory
+from tools.build_orders.identities import DEFAULT_IDENTITY_CATALOG
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -183,7 +185,7 @@ class ProduceCompilerTests(unittest.TestCase):
             {"id": "unit_archer_2_abb", "count": 2, "constant": False, "queued": True},
         )
 
-    def test_queue_title_uses_only_vetted_plural_display_names(self) -> None:
+    def test_queue_title_uses_catalog_safe_plural_display_names(self) -> None:
         cases = (
             ("Ottomans", "janissary_3", "Queue 2 janissaries"),
             ("Golden Horde", "shaman", "Queue 2 shamans"),
@@ -196,6 +198,33 @@ class ProduceCompilerTests(unittest.TestCase):
                     f"[{{id: {unit}, count: 2, queued: true}}]", civ=civilization
                 )[0]
                 self.assertEqual(check.title, expected_title)
+
+    def test_catalog_problem_families_never_receive_suffix_corruption(self) -> None:
+        catalog = json.loads(DEFAULT_IDENTITY_CATALOG.read_text(encoding="utf-8"))
+        displays = {
+            _display_produced_unit(identifier)
+            for civilization in catalog["civilizations"].values()
+            for identifier in civilization.get("squad", {})
+        }
+        expected_plurals = {
+            "archer": "archers",
+            "spearman": "spearmen",
+            "gilded man at arms": "gilded men at arms",
+            "janissary": "janissaries",
+            "shaman": "shamans",
+            "wynguard footmen": "wynguard footmen",
+            "wynguard raiders": "wynguard raiders",
+            "landsknecht mercenaries": "landsknecht mercenaries",
+            "nest of bees": "nest of bees",
+            "clocktower nest of bees": "clocktower nest of bees",
+            "samurai": "samurai",
+            "streltsy": "streltsy",
+        }
+
+        self.assertTrue(expected_plurals.keys() <= displays)
+        for unit, expected_plural in expected_plurals.items():
+            with self.subTest(unit=unit):
+                self.assertEqual(_pluralize_unit(unit), expected_plural)
 
     def test_constant_precedes_queued_when_both_flags_are_set(self) -> None:
         check = self.compile_checks("[{id: villager, count: 2, constant: true, queued: true}]")[0]

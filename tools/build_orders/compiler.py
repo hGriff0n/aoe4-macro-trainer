@@ -88,30 +88,38 @@ def _display_produced_unit(identifier: str) -> str:
     return " ".join(parts)
 
 
-_PRODUCED_UNIT_IRREGULAR_PLURALS = {
+_PRODUCED_UNIT_SINGULAR_SUFFIX_PLURALS = {
+    "archer": "archers",
+    "spearman": "spearmen",
     "man at arms": "men at arms",
+}
+_PRODUCED_UNIT_EXACT_PLURALS = {
+    "janissary": "janissaries",
     "shaman": "shamans",
 }
+_PRODUCED_UNIT_ALREADY_PLURAL_SUFFIXES = (
+    "footmen",
+    "raiders",
+    "mercenaries",
+    "nest of bees",
+    "samurai",
+    "streltsy",
+)
 
 
 def _pluralize_unit(unit: str) -> str:
-    """Pluralize display IDs with explicit exceptions from the official unit catalog."""
-    irregular = _PRODUCED_UNIT_IRREGULAR_PLURALS.get(unit)
-    if irregular is not None:
-        return irregular
-
-    prefix, _, last_word = unit.rpartition(" ")
-    if last_word.endswith("man"):
-        plural = f"{last_word[:-3]}men"
-    elif last_word.endswith("y") and len(last_word) > 1 and last_word[-2] not in "aeiou":
-        plural = f"{last_word[:-1]}ies"
-    elif last_word.endswith(("s", "sh", "ch", "x", "z")):
-        plural = f"{last_word}es"
-    else:
-        plural = f"{last_word}s"
-    if prefix:
-        return f"{prefix} {plural}"
-    return plural
+    """Use only vetted official-catalog display inflections; unknown labels stay unchanged."""
+    exact = _PRODUCED_UNIT_EXACT_PLURALS.get(unit)
+    if exact is not None:
+        return exact
+    if any(unit == suffix or unit.endswith(f" {suffix}") for suffix in _PRODUCED_UNIT_ALREADY_PLURAL_SUFFIXES):
+        return unit
+    for singular, plural in _PRODUCED_UNIT_SINGULAR_SUFFIX_PLURALS.items():
+        if unit == singular:
+            return plural
+        if unit.endswith(f" {singular}"):
+            return f"{unit[: -len(singular)]}{plural}"
+    return unit
 
 
 def _resolve_identity_payload(
