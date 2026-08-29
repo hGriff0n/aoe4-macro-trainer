@@ -1,20 +1,6 @@
 local VILS_STATE = {}
 local VILS_POLL_REGISTERED = false
 
-function Vils_LogPoll(checkID, state, food, gold, wood, stone)
-	print(
-		"GRI55_VILS|POLL|check=" .. tostring(checkID)
-		.. "|player=" .. tostring(state.player)
-		.. "|targets=food:" .. tostring(state.payload.food)
-		.. ",gold:" .. tostring(state.payload.gold)
-		.. ",wood:" .. tostring(state.payload.wood)
-		.. ",stone:" .. tostring(state.payload.stone)
-		.. "|counts=food:" .. tostring(food)
-		.. ",gold:" .. tostring(gold)
-		.. ",wood:" .. tostring(wood)
-		.. ",stone:" .. tostring(stone))
-end
-
 function Vils_CountOrZero(value)
 	if type(value) ~= "number" then
 		return 0
@@ -32,7 +18,6 @@ function Vils_Poll(checkID)
 	local gold = Player_GetNumGatheringSquads(state.player, RT_Gold)
 	local wood = Player_GetNumGatheringSquads(state.player, RT_Wood)
 	local stone = Player_GetNumGatheringSquads(state.player, RT_Stone)
-	Vils_LogPoll(checkID, state, food, gold, wood, stone)
 	food = Vils_CountOrZero(food)
 	gold = Vils_CountOrZero(gold)
 	wood = Vils_CountOrZero(wood)
