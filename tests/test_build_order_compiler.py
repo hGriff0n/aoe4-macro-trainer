@@ -109,7 +109,7 @@ steps:
                 "Built: palace of swabia 3",
                 "Age Up: council hall 2",
                 "wheelbarrow 1",
-                "Constantly produce villager 2 [unsupported: continuous production]",
+                "Constantly produce villager [unsupported: continuous production]",
                 "spearman 3",
             ],
         )

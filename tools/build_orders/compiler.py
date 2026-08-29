@@ -81,6 +81,21 @@ def _humanize_identity_id(identifier: str) -> str:
     return identifier.replace("_", " ")
 
 
+def _display_produced_unit(identifier: str) -> str:
+    parts = identifier.split("_")
+    if parts[-1].isdigit():
+        parts.pop()
+    return " ".join(parts)
+
+
+def _pluralize_unit(unit: str) -> str:
+    if unit.endswith("man"):
+        return f"{unit[:-3]}men"
+    if unit.endswith(("s", "sh", "ch", "x", "z")):
+        return f"{unit}es"
+    return f"{unit}s"
+
+
 def _resolve_identity_payload(
     payload: dict[str, object],
     *,
@@ -215,17 +230,15 @@ def _check_descriptors(
             )
             readable_identifier = _humanize_identity_id(identifier)
             if kind == "produce":
+                unit = _display_produced_unit(identifier)
+                counted_unit = unit if payload["count"] == 1 else _pluralize_unit(unit)
                 if payload["constant"]:
-                    title = f"Constantly produce {readable_identifier} [unsupported: continuous production]"
+                    title = f"Constantly produce {unit} [unsupported: continuous production]"
                     optional = True
                 elif payload["queued"]:
-                    title = (
-                        f"Queue {readable_identifier} for production"
-                        if payload["count"] == 1
-                        else f"Have {payload['count']} {readable_identifier} queued"
-                    )
+                    title = f"Queue {payload['count']} {counted_unit}"
                 else:
-                    title = f"Produce {payload['count']} {readable_identifier}"
+                    title = f"Produce {payload['count']} {counted_unit}"
             else:
                 title = readable_identifier
             result.append(CheckDescriptor(kind, title, optional, payload))

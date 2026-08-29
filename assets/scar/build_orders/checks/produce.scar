@@ -1,5 +1,4 @@
 PRODUCE_STATE = {}
-PRODUCE_QUEUE_STATE = nil
 PRODUCE_RECOUNT_PENDING = {}
 PRODUCE_RECOUNT_RULE_ACTIVE = false
 PRODUCE_COMMAND_EVENT_REGISTERED = false
@@ -11,33 +10,22 @@ local function Produce_BlueprintsEqual(left, right)
 		and left.PropertyBagGroupType == right.PropertyBagGroupType
 end
 
-function Produce_ScanQueueEntity(groupID, entityIndex, entity)
-	local state = PRODUCE_QUEUE_STATE
-	if state == nil then
-		return true
-	end
-	if Entity_GetPlayerOwner(entity) ~= state.player then
-		return false
-	end
-	if Entity_HasProductionQueue(entity) == false then
-		return false
-	end
-
-	local queueSize = Entity_GetProductionQueueSize(entity)
-	for index = 0, queueSize - 1 do
-		if Entity_GetProductionQueueItemType(entity, index) == PITEM_Spawn
-			and Produce_BlueprintsEqual(Entity_GetProductionQueueItem(entity, index), state.pbg) then
-			state.queueCount = state.queueCount + 1
-		end
-	end
-	return false
-end
-
 local function Produce_QueueHasCount(state)
 	state.queueCount = 0
-	PRODUCE_QUEUE_STATE = state
-	EGroup_ForEach(Player_GetEntities(state.player), Produce_ScanQueueEntity)
-	PRODUCE_QUEUE_STATE = nil
+	local entities = Player_GetEntities(state.player)
+	for entityIndex = 1, EGroup_Count(entities) do
+		local entity = EGroup_GetEntityAt(entities, entityIndex)
+		if entity ~= nil and Entity_GetPlayerOwner(entity) == state.player
+			and Entity_HasProductionQueue(entity) then
+			local queueSize = Entity_GetProductionQueueSize(entity)
+			for index = 0, queueSize - 1 do
+				if Entity_GetProductionQueueItemType(entity, index) == PITEM_Spawn
+					and Produce_BlueprintsEqual(Entity_GetProductionQueueItem(entity, index), state.pbg) then
+					state.queueCount = state.queueCount + 1
+				end
+			end
+		end
+	end
 	return state.queueCount >= state.payload.count
 end
 

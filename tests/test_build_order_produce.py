@@ -123,7 +123,7 @@ class ProduceBehaviorHarness:
 
 
 class ProduceCompilerTests(unittest.TestCase):
-    def compile_checks(self, produce: str):
+    def compile_checks(self, produce: str, civ: str = "English"):
         directory = ROOT / "tests" / "fixtures" / "build_orders" / "produce"
         directory.mkdir(parents=True, exist_ok=True)
         fixture = directory / "produce.yaml"
@@ -134,7 +134,7 @@ class ProduceCompilerTests(unittest.TestCase):
             else None
         )
         fixture.write_text(
-            "civ: English\n"
+            f"civ: {civ}\n"
             "title: Produce\n"
             "steps:\n"
             f"  - produce: {produce}\n",
@@ -144,7 +144,7 @@ class ProduceCompilerTests(unittest.TestCase):
 
     def test_renders_normal_production_with_explicit_defaults(self) -> None:
         check = self.compile_checks("[{id: spearman_2, count: 3}]")[0]
-        self.assertEqual(check.title, "Produce 3 spearman 2")
+        self.assertEqual(check.title, "Produce 3 spearmen")
         self.assertFalse(check.optional)
         self.assertEqual(
             check.payload,
@@ -165,7 +165,7 @@ class ProduceCompilerTests(unittest.TestCase):
 
     def test_renders_single_queued_unit(self) -> None:
         check = self.compile_checks("[{id: longbowman_2, queued: true}]")[0]
-        self.assertEqual(check.title, "Queue longbowman 2 for production")
+        self.assertEqual(check.title, "Queue 1 longbowman")
         self.assertFalse(check.optional)
         self.assertEqual(
             check.payload,
@@ -173,12 +173,14 @@ class ProduceCompilerTests(unittest.TestCase):
         )
 
     def test_renders_requested_queued_count(self) -> None:
-        check = self.compile_checks("[{id: knight_3, count: 2, queued: true}]")[0]
-        self.assertEqual(check.title, "Have 2 knight 3 queued")
+        check = self.compile_checks(
+            "[{id: archer_2, count: 2, queued: true}]", civ="Abbasid"
+        )[0]
+        self.assertEqual(check.title, "Queue 2 archers")
         self.assertFalse(check.optional)
         self.assertEqual(
             check.payload,
-            {"id": "unit_knight_3_eng", "count": 2, "constant": False, "queued": True},
+            {"id": "unit_archer_2_abb", "count": 2, "constant": False, "queued": True},
         )
 
     def test_constant_precedes_queued_when_both_flags_are_set(self) -> None:
@@ -285,14 +287,16 @@ class ProduceHandlerContractTests(unittest.TestCase):
 
     def test_queued_variant_uses_only_owned_entity_queues(self) -> None:
         queue = function_body(self.source, "Produce_QueueHasCount")
-        scan = function_body(self.source, "Produce_ScanQueueEntity")
-        owner = "Entity_GetPlayerOwner(entity) ~= state.player"
+        owner = "Entity_GetPlayerOwner(entity) == state.player"
         blueprint = "Entity_GetProductionQueueItem(entity, index)"
         self.assertIn("Player_GetEntities(state.player)", queue)
-        self.assertIn(owner, scan)
-        self.assertIn(blueprint, scan)
-        self.assertLess(scan.index(owner), scan.index(blueprint))
-        self.assertIn("Entity_GetProductionQueueSize(entity)", scan)
+        self.assertIn("EGroup_Count(entities)", queue)
+        self.assertIn("EGroup_GetEntityAt(entities, entityIndex)", queue)
+        self.assertNotIn("EGroup_ForEach", queue)
+        self.assertIn(owner, queue)
+        self.assertIn(blueprint, queue)
+        self.assertLess(queue.index(owner), queue.index(blueprint))
+        self.assertIn("Entity_GetProductionQueueSize(entity)", queue)
         self.assertIn("queueCount >= state.payload.count", queue)
 
     def test_constant_variant_is_explicitly_unsupported_and_never_completes(self) -> None:
@@ -378,6 +382,15 @@ class ProduceBehaviorTests(unittest.TestCase):
         self.harness.set_queue("enemy-tc", "opponent", [archer, archer])
         self.harness.activate("queue", "human", archer, 2, queued=True)
         self.assertTrue(self.harness.active["queue"]["completed"])
+
+    def test_queue_in_a_later_human_producer_satisfies_the_queued_check(self) -> None:
+        archer = (1, 0, 1)
+        self.harness.set_queue("human-tc", "human", [])
+        self.harness.set_queue("human-archery-range", "human", [archer, archer])
+
+        self.harness.activate("archers", "human", archer, 2, queued=True)
+
+        self.assertTrue(self.harness.active["archers"]["completed"])
 
     def test_command_reconciles_next_tick_after_sync_pre_mutation_queue_add(self) -> None:
         archer = (1, 0, 1)
