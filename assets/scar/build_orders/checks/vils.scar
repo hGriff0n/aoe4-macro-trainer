@@ -15,6 +15,13 @@ function Vils_LogPoll(checkID, state, food, gold, wood, stone)
 		.. ",stone:" .. tostring(stone))
 end
 
+function Vils_CountOrZero(value)
+	if type(value) ~= "number" then
+		return 0
+	end
+	return value
+end
+
 function Vils_Poll(checkID)
 	local state = VILS_STATE[checkID]
 	if state == nil then
@@ -26,6 +33,10 @@ function Vils_Poll(checkID)
 	local wood = Player_GetNumGatheringSquads(state.player, RT_Wood)
 	local stone = Player_GetNumGatheringSquads(state.player, RT_Stone)
 	Vils_LogPoll(checkID, state, food, gold, wood, stone)
+	food = Vils_CountOrZero(food)
+	gold = Vils_CountOrZero(gold)
+	wood = Vils_CountOrZero(wood)
+	stone = Vils_CountOrZero(stone)
 
 	local completed = true
 	if state.payload.food ~= nil then

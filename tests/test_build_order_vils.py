@@ -66,6 +66,17 @@ class BuildOrderVilsContractTests(unittest.TestCase):
         self.assertIn("Vils_LogPoll(checkID, state", poll)
         self.assertIn("tostring(state.player)", log)
 
+    def test_poll_treats_missing_or_non_numeric_counts_as_incomplete(self) -> None:
+        poll = function_body(self.source, "Vils_Poll")
+        normalize = function_body(self.source, "Vils_CountOrZero")
+        self.assertIn('type(value) ~= "number"', normalize)
+        for resource in ("food", "gold", "wood", "stone"):
+            self.assertIn(f"{resource} = Vils_CountOrZero({resource})", poll)
+        self.assertLess(
+            poll.index("Vils_LogPoll(checkID, state"),
+            poll.index("food = Vils_CountOrZero(food)"),
+        )
+
     def test_uses_one_named_shared_poll_rule_for_all_active_checks(self) -> None:
         activate = function_body(self.source, "Vils_Activate")
         deactivate = function_body(self.source, "Vils_Deactivate")

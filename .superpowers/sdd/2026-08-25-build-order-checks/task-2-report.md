@@ -66,3 +66,9 @@ Presentation: generated `vils` titles now read `1 food | 1 gold | 1 wood | 1 sto
 TDD/static evidence: import, diagnostics, and compact-title expectations were added first and failed before the production changes. Focused tests passed 39/39; full discovery passed 74/74. `check_code` reported no low-confidence APIs or missing locdb IDs. Its `Vils_LogPoll` and `Vils_Poll` entries are project-local functions not indexed as official APIs.
 
 New validation request: build this diagnostic commit through the main validation flow, select English — Villager split, and assign one human villager each to food, gold, wood, and stone after activation. Return the `GRI55_VILS|POLL` lines from the scarlog. They will establish whether each resource uses the expected `RT_*` argument/count; also confirm an opponent's gatherers do not affect the logged human-player counts. This is a diagnostic build, not a claimed behavioral fix.
+
+## Diagnostic safety fix
+
+Review identified that an unexpected `nil` (or another non-number) from `Player_GetNumGatheringSquads` would be safely printed but then crash on comparison, losing the diagnostic evidence. `Vils_Poll` now logs the raw four values first and normalizes each value through `Vils_CountOrZero` before threshold comparison. An unavailable value consequently evaluates as zero and leaves the objective incomplete instead of crashing the named shared rule.
+
+TDD evidence: the focused contract test failed before `Vils_CountOrZero` existed, then passed after the change. Full discovery passed 75/75 and `git diff --check` passed. `check_code` reported no low-confidence API or missing localization findings; listed `Vils_CountOrZero`, `Vils_LogPoll`, and `Vils_Poll` are project-local function references.
