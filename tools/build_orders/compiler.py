@@ -77,6 +77,10 @@ def _identity_category(kind: str, civ: str) -> str:
     return CHECK_ID_CATEGORIES[kind]
 
 
+def _humanize_identity_id(identifier: str) -> str:
+    return identifier.replace("_", " ")
+
+
 def _resolve_identity_payload(
     payload: dict[str, object],
     *,
@@ -161,7 +165,11 @@ def _check_descriptors(
                 payload["vils"] = _positive(mapping["vils"], file, f"{item_path}.vils")
             if "location" in mapping:
                 payload["location"] = _string(mapping["location"], file, f"{item_path}.location")
-            label = payload["id"] if "id" in payload else " or ".join(payload["oneof"])
+            label = (
+                _humanize_identity_id(payload["id"])
+                if "id" in payload
+                else " or ".join(_humanize_identity_id(item) for item in payload["oneof"])
+            )
             _resolve_identity_payload(
                 payload,
                 kind=kind,
@@ -205,20 +213,21 @@ def _check_descriptors(
                 file=file,
                 path=item_path,
             )
+            readable_identifier = _humanize_identity_id(identifier)
             if kind == "produce":
                 if payload["constant"]:
-                    title = f"Constantly produce {identifier} [unsupported: continuous production]"
+                    title = f"Constantly produce {readable_identifier} [unsupported: continuous production]"
                     optional = True
                 elif payload["queued"]:
                     title = (
-                        f"Queue {identifier} for production"
+                        f"Queue {readable_identifier} for production"
                         if payload["count"] == 1
-                        else f"Have {payload['count']} {identifier} queued"
+                        else f"Have {payload['count']} {readable_identifier} queued"
                     )
                 else:
-                    title = f"Produce {payload['count']} {identifier}"
+                    title = f"Produce {payload['count']} {readable_identifier}"
             else:
-                title = identifier
+                title = readable_identifier
             result.append(CheckDescriptor(kind, title, optional, payload))
         return result
     if kind == "hints":

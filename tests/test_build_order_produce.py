@@ -144,7 +144,7 @@ class ProduceCompilerTests(unittest.TestCase):
 
     def test_renders_normal_production_with_explicit_defaults(self) -> None:
         check = self.compile_checks("[{id: spearman_2, count: 3}]")[0]
-        self.assertEqual(check.title, "Produce 3 spearman_2")
+        self.assertEqual(check.title, "Produce 3 spearman 2")
         self.assertFalse(check.optional)
         self.assertEqual(
             check.payload,
@@ -165,7 +165,7 @@ class ProduceCompilerTests(unittest.TestCase):
 
     def test_renders_single_queued_unit(self) -> None:
         check = self.compile_checks("[{id: longbowman_2, queued: true}]")[0]
-        self.assertEqual(check.title, "Queue longbowman_2 for production")
+        self.assertEqual(check.title, "Queue longbowman 2 for production")
         self.assertFalse(check.optional)
         self.assertEqual(
             check.payload,
@@ -174,7 +174,7 @@ class ProduceCompilerTests(unittest.TestCase):
 
     def test_renders_requested_queued_count(self) -> None:
         check = self.compile_checks("[{id: knight_3, count: 2, queued: true}]")[0]
-        self.assertEqual(check.title, "Have 2 knight_3 queued")
+        self.assertEqual(check.title, "Have 2 knight 3 queued")
         self.assertFalse(check.optional)
         self.assertEqual(
             check.payload,

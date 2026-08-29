@@ -8,8 +8,9 @@ import time
 import unittest
 from contextlib import redirect_stderr
 from pathlib import Path
+from unittest.mock import patch
 
-from tools.build_mod import BuildConfig, BuildPaths, build_mod
+from tools.build_mod import BuildConfig, BuildPaths, _wait_for_fresh_archive, build_mod
 from tools.build_orders.compiler import compile_directory
 from tools.build_orders.emitters import emit_outputs, reset_outputs
 
@@ -169,6 +170,19 @@ steps:
         if worker is not None:
             worker.join()
         self.assertEqual(result, 0)
+
+    def test_archive_wait_retries_a_transient_permission_error(self) -> None:
+        before = (1, 10, "stale")
+        fresh = (2, 20, "fresh")
+
+        with (
+            patch(
+                "tools.build_mod._file_signature",
+                side_effect=[PermissionError("archive is still locked"), fresh],
+            ),
+            patch("tools.build_mod.time.sleep"),
+        ):
+            self.assertTrue(_wait_for_fresh_archive(self.archive, before, timeout=1))
 
     def test_nonzero_essence_result_is_returned(self) -> None:
         (self.orders / "valid.yaml").write_text(VALID, encoding="utf-8")

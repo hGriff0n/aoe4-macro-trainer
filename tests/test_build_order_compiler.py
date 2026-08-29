@@ -20,17 +20,22 @@ class BuildOrderCompilerTests(unittest.TestCase):
                         "archery_range": "building_archery_range_eng",
                         "barracks": "building_barracks_eng",
                         "council_hall": "building_landmark_age2_eng",
+                        "council_hall_2": "building_landmark_age2_eng_2",
+                        "palace_of_swabia_3": "building_landmark_age4_eng_3",
                         "stable": "building_stable_eng",
                         "town_center": "building_town_center_eng",
                     },
                     "squad": {
                         "scout": "unit_scout_1_eng",
                         "spearman": "unit_spearman_1_eng",
+                        "spearman_3": "unit_spearman_3_eng",
                         "villager": "unit_villager_1_eng",
+                        "villager_2": "unit_villager_2_eng",
                     },
                     "upgrade": {
                         "horticulture": "upgrade_horticulture_eng",
                         "wheelbarrow": "upgrade_wheelbarrow_eng",
+                        "wheelbarrow_1": "upgrade_wheelbarrow_eng_1",
                     },
                 },
             }
@@ -85,7 +90,39 @@ steps:
             check.payload["oneof"],
             ["building_stable_eng", "building_archery_range_eng"],
         )
-        self.assertEqual(check.title, "Built: stable or archery_range")
+        self.assertEqual(check.title, "Built: stable or archery range")
+
+    def test_identity_titles_humanize_author_ids_before_canonical_resolution(self) -> None:
+        checks = self.compile({"order.yaml": """civ: english
+title: Readable IDs
+steps:
+  - built: [{id: palace_of_swabia_3}]
+    age_up: {id: council_hall_2}
+    upgrades: [{id: wheelbarrow_1, queued: true}]
+    produce: [{id: villager_2, count: 2, constant: true, queued: true}]
+    units: [{id: spearman_3, count: 3}]
+"""}).build_orders[0].steps[0].checks
+
+        self.assertEqual(
+            [check.title for check in checks],
+            [
+                "Built: palace of swabia 3",
+                "Age Up: council hall 2",
+                "wheelbarrow 1",
+                "Constantly produce villager 2 [unsupported: continuous production]",
+                "spearman 3",
+            ],
+        )
+        self.assertEqual(
+            [check.payload["id"] for check in checks],
+            [
+                "building_landmark_age4_eng_3",
+                "building_landmark_age2_eng_2",
+                "upgrade_wheelbarrow_eng_1",
+                "unit_villager_2_eng",
+                "unit_spearman_3_eng",
+            ],
+        )
 
     def test_rejects_capability_and_reports_catalog_context(self) -> None:
         self.assert_invalid(
