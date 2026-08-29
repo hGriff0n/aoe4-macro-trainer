@@ -91,9 +91,7 @@ def _vils_check(value: Any, file: Path, path: str) -> list[CheckDescriptor]:
             _error(file, f"{path}.{resource}", "unsupported resource")
     if not thresholds:
         _error(file, path, "must not be empty")
-    title = " | ".join(
-        f"{count} {resource} villagers" for resource, count in thresholds.items()
-    )
+    title = " | ".join(f"{count} {resource}" for resource, count in thresholds.items())
     return [CheckDescriptor("vils", title, False, thresholds)]
 
 

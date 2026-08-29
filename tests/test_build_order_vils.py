@@ -5,6 +5,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 VILS_PATH = ROOT / "assets" / "scar" / "build_orders" / "checks" / "vils.scar"
+MAIN_PATH = ROOT / "assets" / "scar" / "winconditions" / "Macro Trainer.scar"
 
 
 def function_body(source: str, name: str) -> str:
@@ -25,6 +26,10 @@ class BuildOrderVilsContractTests(unittest.TestCase):
 
     def test_vils_handler_module_exists(self) -> None:
         self.assertTrue(VILS_PATH.exists(), "vils handler must be added")
+
+    def test_main_wincondition_imports_the_vils_handler(self) -> None:
+        source = MAIN_PATH.read_text(encoding="utf-8")
+        self.assertIn('import("build_orders/checks/vils.scar")', source)
 
     def test_registers_vils_handler_with_lifecycle_functions(self) -> None:
         self.assertIn('BuildOrder_RegisterHandler("vils", {', self.source)
@@ -50,6 +55,16 @@ class BuildOrderVilsContractTests(unittest.TestCase):
         poll = function_body(self.source, "Vils_Poll")
         self.assertIn("BuildOrder_SetCheckComplete(checkID, true)", poll)
         self.assertIn("BuildOrder_SetCheckComplete(checkID, false)", poll)
+
+    def test_poll_logs_each_resource_count_with_bound_player_and_thresholds(self) -> None:
+        poll = function_body(self.source, "Vils_Poll")
+        log = function_body(self.source, "Vils_LogPoll")
+        for resource in ("food", "gold", "wood", "stone"):
+            self.assertIn(f"local {resource} = Player_GetNumGatheringSquads", poll)
+            self.assertIn(f"state.payload.{resource}", log)
+            self.assertIn(resource, log)
+        self.assertIn("Vils_LogPoll(checkID, state", poll)
+        self.assertIn("tostring(state.player)", log)
 
     def test_uses_one_named_shared_poll_rule_for_all_active_checks(self) -> None:
         activate = function_body(self.source, "Vils_Activate")
