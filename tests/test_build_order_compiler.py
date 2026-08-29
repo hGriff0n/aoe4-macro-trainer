@@ -20,7 +20,7 @@ class BuildOrderCompilerTests(unittest.TestCase):
 
     def test_compiles_single_mapping_with_canonical_immutable_model(self) -> None:
         catalog = self.compile({"opening.yaml": """civ: English\ntitle: 2 TC\nsteps:\n  - title: Opening\n    vils:\n      food: 7\n"""})
-        self.assertEqual(catalog, Catalog((BuildOrder("english-2-tc", "English", "2 TC", (Step("Opening", (CheckDescriptor("vils", "7 F", False, {"food": 7}),)),)),)))
+        self.assertEqual(catalog, Catalog((BuildOrder("english-2-tc", "English", "2 TC", (Step("Opening", (CheckDescriptor("vils", "7 food villagers", False, {"food": 7}),)),)),)))
         with self.assertRaises(Exception):
             catalog.build_orders[0].title = "changed"
 
@@ -36,7 +36,7 @@ steps:
             (
                 CheckDescriptor(
                     "vils",
-                    "7 F | 3 G | 4 W | 2 S",
+                    "7 food villagers | 3 gold villagers | 4 wood villagers | 2 stone villagers",
                     False,
                     {"food": 7, "gold": 3, "wood": 4, "stone": 2},
                 ),

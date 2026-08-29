@@ -51,13 +51,21 @@ class BuildOrderVilsContractTests(unittest.TestCase):
         self.assertIn("BuildOrder_SetCheckComplete(checkID, true)", poll)
         self.assertIn("BuildOrder_SetCheckComplete(checkID, false)", poll)
 
-    def test_activation_uses_a_unique_poll_rule_and_deactivation_removes_that_rule(self) -> None:
+    def test_uses_one_named_shared_poll_rule_for_all_active_checks(self) -> None:
         activate = function_body(self.source, "Vils_Activate")
         deactivate = function_body(self.source, "Vils_Deactivate")
-        self.assertIn("state.pollRule = function()", activate)
-        self.assertIn("Rule_Add(state.pollRule)", activate)
-        self.assertIn("Rule_Remove(state.pollRule)", deactivate)
+        poll_all = function_body(self.source, "Vils_PollAll")
+        self.assertIn("for checkID", poll_all)
+        self.assertIn("Vils_Poll(checkID)", poll_all)
+        self.assertIn("Rule_Add(Vils_PollAll)", activate)
+        self.assertNotIn("Rule_Add(function", self.source)
+        self.assertNotIn("state.pollRule = function()", self.source)
+
+    def test_removes_the_shared_rule_only_after_the_last_active_check(self) -> None:
+        deactivate = function_body(self.source, "Vils_Deactivate")
         self.assertIn("VILS_STATE[check.id] = nil", deactivate)
+        self.assertIn("next(VILS_STATE) == nil", deactivate)
+        self.assertIn("Rule_Remove(Vils_PollAll)", deactivate)
 
 
 if __name__ == "__main__":

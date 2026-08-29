@@ -40,3 +40,15 @@ The AoE4 MCP official index was queried for the runtime calls used by this handl
 - `Rule_Remove(f)`: high-confidence official wrapper definition at `official_scar/rulesystem.scar:337`, annotated `@result Void` and `@args LuaFunction rule`, with the implementation noting it removes time rules. Official cleanup usage includes `official_scar/campaignpanel.scar:225` and `:950`, guarding with `Rule_Exists` before `Rule_Remove(rule)`.
 
 These exact signatures and official-source paths justify the handler's stored-player polling and per-check time-rule lifecycle. `BuildOrder_SetCheckComplete` and `BuildOrder_RegisterHandler` are project-owned wrappers, not official engine APIs; their contracts are defined and tested in this repository (`assets/scar/build_orders/objective_engine.scar` and `tests/test_build_order_vils.py`).
+
+## Validation feedback fix
+
+Validation feedback: assigning one human villager to each required resource did not complete the check; the objective title displayed `F/G/W/S` shorthand rather than resource icons or names.
+
+Root cause: `Player_GetNumGatheringSquads` is the documented, high-confidence API for the desired measurement and official training SCAR uses it with `RT_Food`, `RT_Wood`, `RT_Stone`, and `RT_Gold`. The handler's recurring update never ran because it passed an anonymous closure to `Rule_Add`; the runtime reports `Adding unnamed function as rule; this is not allowed`. The activation-time poll occurred before later villager assignment, exactly matching the observed behavior.
+
+Fix: all active `vils` descriptors share the named `Vils_PollAll` rule. It registers once for the first active descriptor, polls every active descriptor, and removes itself only after the last descriptor deactivates. The compiler now emits readable full resource names (for example, `7 food villagers`) because this project's generated locdb/objective-title pipeline provides no supported resource-icon markup convention.
+
+TDD and static evidence: the new shared-rule contract failed before the implementation because `Vils_PollAll` and its last-listener cleanup were absent; title expectations failed because the compiler still emitted shorthand. Focused tests passed 19/19 after the fix. Full discovery passed 72/72. `check_code` reported no low-confidence APIs or missing locdb IDs; its sole `Vils_Poll` finding is a false-positive project-local function reference.
+
+New validation request: activate English — Villager split and assign the human player's villagers to the required food/gold/wood/stone thresholds after the objective is active. Confirm that the child completes, becomes incomplete after dropping any threshold, and that its text uses full resource names. Repeat with an opponent matching the split first; the human objective must remain incomplete until the human thresholds are met. Content Editor build intentionally not run by this subagent.
