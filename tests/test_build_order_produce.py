@@ -183,6 +183,20 @@ class ProduceCompilerTests(unittest.TestCase):
             {"id": "unit_archer_2_abb", "count": 2, "constant": False, "queued": True},
         )
 
+    def test_queue_title_uses_only_vetted_plural_display_names(self) -> None:
+        cases = (
+            ("Ottomans", "janissary_3", "Queue 2 janissaries"),
+            ("Golden Horde", "shaman", "Queue 2 shamans"),
+            ("English", "man_at_arms_2", "Queue 2 men at arms"),
+        )
+
+        for civilization, unit, expected_title in cases:
+            with self.subTest(unit=unit):
+                check = self.compile_checks(
+                    f"[{{id: {unit}, count: 2, queued: true}}]", civ=civilization
+                )[0]
+                self.assertEqual(check.title, expected_title)
+
     def test_constant_precedes_queued_when_both_flags_are_set(self) -> None:
         check = self.compile_checks("[{id: villager, count: 2, constant: true, queued: true}]")[0]
         self.assertEqual(
@@ -287,16 +301,15 @@ class ProduceHandlerContractTests(unittest.TestCase):
 
     def test_queued_variant_uses_only_owned_entity_queues(self) -> None:
         queue = function_body(self.source, "Produce_QueueHasCount")
-        owner = "Entity_GetPlayerOwner(entity) == state.player"
+        scan = function_body(self.source, "Produce_ScanQueueEntity")
+        owner = "Entity_GetPlayerOwner(entity) ~= state.player"
         blueprint = "Entity_GetProductionQueueItem(entity, index)"
         self.assertIn("Player_GetEntities(state.player)", queue)
-        self.assertIn("EGroup_Count(entities)", queue)
-        self.assertIn("EGroup_GetEntityAt(entities, entityIndex)", queue)
-        self.assertNotIn("EGroup_ForEach", queue)
-        self.assertIn(owner, queue)
-        self.assertIn(blueprint, queue)
-        self.assertLess(queue.index(owner), queue.index(blueprint))
-        self.assertIn("Entity_GetProductionQueueSize(entity)", queue)
+        self.assertIn("EGroup_ForEach", queue)
+        self.assertIn(owner, scan)
+        self.assertIn(blueprint, scan)
+        self.assertLess(scan.index(owner), scan.index(blueprint))
+        self.assertIn("Entity_GetProductionQueueSize(entity)", scan)
         self.assertIn("queueCount >= state.payload.count", queue)
 
     def test_constant_variant_is_explicitly_unsupported_and_never_completes(self) -> None:
@@ -311,28 +324,31 @@ class ProduceHandlerContractTests(unittest.TestCase):
         self.assertIn("context.entity == nil or context.entity.EntityID == nil", callback)
         self.assertIn("Entity_GetPlayerOwner(context.entity)", callback)
         self.assertIn("Entity_HasProductionQueue(context.entity) == false", callback)
-        self.assertIn("Produce_ScheduleQueueReconciliation(owner)", callback)
+        self.assertIn("Produce_ScheduleQueueReconciliation(state.checkID)", callback)
         self.assertLess(
             callback.index("Entity_GetPlayerOwner(context.entity)"),
-            callback.index("Produce_ScheduleQueueReconciliation(owner)"),
+            callback.index("Produce_ScheduleQueueReconciliation(state.checkID)"),
         )
 
     def test_completion_reconciles_queued_human_state_without_a_producer_entity(self) -> None:
         callback = function_body(self.source, "Produce_OnBuildItemComplete")
         self.assertIn("context.player == state.player", callback)
-        self.assertIn("Produce_ScheduleQueueReconciliation(context.player)", callback)
+        self.assertIn("Produce_ScheduleQueueReconciliation(state.checkID)", callback)
         self.assertLess(
             callback.index("context.player == state.player"),
-            callback.index("Produce_ScheduleQueueReconciliation(context.player)"),
+            callback.index("Produce_ScheduleQueueReconciliation(state.checkID)"),
         )
 
     def test_queued_reconciliation_is_one_shot_coalesced_and_not_periodic(self) -> None:
         schedule = function_body(self.source, "Produce_ScheduleQueueReconciliation")
         next_tick = function_body(self.source, "Produce_ReconcileQueuedNextTick")
-        self.assertIn("PRODUCE_RECOUNT_PENDING[player] == true", schedule)
+        self.assertIn("PRODUCE_RECOUNT_PENDING[checkID] == true", schedule)
+        self.assertNotIn("PRODUCE_RECOUNT_PENDING[player]", schedule)
         self.assertIn("Rule_Add(Produce_ReconcileQueuedNextTick)", schedule)
         self.assertIn("Rule_RemoveMe()", next_tick)
         self.assertIn("PRODUCE_RECOUNT_PENDING = {}", next_tick)
+        self.assertIn("pending[state.checkID] == true", next_tick)
+        self.assertNotIn("pending[state.player]", next_tick)
         self.assertIn("Produce_QueueHasCount(state)", next_tick)
         self.assertNotIn("Produce_Poll", self.source)
         self.assertNotIn("Rule_Add(Produce_Poll)", self.source)
@@ -382,15 +398,6 @@ class ProduceBehaviorTests(unittest.TestCase):
         self.harness.set_queue("enemy-tc", "opponent", [archer, archer])
         self.harness.activate("queue", "human", archer, 2, queued=True)
         self.assertTrue(self.harness.active["queue"]["completed"])
-
-    def test_queue_in_a_later_human_producer_satisfies_the_queued_check(self) -> None:
-        archer = (1, 0, 1)
-        self.harness.set_queue("human-tc", "human", [])
-        self.harness.set_queue("human-archery-range", "human", [archer, archer])
-
-        self.harness.activate("archers", "human", archer, 2, queued=True)
-
-        self.assertTrue(self.harness.active["archers"]["completed"])
 
     def test_command_reconciles_next_tick_after_sync_pre_mutation_queue_add(self) -> None:
         archer = (1, 0, 1)

@@ -88,12 +88,30 @@ def _display_produced_unit(identifier: str) -> str:
     return " ".join(parts)
 
 
+_PRODUCED_UNIT_IRREGULAR_PLURALS = {
+    "man at arms": "men at arms",
+    "shaman": "shamans",
+}
+
+
 def _pluralize_unit(unit: str) -> str:
-    if unit.endswith("man"):
-        return f"{unit[:-3]}men"
-    if unit.endswith(("s", "sh", "ch", "x", "z")):
-        return f"{unit}es"
-    return f"{unit}s"
+    """Pluralize display IDs with explicit exceptions from the official unit catalog."""
+    irregular = _PRODUCED_UNIT_IRREGULAR_PLURALS.get(unit)
+    if irregular is not None:
+        return irregular
+
+    prefix, _, last_word = unit.rpartition(" ")
+    if last_word.endswith("man"):
+        plural = f"{last_word[:-3]}men"
+    elif last_word.endswith("y") and len(last_word) > 1 and last_word[-2] not in "aeiou":
+        plural = f"{last_word[:-1]}ies"
+    elif last_word.endswith(("s", "sh", "ch", "x", "z")):
+        plural = f"{last_word}es"
+    else:
+        plural = f"{last_word}s"
+    if prefix:
+        return f"{prefix} {plural}"
+    return plural
 
 
 def _resolve_identity_payload(
