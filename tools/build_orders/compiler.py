@@ -77,6 +77,10 @@ def _identity_category(kind: str, civ: str) -> str:
     return CHECK_ID_CATEGORIES[kind]
 
 
+def _humanize_identity_id(identifier: str) -> str:
+    return identifier.replace("_", " ")
+
+
 def _resolve_identity_payload(
     payload: dict[str, object],
     *,
@@ -161,7 +165,11 @@ def _check_descriptors(
                 payload["vils"] = _positive(mapping["vils"], file, f"{item_path}.vils")
             if "location" in mapping:
                 payload["location"] = _string(mapping["location"], file, f"{item_path}.location")
-            label = payload["id"] if "id" in payload else " or ".join(payload["oneof"])
+            label = (
+                _humanize_identity_id(payload["id"])
+                if "id" in payload
+                else " or ".join(_humanize_identity_id(item) for item in payload["oneof"])
+            )
             _resolve_identity_payload(
                 payload,
                 kind=kind,
@@ -204,7 +212,7 @@ def _check_descriptors(
                 file=file,
                 path=item_path,
             )
-            result.append(CheckDescriptor(kind, identifier, optional, payload))
+            result.append(CheckDescriptor(kind, _humanize_identity_id(identifier), optional, payload))
         return result
     if kind == "hints":
         return [CheckDescriptor(kind, _string(item, file, f"{path}[{index}]"), False, {"text": _string(item, file, f"{path}[{index}]")}) for index, item in enumerate(_list(value, file, path))]

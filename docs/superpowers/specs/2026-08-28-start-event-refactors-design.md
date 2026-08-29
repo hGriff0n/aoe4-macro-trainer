@@ -27,10 +27,10 @@ For production, `GE_EntityCommandIssued` with command type 3 fired once per queu
 
 ### GRI-59 and GRI-60
 
-- Do not remove their current queue polling until the focused probe proves a command is emitted for both insertion and cancellation and establishes whether queue mutation is visible synchronously or only on the next tick.
-- GRI-59 may independently fix completed-event identity to `context.upgrade`; its final queued refactor uses start/cancel/complete plus event-triggered queue reconciliation.
+- The focused probe proved that production insertion and cancellation both emit `GE_EntityCommandIssued`, with mutation visible on the next tick. GRI-60 replaces continuous polling with a coalesced next-tick player queue recount after a human-owned production-entity command and after human `GE_BuildItemComplete`. It does not hardcode opaque command enum values.
+- The focused probe proved that `GE_UpgradeStart` fires at accepted queue insertion even behind existing unit entries. GRI-59 uses start/cancel/complete events with `context.upgrade`, performs one activation baseline scan, and removes continuous polling.
 - A successful upgrade completion wins over the immediately preceding cancellation. Cancellation is marked pending and reconciled after event dispatch; completed research remains latched, while a queued check may return false only while its step is still active.
-- GRI-60 continues using `GE_BuildItemComplete` for normal production. Its queued refactor uses human-owned source commands and completion/cancellation events only after the probe proves full add/remove coverage.
+- GRI-60 continues using `GE_BuildItemComplete` for normal production and full PBG tuple comparison for every queue recount.
 
 ## Validation boundary
 
