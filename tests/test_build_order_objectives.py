@@ -118,11 +118,17 @@ class BuildOrderObjectiveContractTests(unittest.TestCase):
         activate = function_body(self.engine, "BuildOrder_ActivateStep")
         setter = function_body(self.engine, "BuildOrder_SetCheckComplete")
         self.assertIn("Obj_SetState(childID, OS_Incomplete)", activate)
-        self.assertIn("if handler ~= nil and handler.activate ~= nil then", activate)
+        self.assertIn("BuildOrder_LogMissingHandler(child.check)", activate)
+        self.assertIn("elseif handler.activate ~= nil then", activate)
         self.assertIn("if child == nil or child.completed == completed then", setter)
         self.assertIn("child.completed = completed", setter)
         self.assertIn("Obj_SetState(child.objectiveID, OS_Complete)", setter)
         self.assertIn("BuildOrder_TryAdvance()", setter)
+
+    def test_missing_registered_handler_logs_check_kind_and_id_without_completing_it(self) -> None:
+        logger = function_body(self.engine, "BuildOrder_LogMissingHandler")
+        self.assertIn('print("BuildOrder: no registered handler for " .. tostring(check.kind) .. " (check " .. tostring(check.id) .. ")")', logger)
+        self.assertNotIn("BuildOrder_SetCheckComplete", logger)
 
     def test_state_api_is_idempotent_reversible_and_advances_only_on_completion(self) -> None:
         body = function_body(self.engine, "BuildOrder_SetCheckComplete")
