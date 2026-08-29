@@ -92,7 +92,10 @@ def _wait_for_fresh_archive(
 ) -> bool:
     deadline = time.monotonic() + timeout
     while True:
-        after = _file_signature(path)
+        try:
+            after = _file_signature(path)
+        except PermissionError:
+            after = None
         if after is not None and before != after:
             return True
         remaining = deadline - time.monotonic()
