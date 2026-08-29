@@ -1,3 +1,4 @@
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -7,6 +8,23 @@ from tools.build_orders.compiler import BuildOrderValidationError, compile_direc
 
 ROOT = Path(__file__).resolve().parents[1]
 AGE_UP_HANDLER = ROOT / "assets" / "scar" / "build_orders" / "checks" / "age_up.scar"
+SCAR_ROOT = ROOT / "assets" / "scar"
+MAIN_WINCONDITION = SCAR_ROOT / "winconditions" / "Macro Trainer.scar"
+
+
+def packaged_import_graph(root: Path) -> list[Path]:
+    pending = [root]
+    visited: list[Path] = []
+    while pending:
+        source = pending.pop()
+        if source in visited:
+            continue
+        visited.append(source)
+        for target in re.findall(r'import\("([^"]+)"\)', source.read_text(encoding="utf-8")):
+            imported = SCAR_ROOT / target
+            if imported.exists():
+                pending.append(imported)
+    return visited
 
 
 class AgeUpCompilerTests(unittest.TestCase):
@@ -62,6 +80,18 @@ class AgeUpHandlerContractTests(unittest.TestCase):
         self.assertIn("civ = context.civ", self.source)
         self.assertIn("AgeUp_UsesUpgradeEvent(state.civ)", self.source)
         self.assertNotIn("capability", self.source)
+
+    def test_packaged_wincondition_reaches_age_up_handler_once_after_engine(self) -> None:
+        graph = packaged_import_graph(MAIN_WINCONDITION)
+        root_source = MAIN_WINCONDITION.read_text(encoding="utf-8")
+        engine_import = 'import("build_orders/objective_engine.scar")'
+        handler_import = 'import("build_orders/checks/age_up.scar")'
+        startup_import = 'import("build_orders/startup.scar")'
+
+        self.assertEqual(graph.count(AGE_UP_HANDLER), 1)
+        self.assertEqual(root_source.count(handler_import), 1)
+        self.assertLess(root_source.index(engine_import), root_source.index(handler_import))
+        self.assertLess(root_source.index(handler_import), root_source.index(startup_import))
 
     def test_upgrade_civilizations_are_explicit(self) -> None:
         for civ in ("abbasid", "ayyubids", "templar", "golden_horde"):

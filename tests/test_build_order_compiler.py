@@ -226,7 +226,7 @@ steps:
   - age_up: {oneof: [council_hall, town_center], vils: 4, location: gold}
 """})
         check = catalog.build_orders[0].steps[0].checks[0]
-        self.assertEqual(check.title, "Age Up: council_hall or town_center")
+        self.assertEqual(check.title, "Age Up: council hall or town center")
         self.assertFalse(check.optional)
         self.assertEqual(
             check.payload,
