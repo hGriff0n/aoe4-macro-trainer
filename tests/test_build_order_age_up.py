@@ -15,6 +15,7 @@ MAIN_WINCONDITION = SCAR_ROOT / "winconditions" / "Macro Trainer.scar"
 def packaged_import_graph(root: Path) -> list[Path]:
     pending = [root]
     visited: list[Path] = []
+    imported_edges: list[Path] = []
     while pending:
         source = pending.pop()
         if source in visited:
@@ -23,8 +24,9 @@ def packaged_import_graph(root: Path) -> list[Path]:
         for target in re.findall(r'import\("([^"]+)"\)', source.read_text(encoding="utf-8")):
             imported = SCAR_ROOT / target
             if imported.exists():
+                imported_edges.append(imported)
                 pending.append(imported)
-    return visited
+    return imported_edges
 
 
 class AgeUpCompilerTests(unittest.TestCase):
@@ -92,6 +94,30 @@ class AgeUpHandlerContractTests(unittest.TestCase):
         self.assertEqual(root_source.count(handler_import), 1)
         self.assertLess(root_source.index(engine_import), root_source.index(handler_import))
         self.assertLess(root_source.index(handler_import), root_source.index(startup_import))
+
+    def test_packaged_import_graph_retains_duplicate_transitive_edges(self) -> None:
+        global SCAR_ROOT
+        with tempfile.TemporaryDirectory() as temp:
+            temporary_root = Path(temp)
+            root = temporary_root / "root.scar"
+            age_handler = temporary_root / "checks" / "age_up.scar"
+            root.write_text('import("first.scar")\nimport("second.scar")\n', encoding="utf-8")
+            (temporary_root / "first.scar").write_text(
+                'import("checks/age_up.scar")\n', encoding="utf-8"
+            )
+            (temporary_root / "second.scar").write_text(
+                'import("checks/age_up.scar")\n', encoding="utf-8"
+            )
+            age_handler.parent.mkdir()
+            age_handler.write_text("", encoding="utf-8")
+            original_root = SCAR_ROOT
+            try:
+                SCAR_ROOT = temporary_root
+                graph = packaged_import_graph(root)
+            finally:
+                SCAR_ROOT = original_root
+
+        self.assertEqual(graph.count(age_handler), 2)
 
     def test_upgrade_civilizations_are_explicit(self) -> None:
         for civ in ("abbasid", "ayyubids", "templar", "golden_horde"):
