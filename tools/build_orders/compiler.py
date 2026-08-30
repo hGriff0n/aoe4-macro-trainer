@@ -81,13 +81,6 @@ def _humanize_identity_id(identifier: str) -> str:
     return identifier.replace("_", " ")
 
 
-def _display_produced_unit(identifier: str) -> str:
-    parts = identifier.split("_")
-    if parts[-1].isdigit():
-        parts.pop()
-    return " ".join(parts)
-
-
 _PRODUCED_UNIT_SINGULAR_SUFFIX_PLURALS = {
     "archer": "archers",
     "spearman": "spearmen",
@@ -276,7 +269,7 @@ def _check_descriptors(
                         f"expected squad ID '{identifier}': {exc}",
                     )
                 if kind == "produce":
-                    unit = _display_produced_unit(family_id)
+                    unit = _humanize_identity_id(family_id)
                     counted_unit = unit if payload["count"] == 1 else _pluralize_unit(unit)
                     if payload.get("constant", False):
                         title = f"Constantly produce {unit} [unsupported: continuous production]"

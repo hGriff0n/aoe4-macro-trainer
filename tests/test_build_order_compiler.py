@@ -50,6 +50,10 @@ class BuildOrderCompilerTests(unittest.TestCase):
                         "spearman",
                         ("unit_spearman_1_eng", "unit_spearman_2_eng"),
                     ),
+                    "siege_tank_2": SquadFamilyIdentity(
+                        "siege_tank_2",
+                        ("unit_siege_tank_2_eng",),
+                    ),
                     "villager": SquadFamilyIdentity(
                         "villager",
                         ("unit_villager_1_eng", "unit_villager_2_eng"),
@@ -181,6 +185,15 @@ steps:
             [check.title for check in checks],
             ["Queue 2 spearmen", "Queue 2 spearmen", "Have 2 spearman active", "Have 2 spearman active"],
         )
+
+    def test_produce_title_retains_numeric_family_id_suffix(self) -> None:
+        check = self.compile({"order.yaml": """civ: english
+title: Numeric family
+steps:
+  - produce: [{id: siege_tank_2, queued: true}]
+"""}).build_orders[0].steps[0].checks[0]
+
+        self.assertEqual(check.title, "Queue 1 siege tank 2")
 
     def test_rejects_capability_and_reports_catalog_context(self) -> None:
         self.assert_invalid(
