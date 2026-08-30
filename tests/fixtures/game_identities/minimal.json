@@ -1,22 +1,20 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "source": "official_base_data",
   "civilizations": {
-    "abbasid": {
-      "squad": {
-        "scout": "unit_scout_1_abb"
-      },
-      "upgrade": {
-        "economic_wing": "upgrade_add_economy_wing"
-      }
-    },
     "english": {
       "entity": {
-        "council_hall": "building_council_hall_eng",
         "town_center": "building_town_center_eng"
       },
       "squad": {
-        "scout": "unit_scout_1_eng"
+        "spearman": {
+          "aliases": ["spearman", "spearman_2", "spearman_3"],
+          "canonical_ids": ["unit_spearman_2_eng", "unit_spearman_3_eng"]
+        },
+        "scout": {
+          "aliases": ["scout"],
+          "canonical_ids": ["unit_scout_1_eng"]
+        }
       },
       "upgrade": {
         "wheelbarrow": "upgrade_wheelbarrow_eng"

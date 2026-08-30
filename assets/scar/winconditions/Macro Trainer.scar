@@ -7,6 +7,9 @@ import("cardinal.scar")							-- Contains sfx references, UI templates, and Civ/
 import("ScarUtil.scar")							-- Contains game helper functions
 import("generated/build_orders.scar")
 import("build_orders/objective_engine.scar")
+import("build_orders/checks/age_up.scar")
+import("build_orders/checks/built.scar")
+import("build_orders/checks/vils.scar")
 
 -- Import Gameplay Systems
 import("gameplay/score.scar")					-- Tracks player score
