@@ -67,7 +67,7 @@ class BuildOrderBuildTests(unittest.TestCase):
         self.assertIn("1003,,,Generated check title.,,,7 food", locdb)
         self.assertIn("1004,,,Generated check title.,,,Keep producing villagers", locdb)
         self.assertIn("1005,,,Generated step title.,,,Step 2", locdb)
-        self.assertIn("1006,,,Generated check title.,,,400 wood", locdb)
+        self.assertIn("1006,,,Generated check title.,,,Collect at least 400 wood", locdb)
         self.assertIn(
             'id = "english-framework-test:1:1", kind = "vils", '
             'title = "$dfb5645698a84afb91cf7a2dfb0f4a4e:1003"',

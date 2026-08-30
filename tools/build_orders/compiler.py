@@ -172,7 +172,12 @@ def _resource_checks(kind: str, value: Any, file: Path, path: str, no_collect: b
         if resource not in RESOURCES:
             _error(file, item_path, "unsupported resource")
         number = _positive(count, file, item_path)
-        title = f"{number} {resource} villagers" if kind == "vils" else f"{number} {resource}"
+        if kind == "vils":
+            title = f"{number} {resource} villagers"
+        elif kind == "resources":
+            title = f"Collect at least {number} {resource}"
+        else:
+            title = f"{number} {resource}"
         checks.append(CheckDescriptor(kind, title, False, {"resource": resource, "count": number}))
     if not checks:
         _error(file, path, "must not be empty")
