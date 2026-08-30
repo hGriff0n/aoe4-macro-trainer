@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 
 from tools.build_orders.compiler import BuildOrderValidationError, compile_directory
-from tools.build_orders.identities import IdentityCatalog
+from tools.build_orders.identities import IdentityCatalog, SquadFamilyIdentity
 from tools.build_orders.model import BuildOrder, Catalog, CheckDescriptor, Step, normalize_id
 
 
@@ -12,7 +12,7 @@ class BuildOrderCompilerTests(unittest.TestCase):
         self.identities = IdentityCatalog(
             {
                 "abbasid": {
-                    "squad": {"scout": "unit_scout_1_abb"},
+                    "entity": {},
                     "upgrade": {"economic_wing": "upgrade_add_economy_wing"},
                 },
                 "english": {
@@ -25,20 +25,45 @@ class BuildOrderCompilerTests(unittest.TestCase):
                         "stable": "building_stable_eng",
                         "town_center": "building_town_center_eng",
                     },
-                    "squad": {
-                        "scout": "unit_scout_1_eng",
-                        "spearman": "unit_spearman_1_eng",
-                        "spearman_3": "unit_spearman_3_eng",
-                        "villager": "unit_villager_1_eng",
-                        "villager_2": "unit_villager_2_eng",
-                    },
                     "upgrade": {
                         "horticulture": "upgrade_horticulture_eng",
                         "wheelbarrow": "upgrade_wheelbarrow_eng",
                         "wheelbarrow_1": "upgrade_wheelbarrow_eng_1",
                     },
                 },
-            }
+            },
+            {
+                "abbasid": {
+                    "scout": SquadFamilyIdentity("scout", ("unit_scout_1_abb",)),
+                },
+                "english": {
+                    "scout": SquadFamilyIdentity("scout", ("unit_scout_1_eng",)),
+                    "spearman": SquadFamilyIdentity(
+                        "spearman",
+                        ("unit_spearman_1_eng", "unit_spearman_2_eng"),
+                    ),
+                    "spearman_1": SquadFamilyIdentity(
+                        "spearman",
+                        ("unit_spearman_1_eng", "unit_spearman_2_eng"),
+                    ),
+                    "spearman_2": SquadFamilyIdentity(
+                        "spearman",
+                        ("unit_spearman_1_eng", "unit_spearman_2_eng"),
+                    ),
+                    "siege_tank_2": SquadFamilyIdentity(
+                        "siege_tank_2",
+                        ("unit_siege_tank_2_eng",),
+                    ),
+                    "villager": SquadFamilyIdentity(
+                        "villager",
+                        ("unit_villager_1_eng", "unit_villager_2_eng"),
+                    ),
+                    "villager_2": SquadFamilyIdentity(
+                        "villager",
+                        ("unit_villager_1_eng", "unit_villager_2_eng"),
+                    ),
+                },
+            },
         )
 
     def write(self, directory: Path, name: str, content: str) -> None:
@@ -70,7 +95,8 @@ steps:
 """}, identities=self.identities)
         payloads = [check.payload for check in catalog.build_orders[0].steps[0].checks]
         self.assertEqual(payloads[0]["id"], "building_town_center_eng")
-        self.assertEqual(payloads[1]["id"], "unit_scout_1_eng")
+        self.assertEqual(payloads[1]["ids"], ["unit_scout_1_eng"])
+        self.assertEqual(payloads[2]["ids"], ["unit_scout_1_eng"])
         self.assertEqual(payloads[3]["id"], "upgrade_wheelbarrow_eng")
         self.assertEqual(payloads[4]["id"], "building_landmark_age2_eng")
 
@@ -92,7 +118,7 @@ steps:
         )
         self.assertEqual(check.title, "Built: stable or archery range")
 
-    def test_identity_titles_humanize_author_ids_before_canonical_resolution(self) -> None:
+    def test_family_ids_drive_squad_titles_and_payloads(self) -> None:
         checks = self.compile({"order.yaml": """civ: english
 title: Readable IDs
 steps:
@@ -100,7 +126,7 @@ steps:
     age_up: {id: council_hall_2}
     upgrades: [{id: wheelbarrow_1, queued: true}]
     produce: [{id: villager_2, count: 2, constant: true, queued: true}]
-    units: [{id: spearman_3, count: 3}]
+    units: [{id: spearman_2, count: 3}]
 """}).build_orders[0].steps[0].checks
 
         self.assertEqual(
@@ -110,19 +136,64 @@ steps:
                 "Age Up: council hall 2",
                 "wheelbarrow 1",
                 "Constantly produce villager [unsupported: continuous production]",
-                "spearman 3",
+                "Have 3 spearman active",
             ],
         )
         self.assertEqual(
-            [check.payload["id"] for check in checks],
+            [check.payload["id"] for check in checks[:3]],
             [
                 "building_landmark_age4_eng_3",
                 "building_landmark_age2_eng_2",
                 "upgrade_wheelbarrow_eng_1",
-                "unit_villager_2_eng",
-                "unit_spearman_3_eng",
             ],
         )
+        self.assertEqual(
+            checks[3].payload["ids"],
+            ["unit_villager_1_eng", "unit_villager_2_eng"],
+        )
+        self.assertEqual(
+            checks[4].payload["ids"],
+            ["unit_spearman_1_eng", "unit_spearman_2_eng"],
+        )
+
+    def test_compiles_family_and_legacy_squad_aliases_to_the_same_payloads(self) -> None:
+        checks = self.compile({"order.yaml": """civ: english
+title: Spearmen
+steps:
+  - produce:
+      - {id: spearman, count: 2, constant: false, queued: true}
+      - {id: spearman_1, count: 2, constant: false, queued: true}
+    units:
+      - {id: spearman, count: 2}
+      - {id: spearman_2, count: 2}
+"""}).build_orders[0].steps[0].checks
+        expected_produce_payload = {
+            "ids": ["unit_spearman_1_eng", "unit_spearman_2_eng"],
+            "count": 2,
+            "constant": False,
+            "queued": True,
+        }
+        expected_units_payload = {
+            "ids": ["unit_spearman_1_eng", "unit_spearman_2_eng"],
+            "count": 2,
+        }
+        self.assertEqual(checks[0].payload, expected_produce_payload)
+        self.assertEqual(checks[1].payload, expected_produce_payload)
+        self.assertEqual(checks[2].payload, expected_units_payload)
+        self.assertEqual(checks[3].payload, expected_units_payload)
+        self.assertEqual(
+            [check.title for check in checks],
+            ["Queue 2 spearmen", "Queue 2 spearmen", "Have 2 spearman active", "Have 2 spearman active"],
+        )
+
+    def test_produce_title_retains_numeric_family_id_suffix(self) -> None:
+        check = self.compile({"order.yaml": """civ: english
+title: Numeric family
+steps:
+  - produce: [{id: siege_tank_2, queued: true}]
+"""}).build_orders[0].steps[0].checks[0]
+
+        self.assertEqual(check.title, "Queue 1 siege tank 2")
 
     def test_rejects_capability_and_reports_catalog_context(self) -> None:
         self.assert_invalid(
@@ -130,7 +201,13 @@ steps:
             "steps[0].age_up.capability: unknown field",
         )
 
-    def test_reports_exact_scalar_identity_error_path(self) -> None:
+    def test_reports_exact_squad_family_identity_error_paths(self) -> None:
+        self.assert_invalid_exact(
+            "civ: english\ntitle: x\nsteps:\n  - produce: [{id: economic_wing}]\n",
+            "file.yaml: steps[0].produce[0].id: civilization 'english', produce check, "
+            "expected squad ID 'economic_wing': unknown squad ID 'economic_wing' "
+            "for civilization 'english'",
+        )
         self.assert_invalid_exact(
             "civ: english\ntitle: x\nsteps:\n  - units: [{id: economic_wing}]\n",
             "file.yaml: steps[0].units[0].id: civilization 'english', units check, "
