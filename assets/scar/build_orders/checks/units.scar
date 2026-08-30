@@ -3,6 +3,12 @@ UNITS_POLLING = false
 UNITS_SCAN_STATE = nil
 UNITS_POLL_INTERVAL_SECONDS = 1
 
+local function Units_BlueprintsEqual(left, right)
+	return left.PropertyBagGroupID == right.PropertyBagGroupID
+		and left.PropertyBagGroupModPackID == right.PropertyBagGroupModPackID
+		and left.PropertyBagGroupType == right.PropertyBagGroupType
+end
+
 function Units_ScanSquad(groupID, squadIndex, squad)
 	local state = UNITS_SCAN_STATE
 	if state == nil then
@@ -12,7 +18,7 @@ function Units_ScanSquad(groupID, squadIndex, squad)
 	if Squad_GetPlayerOwner(squad) ~= state.player then
 		return false
 	end
-	if Squad_GetBlueprint(squad) ~= state.pbg then
+	if Units_BlueprintsEqual(Squad_GetBlueprint(squad), state.pbg) == false then
 		return false
 	end
 	if Squad_IsAlive(squad) == false then

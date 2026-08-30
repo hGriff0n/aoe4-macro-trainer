@@ -212,7 +212,9 @@ def _check_descriptors(
                 file=file,
                 path=item_path,
             )
-            result.append(CheckDescriptor(kind, _humanize_identity_id(identifier), optional, payload))
+            label = _humanize_identity_id(identifier)
+            title = f"Have {payload['count']} {label} active" if kind == "units" else label
+            result.append(CheckDescriptor(kind, title, optional, payload))
         return result
     if kind == "hints":
         return [CheckDescriptor(kind, _string(item, file, f"{path}[{index}]"), False, {"text": _string(item, file, f"{path}[{index}]")}) for index, item in enumerate(_list(value, file, path))]

@@ -110,7 +110,7 @@ steps:
                 "Age Up: council hall 2",
                 "wheelbarrow 1",
                 "villager 2",
-                "spearman 3",
+                "Have 3 spearman 3 active",
             ],
         )
         self.assertEqual(
