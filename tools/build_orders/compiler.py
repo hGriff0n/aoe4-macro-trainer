@@ -262,13 +262,10 @@ def _check_descriptors(kind: str, value: Any, file: Path, path: str) -> list[Che
                 queued = mapping.get("queued", False)
                 if not isinstance(queued, bool): _error(file, f"{item_path}.queued", "must be boolean")
                 payload["queued"] = queued
-            else:
-                payload["count"] = _positive(mapping.get("count", 1), file, f"{item_path}.count")
-                for flag in ("constant", "queued"):
-                    if flag in mapping:
-                        if not isinstance(mapping[flag], bool): _error(file, f"{item_path}.{flag}", "must be boolean")
-                        payload[flag] = mapping[flag]
-            if kind in {"produce", "units"}:
+                title = f"Queue {identifier} for research" if queued else f"Research {identifier}"
+                if optional:
+                    title = f"[Optional] {title}"
+            elif kind in {"produce", "units"}:
                 try:
                     family_id = _resolve_squad_family_payload(
                         payload,
@@ -297,6 +294,11 @@ def _check_descriptors(kind: str, value: Any, file: Path, path: str) -> list[Che
                 else:
                     title = f"Have {payload['count']} {_humanize_identity_id(family_id)} active"
             else:
+                payload["count"] = _positive(mapping.get("count", 1), file, f"{item_path}.count")
+                for flag in ("constant", "queued"):
+                    if flag in mapping:
+                        if not isinstance(mapping[flag], bool): _error(file, f"{item_path}.{flag}", "must be boolean")
+                        payload[flag] = mapping[flag]
                 _resolve_identity_payload(
                     payload,
                     kind=kind,
