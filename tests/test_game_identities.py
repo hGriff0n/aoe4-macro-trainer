@@ -2,6 +2,7 @@ import json
 import sqlite3
 import tempfile
 import unittest
+from dataclasses import FrozenInstanceError
 from pathlib import Path
 from unittest.mock import patch
 
@@ -57,7 +58,78 @@ class IdentityGeneratorTests(unittest.TestCase):
 
         english = document["civilizations"]["english"]
         self.assertEqual(english["entity"]["town_center"], "building_town_center_eng")
-        self.assertEqual(english["squad"]["scout"], "unit_scout_1_eng")
+        self.assertEqual(
+            english["squad"]["scout"],
+            {
+                "aliases": ["scout", "scout_1"],
+                "canonical_ids": ["unit_scout_1_eng"],
+            },
+        )
+
+    def test_generator_groups_squad_tiers_into_one_official_family(self) -> None:
+        document = generate_identity_document(
+            [
+                row("units", "spearman", "unit_spearman_1_eng", ["en"], item_id="spearman-1"),
+                row("units", "spearman", "unit_spearman_2_eng", ["en"], item_id="spearman-2"),
+                row("units", "spearman", "unit_spearman_3_eng", ["en"], item_id="spearman-3"),
+            ]
+        )
+
+        self.assertEqual(
+            document["civilizations"]["english"]["squad"],
+            {
+                "spearman": {
+                    "aliases": ["spearman", "spearman_1", "spearman_2", "spearman_3"],
+                    "canonical_ids": [
+                        "unit_spearman_1_eng",
+                        "unit_spearman_2_eng",
+                        "unit_spearman_3_eng",
+                    ],
+                }
+            },
+        )
+
+    def test_generator_squad_families_are_deterministic_for_reversed_input(self) -> None:
+        rows = [
+            row("units", "spearman", "unit_spearman_1_eng", ["en"], item_id="spearman-1"),
+            row("units", "spearman", "unit_spearman_2_eng", ["en"], item_id="spearman-2"),
+            row("units", "spearman", "unit_spearman_3_eng", ["en"], item_id="spearman-3"),
+        ]
+
+        self.assertEqual(generate_identity_document(rows), generate_identity_document(reversed(rows)))
+
+    def test_generator_creates_one_member_scout_family(self) -> None:
+        document = generate_identity_document(
+            [row("units", "scout", "unit_scout_1_eng", ["en"], item_id="scout-1")]
+        )
+
+        self.assertEqual(
+            document["civilizations"]["english"]["squad"],
+            {
+                "scout": {
+                    "aliases": ["scout", "scout_1"],
+                    "canonical_ids": ["unit_scout_1_eng"],
+                }
+            },
+        )
+
+    def test_generator_rejects_squad_alias_collision_between_families(self) -> None:
+        rows = [
+            row("units", "spearman", "unit_spearman_eng", ["en"], item_id="shared-item"),
+            row("units", "archer", "unit_archer_eng", ["en"], item_id="shared-item"),
+        ]
+
+        with self.assertRaisesRegex(IdentityGenerationError, "conflicting squad alias"):
+            generate_identity_document(rows)
+
+    def test_generator_rejects_alias_reused_by_distinct_raw_squad_base_ids(self) -> None:
+        rows = [
+            row("units", "foo-bar", "unit_same", ["en"], item_id="shared-item"),
+            row("units", "foo_bar", "unit_same", ["en"], item_id="shared-item"),
+        ]
+
+        with self.assertRaisesRegex(IdentityGenerationError, "conflicting squad alias"):
+            generate_identity_document(rows)
 
     def test_generator_rejects_conflicting_normalized_key(self) -> None:
         rows = [
@@ -102,7 +174,19 @@ class IdentityGeneratorTests(unittest.TestCase):
             ]
         )
 
-        self.assertEqual(document["civilizations"], {"english": {"squad": {"spearman": "unit_spearman_eng"}}})
+        self.assertEqual(
+            document["civilizations"],
+            {
+                "english": {
+                    "squad": {
+                        "spearman": {
+                            "aliases": ["spearman", "spearman_1"],
+                            "canonical_ids": ["unit_spearman_eng"],
+                        }
+                    }
+                }
+            },
+        )
 
     def test_generator_rejects_malformed_relevant_records(self) -> None:
         malformed = row("units", "scout", "unit_scout_1_eng", ["en"])
@@ -126,7 +210,19 @@ class IdentityGeneratorTests(unittest.TestCase):
             ]
         )
 
-        self.assertEqual(document["civilizations"], {"english": {"squad": {"scout": "unit_scout_1_eng"}}})
+        self.assertEqual(
+            document["civilizations"],
+            {
+                "english": {
+                    "squad": {
+                        "scout": {
+                            "aliases": ["scout", "scout_1"],
+                            "canonical_ids": ["unit_scout_1_eng"],
+                        }
+                    }
+                }
+            },
+        )
 
     def test_generator_rejects_unknown_playable_translation_sentinel(self) -> None:
         sentinel = row(
@@ -146,7 +242,15 @@ class IdentityGeneratorTests(unittest.TestCase):
 
         document = generate_identity_document([duplicate, duplicate])
 
-        self.assertEqual(document["civilizations"]["english"]["squad"], {"scout": "unit_scout_1_eng"})
+        self.assertEqual(
+            document["civilizations"]["english"]["squad"],
+            {
+                "scout": {
+                    "aliases": ["scout", "scout_1"],
+                    "canonical_ids": ["unit_scout_1_eng"],
+                }
+            },
+        )
 
     def test_generator_serialization_is_identical_for_different_input_order(self) -> None:
         rows = [
@@ -200,16 +304,36 @@ class IdentityCatalogTests(unittest.TestCase):
             path.write_text(json.dumps(document), encoding="utf-8")
             return IdentityCatalog.load(path)
 
-    def test_resolves_shared_id_by_civilization(self) -> None:
+    def test_resolves_squad_family_aliases_to_one_immutable_family(self) -> None:
         catalog = IdentityCatalog.load(FIXTURE)
-        self.assertEqual(
-            catalog.resolve("english", "squad", "scout"),
-            "unit_scout_1_eng",
-        )
-        self.assertEqual(
-            catalog.resolve("abbasid", "squad", "scout"),
-            "unit_scout_1_abb",
-        )
+        spearman = catalog.resolve_squad_family("english", "spearman")
+
+        self.assertEqual(spearman.family_id, "spearman")
+        self.assertEqual(spearman.canonical_ids, ("unit_spearman_2_eng", "unit_spearman_3_eng"))
+        self.assertIsInstance(spearman.canonical_ids, tuple)
+        self.assertIs(spearman, catalog.resolve_squad_family("english", "spearman_2"))
+        self.assertIs(spearman, catalog.resolve_squad_family("english", "spearman_3"))
+        with self.assertRaises(FrozenInstanceError):
+            spearman.family_id = "changed"
+
+    def test_resolves_one_member_squad_family(self) -> None:
+        catalog = IdentityCatalog.load(FIXTURE)
+
+        scout = catalog.resolve_squad_family("english", "scout")
+        self.assertEqual(scout.family_id, "scout")
+        self.assertEqual(scout.canonical_ids, ("unit_scout_1_eng",))
+
+    def test_resolves_scalar_entity_and_upgrade_identities(self) -> None:
+        catalog = IdentityCatalog.load(FIXTURE)
+
+        self.assertEqual(catalog.resolve("english", "entity", "town_center"), "building_town_center_eng")
+        self.assertEqual(catalog.resolve("english", "upgrade", "wheelbarrow"), "upgrade_wheelbarrow_eng")
+
+    def test_rejects_scalar_squad_resolution(self) -> None:
+        catalog = IdentityCatalog.load(FIXTURE)
+
+        with self.assertRaisesRegex(IdentityCatalogError, "squad.*resolve_squad_family"):
+            catalog.resolve("english", "squad", "spearman")
 
     def test_rejects_non_normalized_human_id(self) -> None:
         catalog = IdentityCatalog.load(FIXTURE)
@@ -244,7 +368,7 @@ class IdentityCatalogTests(unittest.TestCase):
     def test_rejects_catalog_keys_that_are_not_normalized_official_ids(self) -> None:
         for identifier in ("town-center", "12345"):
             document = {
-                "schema_version": 1,
+                "schema_version": 2,
                 "source": "official_base_data",
                 "civilizations": {"english": {"entity": {identifier: "building_town_center_eng"}}},
             }
@@ -253,11 +377,138 @@ class IdentityCatalogTests(unittest.TestCase):
 
     def test_rejects_missing_or_wrong_catalog_source(self) -> None:
         for source in (None, "unofficial"):
-            document: dict[str, object] = {"schema_version": 1, "civilizations": {}}
+            document: dict[str, object] = {"schema_version": 2, "civilizations": {}}
             if source is not None:
                 document["source"] = source
             with self.subTest(source=source), self.assertRaisesRegex(IdentityCatalogError, "official_base_data"):
                 self.load_document(document)
+
+    def test_rejects_squad_alias_assigned_to_multiple_families(self) -> None:
+        document = {
+            "schema_version": 2,
+            "source": "official_base_data",
+            "civilizations": {
+                "english": {
+                    "squad": {
+                        "spearman": {
+                            "aliases": ["shared", "spearman"],
+                            "canonical_ids": ["unit_spearman_eng"],
+                        },
+                        "archer": {
+                            "aliases": ["archer", "shared"],
+                            "canonical_ids": ["unit_archer_eng"],
+                        },
+                    }
+                }
+            },
+        }
+
+        with self.assertRaisesRegex(IdentityCatalogError, "shared.*multiple squad families"):
+            self.load_document(document)
+
+    def test_rejects_squad_family_without_base_alias(self) -> None:
+        document = {
+            "schema_version": 2,
+            "source": "official_base_data",
+            "civilizations": {
+                "english": {
+                    "squad": {
+                        "spearman": {
+                            "aliases": ["spearman_2"],
+                            "canonical_ids": ["unit_spearman_eng"],
+                        }
+                    }
+                }
+            },
+        }
+
+        with self.assertRaisesRegex(IdentityCatalogError, "spearman.*aliases"):
+            self.load_document(document)
+
+    def test_rejects_squad_family_with_empty_canonical_ids(self) -> None:
+        document = {
+            "schema_version": 2,
+            "source": "official_base_data",
+            "civilizations": {
+                "english": {
+                    "squad": {"spearman": {"aliases": ["spearman"], "canonical_ids": []}}
+                }
+            },
+        }
+
+        with self.assertRaisesRegex(IdentityCatalogError, "canonical_ids.*non-empty"):
+            self.load_document(document)
+
+    def test_rejects_squad_family_with_empty_canonical_identifier(self) -> None:
+        document = {
+            "schema_version": 2,
+            "source": "official_base_data",
+            "civilizations": {
+                "english": {
+                    "squad": {"spearman": {"aliases": ["spearman"], "canonical_ids": [""]}}
+                }
+            },
+        }
+
+        with self.assertRaisesRegex(IdentityCatalogError, "canonical_ids.*non-empty strings"):
+            self.load_document(document)
+
+    def test_rejects_squad_family_with_duplicate_canonical_ids(self) -> None:
+        document = {
+            "schema_version": 2,
+            "source": "official_base_data",
+            "civilizations": {
+                "english": {
+                    "squad": {
+                        "spearman": {
+                            "aliases": ["spearman"],
+                            "canonical_ids": ["unit_spearman_eng", "unit_spearman_eng"],
+                        }
+                    }
+                }
+            },
+        }
+
+        with self.assertRaisesRegex(IdentityCatalogError, "canonical_ids.*unique"):
+            self.load_document(document)
+
+    def test_rejects_squad_family_with_unsorted_aliases(self) -> None:
+        document = {
+            "schema_version": 2,
+            "source": "official_base_data",
+            "civilizations": {
+                "english": {
+                    "squad": {
+                        "spearman": {
+                            "aliases": ["spearman_2", "spearman"],
+                            "canonical_ids": ["unit_spearman_2_eng", "unit_spearman_3_eng"],
+                        }
+                    }
+                }
+            },
+        }
+
+        with self.assertRaisesRegex(IdentityCatalogError, "aliases.*sorted"):
+            self.load_document(document)
+
+    def test_rejects_squad_family_with_unsorted_canonical_ids(self) -> None:
+        document = {
+            "schema_version": 2,
+            "source": "official_base_data",
+            "civilizations": {
+                "english": {
+                    "squad": {
+                        "spearman": {
+                            "aliases": ["spearman"],
+                            "canonical_ids": ["unit_spearman_3_eng", "unit_spearman_2_eng"],
+                        }
+                    }
+                }
+            },
+        }
+
+        with self.assertRaisesRegex(IdentityCatalogError, "canonical_ids.*sorted"):
+            self.load_document(document)
 
 
 if __name__ == "__main__":

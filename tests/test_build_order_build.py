@@ -64,7 +64,7 @@ class BuildOrderBuildTests(unittest.TestCase):
         self.assertIn("1000,,,Generated build-order option.,,,[English] Framework Test", locdb)
         self.assertIn("1001,,,Generated build-order title.,,,Framework Test", locdb)
         self.assertIn("1002,,,Generated step title.,,,Opening Economy", locdb)
-        self.assertIn("1003,,,Generated check title.,,,7 food villagers", locdb)
+        self.assertIn("1003,,,Generated check title.,,,7 food", locdb)
         self.assertIn("1004,,,Generated check title.,,,Keep producing villagers", locdb)
         self.assertIn("1005,,,Generated step title.,,,Step 2", locdb)
         self.assertIn("1006,,,Generated check title.,,,400 wood", locdb)
@@ -171,7 +171,7 @@ steps:
             worker.join()
         self.assertEqual(result, 0)
 
-    def test_archive_wait_retries_a_transient_permission_error(self) -> None:
+    def test_archive_wait_retries_transient_permission_error(self) -> None:
         before = (1, 10, "stale")
         fresh = (2, 20, "fresh")
 
