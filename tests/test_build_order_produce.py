@@ -57,7 +57,7 @@ class ProduceBehaviorHarness:
             "player": player,
             "units": units,
             "count": count,
-            "queued": queued,
+            "queued": queued and not constant,
             "constant": constant,
             "remaining": count,
             "seen": set(),
@@ -359,6 +359,11 @@ class ProduceHandlerContractTests(unittest.TestCase):
         self.assertIn("remaining = check.payload.count", activate)
         self.assertIn("Produce_UpdateObservers()", activate)
 
+    def test_constant_and_queued_variant_excludes_queue_reconciliation(self) -> None:
+        is_queued = function_body(self.source, "Produce_IsQueued")
+        self.assertIn("state.payload.queued", is_queued)
+        self.assertIn("state.payload.constant ~= true", is_queued)
+
     def test_commands_validate_source_owner_before_scheduling_next_tick_reconciliation(self) -> None:
         callback = function_body(self.source, "Produce_OnEntityCommandIssued")
         self.assertIn("context.entity == nil or context.entity.EntityID == nil", callback)
@@ -435,6 +440,25 @@ class ProduceBehaviorTests(unittest.TestCase):
         self.assertFalse(self.harness.active["constant-villager"]["completed"])
         self.harness.observe_completion("human", villager, 701)
         self.assertTrue(self.harness.active["constant-villager"]["completed"])
+
+    def test_constant_and_queued_author_hint_ignores_queue_and_counts_human_completions(self) -> None:
+        villager = (199747, 0, 1)
+        self.harness.set_queue("tc", "human", [villager, villager])
+        self.harness.activate(
+            "constant-queued-villager",
+            "human",
+            villager,
+            2,
+            queued=True,
+            constant=True,
+        )
+        self.assertFalse(self.harness.active["constant-queued-villager"]["completed"])
+        self.harness.observe_completion("opponent", villager, 710)
+        self.assertFalse(self.harness.active["constant-queued-villager"]["completed"])
+        self.harness.observe_completion("human", villager, 711)
+        self.assertFalse(self.harness.active["constant-queued-villager"]["completed"])
+        self.harness.observe_completion("human", villager, 712)
+        self.assertTrue(self.harness.active["constant-queued-villager"]["completed"])
 
     def test_spearman_family_matches_cross_age_queue_and_completion_events(self) -> None:
         dark_age_spearman = (1, 0, 1)

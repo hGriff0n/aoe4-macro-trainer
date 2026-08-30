@@ -28,6 +28,10 @@ function Produce_MatchesPBG(pbgs, pbg)
 	return false
 end
 
+function Produce_IsQueued(state)
+	return state.payload.queued and state.payload.constant ~= true
+end
+
 function Produce_ScanQueueEntity(groupID, entityIndex, entity)
 	local state = PRODUCE_QUEUE_STATE
 	if state == nil then
@@ -65,7 +69,7 @@ function Produce_ReconcileQueuedNextTick()
 	local pending = PRODUCE_RECOUNT_PENDING
 	PRODUCE_RECOUNT_PENDING = {}
 	for _, state in pairs(PRODUCE_STATE) do
-		if state ~= nil and state.payload.queued and pending[state.checkID] == true then
+		if state ~= nil and Produce_IsQueued(state) and pending[state.checkID] == true then
 			BuildOrder_SetCheckComplete(state.checkID, Produce_QueueHasCount(state))
 		end
 	end
@@ -97,7 +101,7 @@ function Produce_OnEntityCommandIssued(context)
 	end
 
 	for _, state in pairs(PRODUCE_STATE) do
-		if state ~= nil and state.payload.queued and owner == state.player then
+		if state ~= nil and Produce_IsQueued(state) and owner == state.player then
 			Produce_ScheduleQueueReconciliation(state.checkID)
 		end
 	end
@@ -110,7 +114,7 @@ function Produce_OnBuildItemComplete(context)
 
 	for checkID, state in pairs(PRODUCE_STATE) do
 		if state ~= nil and context.player == state.player then
-			if state.payload.queued then
+			if Produce_IsQueued(state) then
 				-- Completion does not identify the producer; recount every human queue next tick.
 				Produce_ScheduleQueueReconciliation(state.checkID)
 			elseif state.remaining > 0 and context.pbg ~= nil and context.spawnedSquad ~= nil then
@@ -151,7 +155,7 @@ local function Produce_UpdateObservers()
 	local needsQueuedCommands = false
 	local needsCompletion = false
 	for _, state in pairs(PRODUCE_STATE) do
-		if state.payload.queued then
+		if Produce_IsQueued(state) then
 			needsQueuedCommands = true
 			needsCompletion = true
 		elseif state.remaining > 0 then
@@ -198,7 +202,7 @@ function Produce_Activate(check, objectiveID, context)
 		seen = {},
 	}
 	Produce_UpdateObservers()
-	if check.payload.queued then
+	if Produce_IsQueued(PRODUCE_STATE[check.id]) then
 		BuildOrder_SetCheckComplete(check.id, Produce_QueueHasCount(PRODUCE_STATE[check.id]))
 	end
 end
