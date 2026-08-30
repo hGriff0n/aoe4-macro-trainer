@@ -317,6 +317,22 @@ steps:
             {"id": "upgrade_horticulture_eng", "queued": False},
         )
 
+    def test_compiles_age_up_presentation_suffixes_in_stable_order(self) -> None:
+        catalog = self.compile({"age-up.yaml": """civ: English
+title: Age Up
+steps:
+  - age_up: {oneof: [council_hall, town_center], vils: 4, location: gold}
+"""})
+        check = catalog.build_orders[0].steps[0].checks[0]
+        self.assertEqual(check.title, "Age Up: council hall or town center")
+        self.assertFalse(check.optional)
+        self.assertEqual(
+            check.payload,
+            {
+                "oneof": ["building_landmark_age2_eng", "building_town_center_eng"],
+                "vils": 4,
+                "location": "gold",
+            },
     def test_formats_built_titles_from_count_choice_and_presentation_hints(self) -> None:
         catalog = self.compile({"built.yaml": """civ: English
 title: Built titles
