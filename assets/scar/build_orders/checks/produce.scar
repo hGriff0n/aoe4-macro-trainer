@@ -188,11 +188,6 @@ function Produce_Activate(check, objectiveID, context)
 		return
 	end
 
-	if check.payload.constant then
-		-- No verified signal or API proves uninterrupted production across idle gaps.
-		return
-	end
-
 	PRODUCE_STATE[check.id] = {
 		checkID = check.id,
 		objectiveID = objectiveID,

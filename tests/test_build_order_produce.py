@@ -49,6 +49,7 @@ class ProduceBehaviorHarness:
         units: tuple[int, int, int] | list[tuple[int, int, int]],
         count: int,
         queued: bool,
+        constant: bool = False,
     ) -> None:
         if isinstance(units, tuple):
             units = [units]
@@ -57,6 +58,7 @@ class ProduceBehaviorHarness:
             "units": units,
             "count": count,
             "queued": queued,
+            "constant": constant,
             "remaining": count,
             "seen": set(),
             "completed": False,
@@ -156,11 +158,11 @@ class ProduceCompilerTests(unittest.TestCase):
             },
         )
 
-    def test_renders_constant_production_as_an_explicit_non_blocking_limitation(self) -> None:
+    def test_renders_constant_production_as_a_non_blocking_author_hint(self) -> None:
         check = self.compile_checks("[{id: villager, constant: true}]")[0]
         self.assertEqual(
             check.title,
-            "Constantly produce villager [unsupported: continuous production]",
+            "Constantly produce villager",
         )
         self.assertTrue(check.optional)
         self.assertEqual(
@@ -234,7 +236,7 @@ class ProduceCompilerTests(unittest.TestCase):
         check = self.compile_checks("[{id: villager, count: 2, constant: true, queued: true}]")[0]
         self.assertEqual(
             check.title,
-            "Constantly produce villager [unsupported: continuous production]",
+            "Constantly produce villager",
         )
         self.assertTrue(check.optional)
         self.assertEqual(
@@ -351,12 +353,11 @@ class ProduceHandlerContractTests(unittest.TestCase):
         self.assertIn("Entity_GetProductionQueueSize(entity)", scan)
         self.assertIn("queueCount >= state.payload.count", queue)
 
-    def test_constant_variant_is_explicitly_unsupported_and_never_completes(self) -> None:
-        self.assertNotIn("Produce_ConstantSatisfied", self.source)
+    def test_constant_variant_uses_normal_completion_state(self) -> None:
         activate = function_body(self.source, "Produce_Activate")
-        self.assertIn("if check.payload.constant then", activate)
-        self.assertIn("No verified signal or API proves uninterrupted production", activate)
-        self.assertIn("return", activate)
+        self.assertNotIn("check.payload.constant", activate)
+        self.assertIn("remaining = check.payload.count", activate)
+        self.assertIn("Produce_UpdateObservers()", activate)
 
     def test_commands_validate_source_owner_before_scheduling_next_tick_reconciliation(self) -> None:
         callback = function_body(self.source, "Produce_OnEntityCommandIssued")
@@ -419,6 +420,21 @@ class ProduceBehaviorTests(unittest.TestCase):
         self.assertFalse(self.harness.active["normal"]["completed"])
         self.harness.observe_completion("human", villager, 50048)
         self.assertTrue(self.harness.active["normal"]["completed"])
+
+    def test_constant_author_hint_rejects_opponent_then_completes_on_matching_human_product(self) -> None:
+        villager = (199747, 0, 1)
+        self.harness.activate(
+            "constant-villager",
+            "human",
+            villager,
+            1,
+            queued=False,
+            constant=True,
+        )
+        self.harness.observe_completion("opponent", villager, 700)
+        self.assertFalse(self.harness.active["constant-villager"]["completed"])
+        self.harness.observe_completion("human", villager, 701)
+        self.assertTrue(self.harness.active["constant-villager"]["completed"])
 
     def test_spearman_family_matches_cross_age_queue_and_completion_events(self) -> None:
         dark_age_spearman = (1, 0, 1)
