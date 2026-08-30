@@ -44,6 +44,14 @@ class BuildOrderObjectiveContractTests(unittest.TestCase):
         self.assertIn(engine, self.main)
         self.assertLess(self.main.index(generated), self.main.index(engine))
 
+    def test_main_imports_built_handler_once_after_engine_and_before_startup(self) -> None:
+        engine = 'import("build_orders/objective_engine.scar")'
+        built = 'import("build_orders/checks/built.scar")'
+        startup = 'import("build_orders/startup.scar")'
+        self.assertEqual(self.main.count(built), 1)
+        self.assertLess(self.main.index(engine), self.main.index(built))
+        self.assertLess(self.main.index(built), self.main.index(startup))
+
     def test_engine_tracks_active_hierarchy_handlers_and_advancement(self) -> None:
         for field in (
             "localPlayer",

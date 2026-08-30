@@ -20,6 +20,8 @@ class BuildOrderCompilerTests(unittest.TestCase):
                         "archery_range": "building_archery_range_eng",
                         "barracks": "building_barracks_eng",
                         "council_hall": "building_landmark_age2_eng",
+                        "house": "building_house_eng",
+                        "outpost": "building_outpost_eng",
                         "council_hall_2": "building_landmark_age2_eng_2",
                         "palace_of_swabia_3": "building_landmark_age4_eng_3",
                         "stable": "building_stable_eng",
@@ -313,6 +315,34 @@ steps:
         self.assertEqual(
             checks[3].payload,
             {"id": "upgrade_horticulture_eng", "queued": False},
+        )
+
+    def test_formats_built_titles_from_count_choice_and_presentation_hints(self) -> None:
+        catalog = self.compile({"built.yaml": """civ: English
+title: Built titles
+steps:
+  - built:
+      - id: barracks
+      - id: house
+        count: 2
+      - id: barracks
+        count: 2
+      - oneof: [stable, archery_range]
+      - id: outpost
+        count: 2
+        vils: 3
+        location: wood
+"""})
+        checks = catalog.build_orders[0].steps[0].checks
+        self.assertEqual(
+            [check.title for check in checks],
+            [
+                "Built: barracks",
+                "Built: house",
+                "Built: barracks",
+                "Built: stable or archery range",
+                "Built: outpost",
+            ],
         )
 
     def test_rejects_invalid_extended_built_and_upgrade_fields(self) -> None:
