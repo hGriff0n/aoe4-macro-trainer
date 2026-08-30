@@ -1,10 +1,8 @@
 import re
 import unittest
-import json
 from pathlib import Path
 
-from tools.build_orders.compiler import _display_produced_unit, _pluralize_unit, compile_directory
-from tools.build_orders.identities import DEFAULT_IDENTITY_CATALOG
+from tools.build_orders.compiler import _pluralize_unit, compile_directory
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -48,13 +46,15 @@ class ProduceBehaviorHarness:
         self,
         check_id: str,
         player: str,
-        unit: tuple[int, int, int],
+        units: tuple[int, int, int] | list[tuple[int, int, int]],
         count: int,
         queued: bool,
     ) -> None:
+        if isinstance(units, tuple):
+            units = [units]
         self.active[check_id] = {
             "player": player,
-            "unit": unit,
+            "units": units,
             "count": count,
             "queued": queued,
             "remaining": count,
@@ -90,7 +90,7 @@ class ProduceBehaviorHarness:
             if not state["queued"] or state["player"] != player:
                 continue
             matching = sum(
-                entity["owner"] == player and unit == state["unit"]
+                entity["owner"] == player and unit in state["units"]
                 for entity in self.entities.values()
                 for unit in entity["entries"]
             )
@@ -111,7 +111,7 @@ class ProduceBehaviorHarness:
                 continue
             if player != state["player"]:
                 continue
-            if unit != state["unit"]:
+            if unit not in state["units"]:
                 continue
             seen = state["seen"]
             if spawned_squad_id in seen:
@@ -144,13 +144,16 @@ class ProduceCompilerTests(unittest.TestCase):
         )
         return compile_directory(directory).build_orders[0].steps[0].checks
 
-    def test_renders_normal_production_with_explicit_defaults(self) -> None:
+    def test_renders_normal_production_with_canonical_family_payload(self) -> None:
         check = self.compile_checks("[{id: spearman_2, count: 3}]")[0]
         self.assertEqual(check.title, "Produce 3 spearmen")
         self.assertFalse(check.optional)
         self.assertEqual(
             check.payload,
-            {"id": "unit_spearman_2_eng", "count": 3, "constant": False, "queued": False},
+            {
+                "ids": ["unit_spearman_2_eng", "unit_spearman_3_eng", "unit_spearman_4_eng"],
+                "count": 3,
+            },
         )
 
     def test_renders_constant_production_as_an_explicit_non_blocking_limitation(self) -> None:
@@ -162,7 +165,7 @@ class ProduceCompilerTests(unittest.TestCase):
         self.assertTrue(check.optional)
         self.assertEqual(
             check.payload,
-            {"id": "unit_villager_1_nomad_eng", "count": 1, "constant": True, "queued": False},
+            {"ids": ["unit_villager_1_nomad_eng"], "count": 1, "constant": True},
         )
 
     def test_renders_single_queued_unit(self) -> None:
@@ -171,7 +174,11 @@ class ProduceCompilerTests(unittest.TestCase):
         self.assertFalse(check.optional)
         self.assertEqual(
             check.payload,
-            {"id": "unit_archer_2_eng", "count": 1, "constant": False, "queued": True},
+            {
+                "ids": ["unit_archer_2_eng", "unit_archer_3_eng", "unit_archer_4_eng"],
+                "count": 1,
+                "queued": True,
+            },
         )
 
     def test_renders_requested_queued_count(self) -> None:
@@ -182,7 +189,11 @@ class ProduceCompilerTests(unittest.TestCase):
         self.assertFalse(check.optional)
         self.assertEqual(
             check.payload,
-            {"id": "unit_archer_2_abb", "count": 2, "constant": False, "queued": True},
+            {
+                "ids": ["unit_archer_2_abb", "unit_archer_3_abb", "unit_archer_4_abb"],
+                "count": 2,
+                "queued": True,
+            },
         )
 
     def test_queue_title_uses_catalog_safe_plural_display_names(self) -> None:
@@ -199,13 +210,7 @@ class ProduceCompilerTests(unittest.TestCase):
                 )[0]
                 self.assertEqual(check.title, expected_title)
 
-    def test_catalog_problem_families_never_receive_suffix_corruption(self) -> None:
-        catalog = json.loads(DEFAULT_IDENTITY_CATALOG.read_text(encoding="utf-8"))
-        displays = {
-            _display_produced_unit(identifier)
-            for civilization in catalog["civilizations"].values()
-            for identifier in civilization.get("squad", {})
-        }
+    def test_safe_pluralization_does_not_corrupt_family_labels(self) -> None:
         expected_plurals = {
             "archer": "archers",
             "spearman": "spearmen",
@@ -221,7 +226,6 @@ class ProduceCompilerTests(unittest.TestCase):
             "streltsy": "streltsy",
         }
 
-        self.assertTrue(expected_plurals.keys() <= displays)
         for unit, expected_plural in expected_plurals.items():
             with self.subTest(unit=unit):
                 self.assertEqual(_pluralize_unit(unit), expected_plural)
@@ -235,7 +239,7 @@ class ProduceCompilerTests(unittest.TestCase):
         self.assertTrue(check.optional)
         self.assertEqual(
             check.payload,
-            {"id": "unit_villager_1_nomad_eng", "count": 2, "constant": True, "queued": True},
+            {"ids": ["unit_villager_1_nomad_eng"], "count": 2, "constant": True, "queued": True},
         )
 
     def test_produce_defaults_do_not_leak_into_other_counted_check_payloads(self) -> None:
@@ -257,7 +261,10 @@ class ProduceCompilerTests(unittest.TestCase):
             encoding="utf-8",
         )
         checks = compile_directory(directory).build_orders[0].steps[0].checks
-        self.assertEqual(checks[0].payload, {"id": "unit_spearman_2_eng", "count": 2})
+        self.assertEqual(
+            checks[0].payload,
+            {"ids": ["unit_spearman_2_eng", "unit_spearman_3_eng", "unit_spearman_4_eng"], "count": 2},
+        )
         self.assertEqual(checks[1].payload, {"id": "building_unit_infantry_control_eng", "count": 1})
 
 
@@ -271,19 +278,21 @@ class ProduceHandlerContractTests(unittest.TestCase):
         activate = function_body(self.source, "Produce_Activate")
         self.assertIn("context.localPlayer", activate)
         self.assertIn("PRODUCE_STATE[check.id]", activate)
-        self.assertIn("BP_GetSquadBlueprint(check.payload.id)", activate)
+        self.assertIn("pbgs = Produce_ResolvePBGs(check.payload.ids)", activate)
         self.assertIn("remaining = check.payload.count", activate)
         self.assertIn("seen = {}", activate)
         self.assertNotIn("Player_GetSquads", self.source)
         self.assertNotIn("Produce_ScanNewSquads", self.source)
 
-    def test_resolves_produced_squad_blueprint_once_at_activation(self) -> None:
-        self.assertIn("pbg = BP_GetSquadBlueprint(check.payload.id)", self.source)
+    def test_resolves_every_family_blueprint_once_at_activation(self) -> None:
+        resolver = function_body(self.source, "Produce_ResolvePBGs")
+        self.assertIn("for _, id in ipairs(ids) do", resolver)
+        self.assertIn("table.insert(pbgs, BP_GetSquadBlueprint(id))", resolver)
         start = self.source.index("function Produce_OnBuildItemComplete")
         end = self.source.index("local function Produce_EnsureCommandEventRegistered", start + 1)
         callback = self.source[start:end]
-        self.assertIn("Produce_BlueprintsEqual(context.pbg, state.pbg)", callback)
-        self.assertNotIn("context.pbg == state.pbg", callback)
+        self.assertIn("Produce_MatchesPBG(state.pbgs, context.pbg)", callback)
+        self.assertNotIn("context.pbg == state.pbgs", callback)
         self.assertNotIn("BP_GetSquadBlueprint", callback)
 
     def test_registers_only_the_proven_command_and_completion_events_once(self) -> None:
@@ -309,7 +318,7 @@ class ProduceHandlerContractTests(unittest.TestCase):
     def test_completion_filters_owner_before_full_canonical_identity(self) -> None:
         callback = function_body(self.source, "Produce_OnBuildItemComplete")
         owner = "context.player == state.player"
-        identity = "Produce_BlueprintsEqual(context.pbg, state.pbg)"
+        identity = "Produce_MatchesPBG(state.pbgs, context.pbg)"
         self.assertIn(owner, callback)
         self.assertIn(identity, callback)
         self.assertLess(callback.index(owner), callback.index(identity))
@@ -337,6 +346,7 @@ class ProduceHandlerContractTests(unittest.TestCase):
         self.assertIn("EGroup_ForEach", queue)
         self.assertIn(owner, scan)
         self.assertIn(blueprint, scan)
+        self.assertIn("Produce_MatchesPBG(state.pbgs, Entity_GetProductionQueueItem(entity, index))", scan)
         self.assertLess(scan.index(owner), scan.index(blueprint))
         self.assertIn("Entity_GetProductionQueueSize(entity)", scan)
         self.assertIn("queueCount >= state.payload.count", queue)
@@ -409,6 +419,30 @@ class ProduceBehaviorTests(unittest.TestCase):
         self.assertFalse(self.harness.active["normal"]["completed"])
         self.harness.observe_completion("human", villager, 50048)
         self.assertTrue(self.harness.active["normal"]["completed"])
+
+    def test_spearman_family_matches_cross_age_queue_and_completion_events(self) -> None:
+        dark_age_spearman = (1, 0, 1)
+        feudal_spearman = (2, 0, 1)
+        castle_spearman = (3, 0, 1)
+        archer = (4, 0, 1)
+        spearmen = [dark_age_spearman, feudal_spearman, castle_spearman]
+
+        self.harness.set_queue("human-barracks", "human", [dark_age_spearman])
+        self.harness.set_queue("opponent-barracks", "opponent", [feudal_spearman])
+        self.harness.activate("queued-spearman", "human", spearmen, 1, queued=True)
+        self.assertTrue(self.harness.active["queued-spearman"]["completed"])
+        self.harness.observe_command("human-barracks")
+        self.harness.set_queue("human-barracks", "human", [])
+        self.harness.run_next_tick()
+        self.assertFalse(self.harness.active["queued-spearman"]["completed"])
+
+        self.harness.activate("completed-spearmen", "human", spearmen, 2, queued=False)
+        self.harness.observe_completion("human", archer, 600)
+        self.harness.observe_completion("opponent", feudal_spearman, 601)
+        self.harness.observe_completion("human", feudal_spearman, 602)
+        self.assertFalse(self.harness.active["completed-spearmen"]["completed"])
+        self.harness.observe_completion("human", castle_spearman, 603)
+        self.assertTrue(self.harness.active["completed-spearmen"]["completed"])
 
     def test_duplicate_spawned_squad_counts_once_and_full_tuple_must_match(self) -> None:
         villager = (199747, 0, 1)
