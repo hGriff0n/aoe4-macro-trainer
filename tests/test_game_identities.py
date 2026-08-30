@@ -2,6 +2,7 @@ import json
 import sqlite3
 import tempfile
 import unittest
+from dataclasses import FrozenInstanceError
 from pathlib import Path
 from unittest.mock import patch
 
@@ -200,16 +201,36 @@ class IdentityCatalogTests(unittest.TestCase):
             path.write_text(json.dumps(document), encoding="utf-8")
             return IdentityCatalog.load(path)
 
-    def test_resolves_shared_id_by_civilization(self) -> None:
+    def test_resolves_squad_family_aliases_to_one_immutable_family(self) -> None:
         catalog = IdentityCatalog.load(FIXTURE)
-        self.assertEqual(
-            catalog.resolve("english", "squad", "scout"),
-            "unit_scout_1_eng",
-        )
-        self.assertEqual(
-            catalog.resolve("abbasid", "squad", "scout"),
-            "unit_scout_1_abb",
-        )
+        spearman = catalog.resolve_squad_family("english", "spearman")
+
+        self.assertEqual(spearman.family_id, "spearman")
+        self.assertEqual(spearman.canonical_ids, ("unit_spearman_2_eng", "unit_spearman_3_eng"))
+        self.assertIsInstance(spearman.canonical_ids, tuple)
+        self.assertIs(spearman, catalog.resolve_squad_family("english", "spearman_2"))
+        self.assertIs(spearman, catalog.resolve_squad_family("english", "spearman_3"))
+        with self.assertRaises(FrozenInstanceError):
+            spearman.family_id = "changed"
+
+    def test_resolves_one_member_squad_family(self) -> None:
+        catalog = IdentityCatalog.load(FIXTURE)
+
+        scout = catalog.resolve_squad_family("english", "scout")
+        self.assertEqual(scout.family_id, "scout")
+        self.assertEqual(scout.canonical_ids, ("unit_scout_1_eng",))
+
+    def test_resolves_scalar_entity_and_upgrade_identities(self) -> None:
+        catalog = IdentityCatalog.load(FIXTURE)
+
+        self.assertEqual(catalog.resolve("english", "entity", "town_center"), "building_town_center_eng")
+        self.assertEqual(catalog.resolve("english", "upgrade", "wheelbarrow"), "upgrade_wheelbarrow_eng")
+
+    def test_rejects_scalar_squad_resolution(self) -> None:
+        catalog = IdentityCatalog.load(FIXTURE)
+
+        with self.assertRaisesRegex(IdentityCatalogError, "squad.*resolve_squad_family"):
+            catalog.resolve("english", "squad", "spearman")
 
     def test_rejects_non_normalized_human_id(self) -> None:
         catalog = IdentityCatalog.load(FIXTURE)
@@ -244,7 +265,7 @@ class IdentityCatalogTests(unittest.TestCase):
     def test_rejects_catalog_keys_that_are_not_normalized_official_ids(self) -> None:
         for identifier in ("town-center", "12345"):
             document = {
-                "schema_version": 1,
+                "schema_version": 2,
                 "source": "official_base_data",
                 "civilizations": {"english": {"entity": {identifier: "building_town_center_eng"}}},
             }
@@ -253,11 +274,105 @@ class IdentityCatalogTests(unittest.TestCase):
 
     def test_rejects_missing_or_wrong_catalog_source(self) -> None:
         for source in (None, "unofficial"):
-            document: dict[str, object] = {"schema_version": 1, "civilizations": {}}
+            document: dict[str, object] = {"schema_version": 2, "civilizations": {}}
             if source is not None:
                 document["source"] = source
             with self.subTest(source=source), self.assertRaisesRegex(IdentityCatalogError, "official_base_data"):
                 self.load_document(document)
+
+    def test_rejects_squad_alias_assigned_to_multiple_families(self) -> None:
+        document = {
+            "schema_version": 2,
+            "source": "official_base_data",
+            "civilizations": {
+                "english": {
+                    "squad": {
+                        "spearman": {
+                            "aliases": ["shared", "spearman"],
+                            "canonical_ids": ["unit_spearman_eng"],
+                        },
+                        "archer": {
+                            "aliases": ["archer", "shared"],
+                            "canonical_ids": ["unit_archer_eng"],
+                        },
+                    }
+                }
+            },
+        }
+
+        with self.assertRaisesRegex(IdentityCatalogError, "shared.*multiple squad families"):
+            self.load_document(document)
+
+    def test_rejects_squad_family_without_base_alias(self) -> None:
+        document = {
+            "schema_version": 2,
+            "source": "official_base_data",
+            "civilizations": {
+                "english": {
+                    "squad": {
+                        "spearman": {
+                            "aliases": ["spearman_2"],
+                            "canonical_ids": ["unit_spearman_eng"],
+                        }
+                    }
+                }
+            },
+        }
+
+        with self.assertRaisesRegex(IdentityCatalogError, "spearman.*aliases"):
+            self.load_document(document)
+
+    def test_rejects_squad_family_with_empty_canonical_ids(self) -> None:
+        document = {
+            "schema_version": 2,
+            "source": "official_base_data",
+            "civilizations": {
+                "english": {
+                    "squad": {"spearman": {"aliases": ["spearman"], "canonical_ids": []}}
+                }
+            },
+        }
+
+        with self.assertRaisesRegex(IdentityCatalogError, "canonical_ids.*non-empty"):
+            self.load_document(document)
+
+    def test_rejects_squad_family_with_duplicate_canonical_ids(self) -> None:
+        document = {
+            "schema_version": 2,
+            "source": "official_base_data",
+            "civilizations": {
+                "english": {
+                    "squad": {
+                        "spearman": {
+                            "aliases": ["spearman"],
+                            "canonical_ids": ["unit_spearman_eng", "unit_spearman_eng"],
+                        }
+                    }
+                }
+            },
+        }
+
+        with self.assertRaisesRegex(IdentityCatalogError, "canonical_ids.*unique"):
+            self.load_document(document)
+
+    def test_rejects_squad_family_with_unsorted_lists(self) -> None:
+        document = {
+            "schema_version": 2,
+            "source": "official_base_data",
+            "civilizations": {
+                "english": {
+                    "squad": {
+                        "spearman": {
+                            "aliases": ["spearman_2", "spearman"],
+                            "canonical_ids": ["unit_spearman_3_eng", "unit_spearman_2_eng"],
+                        }
+                    }
+                }
+            },
+        }
+
+        with self.assertRaisesRegex(IdentityCatalogError, "aliases.*sorted"):
+            self.load_document(document)
 
 
 if __name__ == "__main__":
