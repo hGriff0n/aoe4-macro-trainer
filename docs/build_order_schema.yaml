@@ -3,7 +3,7 @@
 ##
 ## Note:
 ##  - All id strings MUST be displayed as the either the localized string or the icon (or maybe both) in the objective ui
-##  - Every building, unit, technology, and age-up author ID is the lowercase underscore-normalized official base ID when that base ID is unique. When a base ID is ambiguous, use the lowercase underscore-normalized official item ID, including its distinguishing suffix.
+##  - Building, technology, and age-up author IDs are the lowercase underscore-normalized official base ID when that base ID is unique. When a base ID is ambiguous, use the lowercase underscore-normalized official item ID, including its distinguishing suffix. `produce` and `units` use the official gameplay unit-family ID described below.
 ##
 civ: string # game id of the civilization that must be selected for this build order
 title: string # in game display string to identify this build order. technically, the full display string is "icon(<civ>) - <title>" *unless the settings groups build order by civ)
@@ -33,7 +33,7 @@ steps: # a list of build order steps, the intention is for each build order to d
         optional: bool # Experimental: Defaults to false. Allows build orders to specify recommended upgrades but to not block completion on them
         queued: bool # Defaults to false. If true, the upgrade only needs to be queued rather than completed
     produce: # A check to specify unit production situations across all production buildings. In general, constant villager production is assumed outside of situations where the build order requires the main TC to do something else.
-      - id: string # Author ID described above for the unit to produce.
+      - id: string # Official gameplay unit family ID for the unit to produce (for example, spearman). Generated age-specific aliases remain temporarily accepted for compatibility.
         count: integer # Defaults to 1. The minimum number of units that should be built
         constant: bool # Defaults to false. An alternative flag to indicate that the user should be trying for constant unit production
         queued: bool # Experimental: Defaults to false. Modifies the check to only require that the unit was queued but does not require it to actually be produced. This is potentially something we will want to rework in the future as it is a bit of a hack to get around some very precise ordering of actions that the rest of the schema can't enforce. However, these orderings might be too detailed to be useful and so should be left as hints instead
@@ -46,6 +46,6 @@ steps: # a list of build order steps, the intention is for each build order to d
       - id: string # Author ID described above for the building.
         count: # Minimum number of built instances of the building
     units: # A check that the player should have "X" units of a given type alive. This may be swapable with `produce` in practice as the player may be unable to prevent opponents from killing the requisite unit, potentially soft-locking the build order
-      - id: string # Author ID described above for the unit that must be alive.
+      - id: string # Official gameplay unit family ID for the unit that must be alive (for example, spearman). Generated age-specific aliases remain temporarily accepted for compatibility.
         count: integer # Defaults to 1. The minimum number of units that should be alive at the same time
     hints: [ string ] # An array of strings that can provide more contextual hints for what the player should be doing. These are sometimes checks that we don't currently have a way of representing in the schema

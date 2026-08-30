@@ -81,6 +81,40 @@ def _humanize_identity_id(identifier: str) -> str:
     return identifier.replace("_", " ")
 
 
+_PRODUCED_UNIT_SINGULAR_SUFFIX_PLURALS = {
+    "archer": "archers",
+    "spearman": "spearmen",
+    "man at arms": "men at arms",
+}
+_PRODUCED_UNIT_EXACT_PLURALS = {
+    "janissary": "janissaries",
+    "shaman": "shamans",
+}
+_PRODUCED_UNIT_ALREADY_PLURAL_SUFFIXES = (
+    "footmen",
+    "raiders",
+    "mercenaries",
+    "nest of bees",
+    "samurai",
+    "streltsy",
+)
+
+
+def _pluralize_unit(unit: str) -> str:
+    """Use only vetted official-catalog display inflections; unknown labels stay unchanged."""
+    exact = _PRODUCED_UNIT_EXACT_PLURALS.get(unit)
+    if exact is not None:
+        return exact
+    if any(unit == suffix or unit.endswith(f" {suffix}") for suffix in _PRODUCED_UNIT_ALREADY_PLURAL_SUFFIXES):
+        return unit
+    for singular, plural in _PRODUCED_UNIT_SINGULAR_SUFFIX_PLURALS.items():
+        if unit == singular:
+            return plural
+        if unit.endswith(f" {singular}"):
+            return f"{unit[: -len(singular)]}{plural}"
+    return unit
+
+
 def _resolve_identity_payload(
     payload: dict[str, object],
     *,
@@ -106,6 +140,20 @@ def _resolve_identity_payload(
                 f"expected {category} ID '{item}': {exc}",
             )
     payload[key] = canonical[0] if key == "id" else canonical
+
+
+def _resolve_squad_family_payload(
+    payload: dict[str, object],
+    *,
+    civ: str,
+    identities: IdentityCatalog,
+    file: Path,
+    path: str,
+) -> str:
+    author_id = payload.pop("id")
+    family = identities.resolve_squad_family(civ, author_id)
+    payload["ids"] = list(family.canonical_ids)
+    return family.family_id
 
 
 def _resource_checks(kind: str, value: Any, file: Path, path: str, no_collect: bool = False) -> list[CheckDescriptor]:
@@ -204,16 +252,44 @@ def _check_descriptors(
                     if flag in mapping:
                         if not isinstance(mapping[flag], bool): _error(file, f"{item_path}.{flag}", "must be boolean")
                         payload[flag] = mapping[flag]
-            _resolve_identity_payload(
-                payload,
-                kind=kind,
-                civ=civ,
-                identities=identities,
-                file=file,
-                path=item_path,
-            )
-            label = _humanize_identity_id(identifier)
-            title = f"Have {payload['count']} {label} active" if kind == "units" else label
+            if kind in {"produce", "units"}:
+                try:
+                    family_id = _resolve_squad_family_payload(
+                        payload,
+                        civ=civ,
+                        identities=identities,
+                        file=file,
+                        path=item_path,
+                    )
+                except IdentityCatalogError as exc:
+                    _error(
+                        file,
+                        f"{item_path}.id",
+                        f"civilization '{normalize_identity_id(civ)}', {kind} check, "
+                        f"expected squad ID '{identifier}': {exc}",
+                    )
+                if kind == "produce":
+                    unit = _humanize_identity_id(family_id)
+                    counted_unit = unit if payload["count"] == 1 else _pluralize_unit(unit)
+                    if payload.get("constant", False):
+                        title = f"Constantly produce {unit} [unsupported: continuous production]"
+                        optional = True
+                    elif payload.get("queued", False):
+                        title = f"Queue {payload['count']} {counted_unit}"
+                    else:
+                        title = f"Produce {payload['count']} {counted_unit}"
+                else:
+                    title = f"Have {payload['count']} {_humanize_identity_id(family_id)} active"
+            else:
+                _resolve_identity_payload(
+                    payload,
+                    kind=kind,
+                    civ=civ,
+                    identities=identities,
+                    file=file,
+                    path=item_path,
+                )
+                title = _humanize_identity_id(identifier)
             result.append(CheckDescriptor(kind, title, optional, payload))
         return result
     if kind == "hints":
