@@ -91,8 +91,8 @@ class UnitsCompilerTests(unittest.TestCase):
         self.assertEqual(
             [(check.title, check.optional, check.payload) for check in checks],
             [
-                ("Have 3 spearman_2 active", False, {"id": "unit_spearman_2_eng", "count": 3}),
-                ("Have 1 longbowman_2 active", False, {"id": "unit_archer_2_eng", "count": 1}),
+                ("spearman 2", False, {"id": "unit_spearman_2_eng", "count": 3}),
+                ("longbowman 2", False, {"id": "unit_archer_2_eng", "count": 1}),
             ],
         )
 
