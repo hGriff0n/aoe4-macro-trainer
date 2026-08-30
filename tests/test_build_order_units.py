@@ -243,6 +243,7 @@ class UnitsPollingBehaviorTests(unittest.TestCase):
         feudal_spearman = SquadFixture("human", PbgFixture(102, 7, 2))
         castle_spearman = SquadFixture("human", PbgFixture(103, 7, 2))
         opponent_spearman = SquadFixture("opponent", PbgFixture(103, 7, 2))
+        unrelated_owned_squad = SquadFixture("human", PbgFixture(404, 7, 2))
 
         self.assertEqual(
             self.model.poll([dark_spearman, feudal_spearman, opponent_spearman]),
@@ -250,7 +251,7 @@ class UnitsPollingBehaviorTests(unittest.TestCase):
         )
         feudal_spearman.owner = "opponent"
         self.assertEqual(
-            self.model.poll([dark_spearman, feudal_spearman, opponent_spearman]),
+            self.model.poll([dark_spearman, feudal_spearman, opponent_spearman, unrelated_owned_squad]),
             {"spears": False, "family": False},
         )
         self.assertEqual(
