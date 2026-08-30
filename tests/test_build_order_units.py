@@ -56,8 +56,8 @@ class UnitsPollingModel:
         self.checks: dict[str, dict[str, object]] = {}
         self.polling = False
 
-    def activate(self, check_id: str, player: str, blueprint: object, count: int) -> None:
-        self.checks[check_id] = {"player": player, "blueprint": blueprint, "count": count}
+    def activate(self, check_id: str, player: str, blueprints: list[object], count: int) -> None:
+        self.checks[check_id] = {"player": player, "blueprints": blueprints, "count": count}
         self.polling = True
 
     def deactivate(self, check_id: str) -> None:
@@ -74,6 +74,9 @@ class UnitsPollingModel:
             )
         return left == right
 
+    def matches_blueprint(self, blueprints: list[object], blueprint: object) -> bool:
+        return any(self.blueprints_equal(candidate, blueprint) for candidate in blueprints)
+
     def poll(self, squads: list[SquadFixture | PoisonedOpponentSquad]) -> dict[str, bool]:
         completed: dict[str, bool] = {}
         for check_id, check in self.checks.items():
@@ -81,7 +84,7 @@ class UnitsPollingModel:
             for squad in squads:
                 if squad.owner != check["player"]:
                     continue
-                if not self.blueprints_equal(squad.blueprint, check["blueprint"]):
+                if not self.matches_blueprint(check["blueprints"], squad.blueprint):
                     continue
                 if squad.alive is False:
                     continue
@@ -108,8 +111,8 @@ class UnitsCompilerTests(unittest.TestCase):
         self.assertEqual(
             [(check.title, check.optional, check.payload) for check in checks],
             [
-                ("Have 3 spearman 2 active", False, {"id": "unit_spearman_2_eng", "count": 3}),
-                ("Have 1 longbowman 2 active", False, {"id": "unit_archer_2_eng", "count": 1}),
+                ("Have 3 spearman active", False, {"ids": ["unit_spearman_2_eng", "unit_spearman_3_eng", "unit_spearman_4_eng"], "count": 3}),
+                ("Have 1 longbowman active", False, {"ids": ["unit_archer_2_eng", "unit_archer_3_eng", "unit_archer_4_eng"], "count": 1}),
             ],
         )
 
@@ -125,30 +128,33 @@ class UnitsHandlerContractTests(unittest.TestCase):
         activate = function_body(self.source, "Units_Activate")
         self.assertIn("local player = context.localPlayer", activate)
         self.assertIn("UNITS_STATE[check.id]", activate)
-        self.assertIn("pbg = BP_GetSquadBlueprint(check.payload.id)", activate)
+        self.assertIn("pbgs = Units_ResolvePBGs(check.payload.ids)", activate)
         self.assertIn("Rule_AddInterval(Units_Poll", activate)
         self.assertIn("Units_Poll()", activate)
 
-    def test_resolves_unit_blueprint_at_activation_not_each_poll(self) -> None:
-        self.assertIn("pbg = BP_GetSquadBlueprint(check.payload.id)", self.source)
+    def test_resolves_every_unit_family_blueprint_at_activation_not_each_poll(self) -> None:
+        resolver = function_body(self.source, "Units_ResolvePBGs")
+        self.assertIn("BP_GetSquadBlueprint", resolver)
         start = self.source.index("function Units_Poll")
         end = self.source.index("function Units_Activate", start + 1)
         poll = self.source[start:end]
         self.assertNotIn("BP_GetSquadBlueprint", poll)
-        self.assertIn("state.pbg", poll)
+        self.assertIn("state.pbgs", poll)
 
     def test_matches_squad_blueprints_by_pbg_tuple_value(self) -> None:
         matcher = function_body(self.source, "Units_BlueprintsEqual")
         self.assertIn("left.PropertyBagGroupID == right.PropertyBagGroupID", matcher)
         self.assertIn("left.PropertyBagGroupModPackID == right.PropertyBagGroupModPackID", matcher)
         self.assertIn("left.PropertyBagGroupType == right.PropertyBagGroupType", matcher)
+        matcher = function_body(self.source, "Units_MatchesPBG")
+        self.assertIn("Units_BlueprintsEqual(candidate, pbg)", matcher)
         scan = function_body(self.source, "Units_ScanSquad")
-        self.assertIn("Units_BlueprintsEqual(Squad_GetBlueprint(squad), state.pbg) == false", scan)
+        self.assertIn("Units_MatchesPBG(state.pbgs, Squad_GetBlueprint(squad)) == false", scan)
 
     def test_recomputes_human_owned_living_canonical_squads_before_each_threshold(self) -> None:
         scan = function_body(self.source, "Units_ScanSquad")
         owner = "Squad_GetPlayerOwner(squad) ~= state.player"
-        blueprint = "Units_BlueprintsEqual(Squad_GetBlueprint(squad), state.pbg) == false"
+        blueprint = "Units_MatchesPBG(state.pbgs, Squad_GetBlueprint(squad)) == false"
         alive = "Squad_IsAlive(squad) == false"
         self.assertIn(owner, scan)
         self.assertIn(blueprint, scan)
@@ -179,7 +185,7 @@ class UnitsHandlerContractTests(unittest.TestCase):
 class UnitsPollingBehaviorTests(unittest.TestCase):
     def setUp(self) -> None:
         self.model = UnitsPollingModel()
-        self.model.activate("spears", "human", "spearman", 2)
+        self.model.activate("spears", "human", ["spearman"], 2)
 
     def test_opponent_squad_is_rejected_before_blueprint_or_alive_are_observed(self) -> None:
         result = self.model.poll(
@@ -208,7 +214,7 @@ class UnitsPollingBehaviorTests(unittest.TestCase):
     def test_starting_scout_counts_when_its_pbg_tuple_matches_by_value(self) -> None:
         expected_scout = PbgFixture(199733, 0, 0)
         starting_scout = PbgFixture(199733, 0, 0)
-        self.model.activate("scouts", "human", expected_scout, 1)
+        self.model.activate("scouts", "human", [expected_scout], 1)
 
         self.assertEqual(
             self.model.poll([SquadFixture("human", starting_scout)]),
@@ -216,7 +222,7 @@ class UnitsPollingBehaviorTests(unittest.TestCase):
         )
 
     def test_simultaneous_descriptors_remain_independent_when_one_is_removed(self) -> None:
-        self.model.activate("archers", "human", "archer", 1)
+        self.model.activate("archers", "human", ["archer"], 1)
         squads = [SquadFixture("human", "spearman"), SquadFixture("human", "spearman"), SquadFixture("human", "archer")]
         self.assertEqual(self.model.poll(squads), {"spears": True, "archers": True})
         self.model.deactivate("spears")
@@ -226,6 +232,36 @@ class UnitsPollingBehaviorTests(unittest.TestCase):
         self.model.deactivate("archers")
         self.assertFalse(self.model.polling)
         self.assertEqual(self.model.poll(squads), {})
+
+    def test_owned_living_spearman_tiers_count_as_one_family_and_reverse_when_lost(self) -> None:
+        dark_age = PbgFixture(101, 7, 2)
+        feudal_age = PbgFixture(102, 7, 2)
+        castle_age = PbgFixture(103, 7, 2)
+        self.model.activate("family", "human", [dark_age, feudal_age, castle_age], 2)
+
+        dark_spearman = SquadFixture("human", PbgFixture(101, 7, 2))
+        feudal_spearman = SquadFixture("human", PbgFixture(102, 7, 2))
+        castle_spearman = SquadFixture("human", PbgFixture(103, 7, 2))
+        opponent_spearman = SquadFixture("opponent", PbgFixture(103, 7, 2))
+
+        self.assertEqual(
+            self.model.poll([dark_spearman, feudal_spearman, opponent_spearman]),
+            {"spears": False, "family": True},
+        )
+        feudal_spearman.owner = "opponent"
+        self.assertEqual(
+            self.model.poll([dark_spearman, feudal_spearman, opponent_spearman]),
+            {"spears": False, "family": False},
+        )
+        self.assertEqual(
+            self.model.poll([dark_spearman, castle_spearman]),
+            {"spears": False, "family": True},
+        )
+        castle_spearman.alive = False
+        self.assertEqual(
+            self.model.poll([dark_spearman, castle_spearman]),
+            {"spears": False, "family": False},
+        )
 
 
 if __name__ == "__main__":
