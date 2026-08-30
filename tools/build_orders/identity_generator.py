@@ -140,6 +140,7 @@ def generate_identity_document(rows: Iterable[Mapping[str, object]]) -> dict[str
 
     civilizations: dict[str, dict[str, dict[str, object]]] = {}
     squad_aliases: dict[str, dict[str, str]] = {}
+    squad_family_base_ids: dict[str, dict[str, str]] = {}
     for (civilization, category, base_id), items in sorted(grouped_identities.items()):
         output = civilizations.setdefault(civilization, {}).setdefault(category, {})
         if category == "squad":
@@ -148,13 +149,21 @@ def generate_identity_document(rows: Iterable[Mapping[str, object]]) -> dict[str
             canonical_ids = sorted(set(items.values()))
             known_aliases = squad_aliases.setdefault(civilization, {})
             for alias in aliases:
-                existing_family = known_aliases.get(alias)
-                if existing_family is not None and existing_family != family_id:
+                existing_base_id = known_aliases.get(alias)
+                if existing_base_id is not None and existing_base_id != base_id:
                     raise IdentityGenerationError(
                         f"conflicting squad alias for {civilization}.{alias}: "
-                        f"{existing_family!r} and {family_id!r}"
+                        f"{existing_base_id!r} and {base_id!r}"
                     )
-                known_aliases[alias] = family_id
+                known_aliases[alias] = base_id
+            known_family_base_ids = squad_family_base_ids.setdefault(civilization, {})
+            existing_base_id = known_family_base_ids.get(family_id)
+            if existing_base_id is not None and existing_base_id != base_id:
+                raise IdentityGenerationError(
+                    f"conflicting squad family for {civilization}.{family_id}: "
+                    f"{existing_base_id!r} and {base_id!r}"
+                )
+            known_family_base_ids[family_id] = base_id
             family = {
                 "aliases": aliases,
                 "canonical_ids": canonical_ids,

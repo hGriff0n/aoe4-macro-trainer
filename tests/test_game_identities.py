@@ -122,6 +122,15 @@ class IdentityGeneratorTests(unittest.TestCase):
         with self.assertRaisesRegex(IdentityGenerationError, "conflicting squad alias"):
             generate_identity_document(rows)
 
+    def test_generator_rejects_alias_reused_by_distinct_raw_squad_base_ids(self) -> None:
+        rows = [
+            row("units", "foo-bar", "unit_same", ["en"], item_id="shared-item"),
+            row("units", "foo_bar", "unit_same", ["en"], item_id="shared-item"),
+        ]
+
+        with self.assertRaisesRegex(IdentityGenerationError, "conflicting squad alias"):
+            generate_identity_document(rows)
+
     def test_generator_rejects_conflicting_normalized_key(self) -> None:
         rows = [
             row("buildings", "town-center", "building_a", ["en"], item_id="town-center-1"),
