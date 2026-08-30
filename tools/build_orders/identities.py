@@ -36,6 +36,8 @@ def _validate_squad_list(value: Any, path: Path, field: str, *, normalized_ids: 
         _error(path, f"{field} must be a non-empty list")
     if not all(isinstance(item, str) for item in value):
         _error(path, f"{field} must contain strings")
+    if not normalized_ids and not all(value):
+        _error(path, f"{field} must contain non-empty strings")
     if normalized_ids and not all(IDENTITY_ID.fullmatch(item) for item in value):
         _error(path, f"{field} must contain normalized official IDs")
     if value != sorted(value):

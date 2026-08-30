@@ -336,6 +336,20 @@ class IdentityCatalogTests(unittest.TestCase):
         with self.assertRaisesRegex(IdentityCatalogError, "canonical_ids.*non-empty"):
             self.load_document(document)
 
+    def test_rejects_squad_family_with_empty_canonical_identifier(self) -> None:
+        document = {
+            "schema_version": 2,
+            "source": "official_base_data",
+            "civilizations": {
+                "english": {
+                    "squad": {"spearman": {"aliases": ["spearman"], "canonical_ids": [""]}}
+                }
+            },
+        }
+
+        with self.assertRaisesRegex(IdentityCatalogError, "canonical_ids.*non-empty strings"):
+            self.load_document(document)
+
     def test_rejects_squad_family_with_duplicate_canonical_ids(self) -> None:
         document = {
             "schema_version": 2,
@@ -355,7 +369,7 @@ class IdentityCatalogTests(unittest.TestCase):
         with self.assertRaisesRegex(IdentityCatalogError, "canonical_ids.*unique"):
             self.load_document(document)
 
-    def test_rejects_squad_family_with_unsorted_lists(self) -> None:
+    def test_rejects_squad_family_with_unsorted_aliases(self) -> None:
         document = {
             "schema_version": 2,
             "source": "official_base_data",
@@ -364,7 +378,7 @@ class IdentityCatalogTests(unittest.TestCase):
                     "squad": {
                         "spearman": {
                             "aliases": ["spearman_2", "spearman"],
-                            "canonical_ids": ["unit_spearman_3_eng", "unit_spearman_2_eng"],
+                            "canonical_ids": ["unit_spearman_2_eng", "unit_spearman_3_eng"],
                         }
                     }
                 }
@@ -372,6 +386,25 @@ class IdentityCatalogTests(unittest.TestCase):
         }
 
         with self.assertRaisesRegex(IdentityCatalogError, "aliases.*sorted"):
+            self.load_document(document)
+
+    def test_rejects_squad_family_with_unsorted_canonical_ids(self) -> None:
+        document = {
+            "schema_version": 2,
+            "source": "official_base_data",
+            "civilizations": {
+                "english": {
+                    "squad": {
+                        "spearman": {
+                            "aliases": ["spearman"],
+                            "canonical_ids": ["unit_spearman_3_eng", "unit_spearman_2_eng"],
+                        }
+                    }
+                }
+            },
+        }
+
+        with self.assertRaisesRegex(IdentityCatalogError, "canonical_ids.*sorted"):
             self.load_document(document)
 
 
