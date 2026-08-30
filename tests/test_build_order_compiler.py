@@ -225,9 +225,28 @@ steps:
 
     def test_compiles_single_mapping_with_canonical_immutable_model(self) -> None:
         catalog = self.compile({"opening.yaml": """civ: English\ntitle: 2 TC\nsteps:\n  - title: Opening\n    vils:\n      food: 7\n"""})
-        self.assertEqual(catalog, Catalog((BuildOrder("english-2-tc", "English", "2 TC", (Step("Opening", (CheckDescriptor("vils", "7 food villagers", False, {"resource": "food", "count": 7}),)),)),)))
+        self.assertEqual(catalog, Catalog((BuildOrder("english-2-tc", "English", "2 TC", (Step("Opening", (CheckDescriptor("vils", "7 food", False, {"food": 7}),)),)),)))
         with self.assertRaises(Exception):
             catalog.build_orders[0].title = "changed"
+
+    def test_vils_mapping_compiles_one_canonical_reversible_descriptor(self) -> None:
+        catalog = self.compile({"opening.yaml": """civ: English
+title: Villager split
+steps:
+  - vils: {stone: 2, wood: 4, gold: 3, food: 7}
+"""})
+        checks = catalog.build_orders[0].steps[0].checks
+        self.assertEqual(
+            checks,
+            (
+                CheckDescriptor(
+                    "vils",
+                    "7 food | 3 gold | 4 wood | 2 stone",
+                    False,
+                    {"food": 7, "gold": 3, "wood": 4, "stone": 2},
+                ),
+            ),
+        )
 
     def test_compiles_list_documents_yaml_and_yml_in_sorted_file_order(self) -> None:
         catalog = self.compile({

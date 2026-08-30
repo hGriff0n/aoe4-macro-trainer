@@ -11,7 +11,8 @@ from .identities import (
 )
 from .model import BuildOrder, Catalog, CheckDescriptor, Step, normalize_id
 
-RESOURCES = {"food", "gold", "stone", "wood"}
+RESOURCE_ORDER = ("food", "gold", "wood", "stone")
+RESOURCES = set(RESOURCE_ORDER)
 CHECK_FIELDS = {"vils", "rallypoint", "built", "age_up", "upgrades", "produce", "resources", "buildings", "units", "hints"}
 CHECK_ID_CATEGORIES = {
     "built": "entity",
@@ -178,15 +179,25 @@ def _resource_checks(kind: str, value: Any, file: Path, path: str, no_collect: b
     return checks
 
 
-def _check_descriptors(
-    kind: str,
-    value: Any,
-    file: Path,
-    path: str,
-    civ: str,
-    identities: IdentityCatalog,
-) -> list[CheckDescriptor]:
-    if kind in {"vils", "resources"}:
+def _vils_check(value: Any, file: Path, path: str) -> list[CheckDescriptor]:
+    mapping = _mapping(value, file, path)
+    thresholds: dict[str, int] = {}
+    for resource in RESOURCE_ORDER:
+        if resource in mapping:
+            thresholds[resource] = _positive(mapping[resource], file, f"{path}.{resource}")
+    for resource in mapping:
+        if resource not in RESOURCES:
+            _error(file, f"{path}.{resource}", "unsupported resource")
+    if not thresholds:
+        _error(file, path, "must not be empty")
+    title = " | ".join(f"{count} {resource}" for resource, count in thresholds.items())
+    return [CheckDescriptor("vils", title, False, thresholds)]
+
+
+def _check_descriptors(kind: str, value: Any, file: Path, path: str) -> list[CheckDescriptor]:
+    if kind == "vils":
+        return _vils_check(value, file, path)
+    if kind == "resources":
         return _resource_checks(kind, value, file, path)
     if kind == "rallypoint":
         checks = []
