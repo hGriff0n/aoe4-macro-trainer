@@ -138,9 +138,34 @@ def generate_identity_document(rows: Iterable[Mapping[str, object]]) -> dict[str
                 )
             identities[normalized_item_id] = attrib_name
 
-    civilizations: dict[str, dict[str, dict[str, str]]] = {}
+    civilizations: dict[str, dict[str, dict[str, object]]] = {}
+    squad_aliases: dict[str, dict[str, str]] = {}
     for (civilization, category, base_id), items in sorted(grouped_identities.items()):
         output = civilizations.setdefault(civilization, {}).setdefault(category, {})
+        if category == "squad":
+            family_id = _normalize_official_id(base_id, "baseId")
+            aliases = sorted({family_id, *items})
+            canonical_ids = sorted(set(items.values()))
+            known_aliases = squad_aliases.setdefault(civilization, {})
+            for alias in aliases:
+                existing_family = known_aliases.get(alias)
+                if existing_family is not None and existing_family != family_id:
+                    raise IdentityGenerationError(
+                        f"conflicting squad alias for {civilization}.{alias}: "
+                        f"{existing_family!r} and {family_id!r}"
+                    )
+                known_aliases[alias] = family_id
+            family = {
+                "aliases": aliases,
+                "canonical_ids": canonical_ids,
+            }
+            existing_family = output.get(family_id)
+            if existing_family is not None and existing_family != family:
+                raise IdentityGenerationError(
+                    f"conflicting squad family for {civilization}.{family_id}"
+                )
+            output[family_id] = family
+            continue
         canonical_ids = set(items.values())
         if len(canonical_ids) == 1:
             normalized_base_id = _normalize_official_id(base_id, "baseId")
@@ -150,7 +175,7 @@ def generate_identity_document(rows: Iterable[Mapping[str, object]]) -> dict[str
             _insert_identity(output, civilization, category, item_id, attrib_name)
 
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "source": "official_base_data",
         "civilizations": civilizations,
     }

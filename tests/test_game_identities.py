@@ -58,7 +58,69 @@ class IdentityGeneratorTests(unittest.TestCase):
 
         english = document["civilizations"]["english"]
         self.assertEqual(english["entity"]["town_center"], "building_town_center_eng")
-        self.assertEqual(english["squad"]["scout"], "unit_scout_1_eng")
+        self.assertEqual(
+            english["squad"]["scout"],
+            {
+                "aliases": ["scout", "scout_1"],
+                "canonical_ids": ["unit_scout_1_eng"],
+            },
+        )
+
+    def test_generator_groups_squad_tiers_into_one_official_family(self) -> None:
+        document = generate_identity_document(
+            [
+                row("units", "spearman", "unit_spearman_1_eng", ["en"], item_id="spearman-1"),
+                row("units", "spearman", "unit_spearman_2_eng", ["en"], item_id="spearman-2"),
+                row("units", "spearman", "unit_spearman_3_eng", ["en"], item_id="spearman-3"),
+            ]
+        )
+
+        self.assertEqual(
+            document["civilizations"]["english"]["squad"],
+            {
+                "spearman": {
+                    "aliases": ["spearman", "spearman_1", "spearman_2", "spearman_3"],
+                    "canonical_ids": [
+                        "unit_spearman_1_eng",
+                        "unit_spearman_2_eng",
+                        "unit_spearman_3_eng",
+                    ],
+                }
+            },
+        )
+
+    def test_generator_squad_families_are_deterministic_for_reversed_input(self) -> None:
+        rows = [
+            row("units", "spearman", "unit_spearman_1_eng", ["en"], item_id="spearman-1"),
+            row("units", "spearman", "unit_spearman_2_eng", ["en"], item_id="spearman-2"),
+            row("units", "spearman", "unit_spearman_3_eng", ["en"], item_id="spearman-3"),
+        ]
+
+        self.assertEqual(generate_identity_document(rows), generate_identity_document(reversed(rows)))
+
+    def test_generator_creates_one_member_scout_family(self) -> None:
+        document = generate_identity_document(
+            [row("units", "scout", "unit_scout_1_eng", ["en"], item_id="scout-1")]
+        )
+
+        self.assertEqual(
+            document["civilizations"]["english"]["squad"],
+            {
+                "scout": {
+                    "aliases": ["scout", "scout_1"],
+                    "canonical_ids": ["unit_scout_1_eng"],
+                }
+            },
+        )
+
+    def test_generator_rejects_squad_alias_collision_between_families(self) -> None:
+        rows = [
+            row("units", "spearman", "unit_spearman_eng", ["en"], item_id="shared-item"),
+            row("units", "archer", "unit_archer_eng", ["en"], item_id="shared-item"),
+        ]
+
+        with self.assertRaisesRegex(IdentityGenerationError, "conflicting squad alias"):
+            generate_identity_document(rows)
 
     def test_generator_rejects_conflicting_normalized_key(self) -> None:
         rows = [
@@ -103,7 +165,19 @@ class IdentityGeneratorTests(unittest.TestCase):
             ]
         )
 
-        self.assertEqual(document["civilizations"], {"english": {"squad": {"spearman": "unit_spearman_eng"}}})
+        self.assertEqual(
+            document["civilizations"],
+            {
+                "english": {
+                    "squad": {
+                        "spearman": {
+                            "aliases": ["spearman", "spearman_1"],
+                            "canonical_ids": ["unit_spearman_eng"],
+                        }
+                    }
+                }
+            },
+        )
 
     def test_generator_rejects_malformed_relevant_records(self) -> None:
         malformed = row("units", "scout", "unit_scout_1_eng", ["en"])
@@ -127,7 +201,19 @@ class IdentityGeneratorTests(unittest.TestCase):
             ]
         )
 
-        self.assertEqual(document["civilizations"], {"english": {"squad": {"scout": "unit_scout_1_eng"}}})
+        self.assertEqual(
+            document["civilizations"],
+            {
+                "english": {
+                    "squad": {
+                        "scout": {
+                            "aliases": ["scout", "scout_1"],
+                            "canonical_ids": ["unit_scout_1_eng"],
+                        }
+                    }
+                }
+            },
+        )
 
     def test_generator_rejects_unknown_playable_translation_sentinel(self) -> None:
         sentinel = row(
@@ -147,7 +233,15 @@ class IdentityGeneratorTests(unittest.TestCase):
 
         document = generate_identity_document([duplicate, duplicate])
 
-        self.assertEqual(document["civilizations"]["english"]["squad"], {"scout": "unit_scout_1_eng"})
+        self.assertEqual(
+            document["civilizations"]["english"]["squad"],
+            {
+                "scout": {
+                    "aliases": ["scout", "scout_1"],
+                    "canonical_ids": ["unit_scout_1_eng"],
+                }
+            },
+        )
 
     def test_generator_serialization_is_identical_for_different_input_order(self) -> None:
         rows = [
