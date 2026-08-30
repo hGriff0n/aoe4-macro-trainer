@@ -100,14 +100,21 @@ steps:
 
         scar = self.paths.scar_output.read_text(encoding="utf-8")
         self.assertIn(
-            'payload = {id = "barracks", count = 2, vils = 3, location = "forward"}',
+            'payload = {id = "building_unit_infantry_control_eng", count = 2, vils = 3, location = "forward"}',
             scar,
         )
         self.assertIn(
-            'payload = {oneof = {"stable", "archery_range"}, count = 1}', scar
+            'payload = {oneof = {"building_unit_cavalry_control_eng", "building_unit_ranged_control_eng"}, count = 1}',
+            scar,
         )
-        self.assertIn('payload = {id = "wheelbarrow", queued = true}', scar)
-        self.assertIn('payload = {id = "horticulture", queued = false}', scar)
+        self.assertIn(
+            'payload = {id = "upgrade_unit_town_center_wheelbarrow_1", queued = true}',
+            scar,
+        )
+        self.assertIn(
+            'payload = {id = "upgrade_econ_resource_food_harvest_rate_2", queued = false}',
+            scar,
+        )
 
     def test_malformed_yaml_leaves_baseline_and_never_calls_essence(self) -> None:
         (self.orders / "bad.yaml").write_text("civ: english\ntitle: Bad\nsteps: [not-a-mapping]\n", encoding="utf-8")
@@ -175,9 +182,7 @@ steps:
             ),
             patch("tools.build_mod.time.sleep"),
         ):
-            result = _wait_for_fresh_archive(self.archive, before, timeout=1)
-
-        self.assertTrue(result)
+            self.assertTrue(_wait_for_fresh_archive(self.archive, before, timeout=1))
 
     def test_nonzero_essence_result_is_returned(self) -> None:
         (self.orders / "valid.yaml").write_text(VALID, encoding="utf-8")

@@ -1,5 +1,6 @@
 BUILD_ORDER_STATE = {
 	localPlayer = nil,
+	civ = nil,
 	selectedBuild = nil,
 	activeStepIndex = nil,
 	primaryObjectiveID = nil,
@@ -12,6 +13,10 @@ BUILD_ORDER_STATE = {
 
 function BuildOrder_RegisterHandler(kind, handler)
 	BUILD_ORDER_STATE.handlerMap[kind] = handler
+end
+
+function BuildOrder_LogMissingHandler(check)
+	print("BuildOrder: no registered handler for " .. tostring(check.kind) .. " (check " .. tostring(check.id) .. ")")
 end
 
 function BuildOrder_ClearActiveHierarchy()
@@ -38,6 +43,7 @@ function BuildOrder_Stop()
 	BUILD_ORDER_STATE.advancing = true
 	BuildOrder_ClearActiveHierarchy()
 	BUILD_ORDER_STATE.localPlayer = nil
+	BUILD_ORDER_STATE.civ = nil
 	BUILD_ORDER_STATE.selectedBuild = nil
 	BUILD_ORDER_STATE.activeStepIndex = nil
 	BUILD_ORDER_STATE.activatingHandlers = false
@@ -51,6 +57,7 @@ function BuildOrder_Start(buildOrder, player)
 	end
 
 	BUILD_ORDER_STATE.localPlayer = player
+	BUILD_ORDER_STATE.civ = string.lower(buildOrder.civ)
 	BUILD_ORDER_STATE.selectedBuild = buildOrder
 	BuildOrder_ActivateStep(1)
 end
@@ -107,7 +114,9 @@ function BuildOrder_ActivateStep(stepIndex)
 	BUILD_ORDER_STATE.activatingHandlers = true
 	for _, child in ipairs(BUILD_ORDER_STATE.childRecords) do
 		local handler = child.handler
-		if handler ~= nil and handler.activate ~= nil then
+		if handler == nil then
+			BuildOrder_LogMissingHandler(child.check)
+		elseif handler.activate ~= nil then
 			handler.activate(child.check, child.objectiveID, BUILD_ORDER_STATE)
 		end
 	end

@@ -118,11 +118,17 @@ class BuildOrderObjectiveContractTests(unittest.TestCase):
         activate = function_body(self.engine, "BuildOrder_ActivateStep")
         setter = function_body(self.engine, "BuildOrder_SetCheckComplete")
         self.assertIn("Obj_SetState(childID, OS_Incomplete)", activate)
-        self.assertIn("if handler ~= nil and handler.activate ~= nil then", activate)
+        self.assertIn("BuildOrder_LogMissingHandler(child.check)", activate)
+        self.assertIn("elseif handler.activate ~= nil then", activate)
         self.assertIn("if child == nil or child.completed == completed then", setter)
         self.assertIn("child.completed = completed", setter)
         self.assertIn("Obj_SetState(child.objectiveID, OS_Complete)", setter)
         self.assertIn("BuildOrder_TryAdvance()", setter)
+
+    def test_missing_registered_handler_logs_check_kind_and_id_without_completing_it(self) -> None:
+        logger = function_body(self.engine, "BuildOrder_LogMissingHandler")
+        self.assertIn('print("BuildOrder: no registered handler for " .. tostring(check.kind) .. " (check " .. tostring(check.id) .. ")")', logger)
+        self.assertNotIn("BuildOrder_SetCheckComplete", logger)
 
     def test_state_api_is_idempotent_reversible_and_advances_only_on_completion(self) -> None:
         body = function_body(self.engine, "BuildOrder_SetCheckComplete")
@@ -161,6 +167,19 @@ class BuildOrderObjectiveContractTests(unittest.TestCase):
         advance = function_body(self.engine, "BuildOrder_TryAdvance")
         self.assert_order(start, "BuildOrder_Stop()", "BuildOrder_ActivateStep(1)")
         self.assert_order(advance, "BuildOrder_ClearActiveHierarchy()", "BuildOrder_ActivateStep(nextStepIndex)")
+
+    def test_engine_exposes_selected_build_civilization_to_handlers(self) -> None:
+        self.assertIn("civ = nil", self.engine)
+        self.assertIn("BUILD_ORDER_STATE.civ = string.lower(buildOrder.civ)", self.engine)
+        activation = self.engine[self.engine.index("function BuildOrder_Start"):]
+        self.assertLess(
+            activation.index("BUILD_ORDER_STATE.civ = string.lower(buildOrder.civ)"),
+            activation.index("BuildOrder_ActivateStep(1)"),
+        )
+
+    def test_stop_clears_civilization_context(self) -> None:
+        stop = function_body(self.engine, "BuildOrder_Stop")
+        self.assertIn("BUILD_ORDER_STATE.civ = nil", stop)
 
     def test_fake_handler_fixture_exercises_public_lifecycle_without_shipping_one(self) -> None:
         self.assertIn("BuildOrder_RegisterHandler(\"fake\", fakeHandler)", FAKE_HANDLER_FIXTURE)
