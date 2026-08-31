@@ -204,6 +204,26 @@ class BuildOrderObjectiveContractTests(unittest.TestCase):
         self.assertIn("child.check.optional == false and child.completed == false", advance)
         self.assertIn("if BUILD_ORDER_STATE.advancing == true then", advance)
 
+    def test_optional_missing_handler_descriptors_do_not_wait_for_completion_callbacks(self) -> None:
+        """Fails if TryAdvance begins treating an incomplete optional child as blocking."""
+        step = {
+            "checks": [
+                {"kind": "hints", "optional": True, "completed": False, "handler": None},
+                {"kind": "hints", "optional": True, "completed": False, "handler": None},
+            ]
+        }
+        blocking_children = [
+            check
+            for check in step["checks"]
+            if check["optional"] is False and check["completed"] is False
+        ]
+
+        advance = function_body(self.engine, "BuildOrder_TryAdvance")
+
+        self.assertEqual(blocking_children, [])
+        self.assertIn("if child.check.optional == false and child.completed == false", advance)
+        self.assertNotIn("child.handler", advance)
+
     def test_cleanup_deactivates_then_deletes_children_before_primary(self) -> None:
         cleanup = function_body(self.engine, "BuildOrder_ClearActiveHierarchy")
         self.assertIn("handler.deactivate(child.check, child.objectiveID, BUILD_ORDER_STATE)", cleanup)

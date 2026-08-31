@@ -311,7 +311,11 @@ def _check_descriptors(kind: str, value: Any, file: Path, path: str) -> list[Che
             result.append(CheckDescriptor(kind, title, optional, payload))
         return result
     if kind == "hints":
-        return [CheckDescriptor(kind, _string(item, file, f"{path}[{index}]"), False, {"text": _string(item, file, f"{path}[{index}]")}) for index, item in enumerate(_list(value, file, path))]
+        checks = []
+        for index, item in enumerate(_list(value, file, path)):
+            text = _string(item, file, f"{path}[{index}]")
+            checks.append(CheckDescriptor(kind, f"[HINT] {text}", True, {"text": text}))
+        return checks
     _error(file, path, "unknown check")
 
 
