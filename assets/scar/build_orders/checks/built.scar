@@ -1,0 +1,113 @@
+BUILT_STATE = {}
+BUILT_EVENT_REGISTERED = false
+
+function Built_BlueprintsEqual(left, right)
+	return left.PropertyBagGroupID == right.PropertyBagGroupID
+		and left.PropertyBagGroupModPackID == right.PropertyBagGroupModPackID
+		and left.PropertyBagGroupType == right.PropertyBagGroupType
+end
+
+function Built_ResolvePBGs(payload)
+	local pbgs = {}
+	if payload.id ~= nil then
+		table.insert(pbgs, BP_GetEntityBlueprint(payload.id))
+		return pbgs
+	end
+
+	for _, candidate in ipairs(payload.oneof) do
+		table.insert(pbgs, BP_GetEntityBlueprint(candidate))
+	end
+	return pbgs
+end
+
+function Built_MatchesPBG(pbgs, pbg)
+	for _, candidate in ipairs(pbgs) do
+		if Built_BlueprintsEqual(candidate, pbg) then
+			return true
+		end
+	end
+	return false
+end
+
+function Built_OnConstructionComplete(context)
+	if context == nil or context.player == nil or context.pbg == nil
+		or context.entity == nil or context.entity.EntityID == nil then
+		return
+	end
+
+	BuildOrder_BeginCheckUpdates()
+	for checkID, state in pairs(BUILT_STATE) do
+		if state ~= nil and state.remaining > 0 then
+			if context.player == state.player then
+				local entityID = context.entity.EntityID
+				if state.seen[entityID] ~= true and Built_MatchesPBG(state.pbgs, context.pbg) then
+					state.seen[entityID] = true
+					state.remaining = state.remaining - 1
+					if state.remaining == 0 then
+						BuildOrder_SetCheckComplete(checkID, true)
+					end
+				end
+			end
+		end
+	end
+	BuildOrder_EndCheckUpdates()
+end
+
+function Built_EnsureEventRegistered()
+	if BUILT_EVENT_REGISTERED then
+		return
+	end
+
+	Rule_AddGlobalEvent(Built_OnConstructionComplete, GE_ConstructionComplete)
+	BUILT_EVENT_REGISTERED = true
+end
+
+function Built_SnapshotEntity(groupID, entityIndex, entity)
+	for _, state in pairs(BUILT_STATE) do
+		if Entity_GetPlayerOwner(entity) == state.player then
+			if Entity_IsBuilding(entity) and Entity_GetBuildingProgress(entity) >= 1.0 then
+				local blueprint = Entity_GetBlueprint(entity)
+				if Built_MatchesPBG(state.pbgs, blueprint) then
+					state.seen[Entity_GetID(entity)] = true
+				end
+			end
+		end
+	end
+	return false
+end
+
+function Built_Activate(check, objectiveID, context)
+	local player = context.localPlayer
+	if player == nil then
+		return
+	end
+
+	BUILT_STATE[check.id] = {
+		player = player,
+		objectiveID = objectiveID,
+		payload = check.payload,
+		pbgs = Built_ResolvePBGs(check.payload),
+		remaining = check.payload.count,
+		seen = {},
+	}
+	Built_EnsureEventRegistered()
+	EGroup_ForEach(Player_GetEntities(player), Built_SnapshotEntity)
+end
+
+function Built_Deactivate(check, objectiveID, context)
+	local state = BUILT_STATE[check.id]
+	if state == nil then
+		return
+	end
+
+	BUILT_STATE[check.id] = nil
+	if next(BUILT_STATE) == nil and BUILT_EVENT_REGISTERED then
+		Rule_RemoveGlobalEvent(Built_OnConstructionComplete)
+		BUILT_EVENT_REGISTERED = false
+	end
+end
+
+BuildOrder_RegisterHandler("built", {
+	activate = Built_Activate,
+	deactivate = Built_Deactivate,
+})

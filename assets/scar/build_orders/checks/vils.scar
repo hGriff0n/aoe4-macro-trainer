@@ -1,0 +1,90 @@
+local VILS_STATE = {}
+local VILS_POLL_REGISTERED = false
+
+function Vils_CountOrZero(value)
+	if type(value) ~= "number" then
+		return 0
+	end
+	return value
+end
+
+function Vils_Poll(checkID)
+	local state = VILS_STATE[checkID]
+	if state == nil then
+		return
+	end
+
+	local food = Player_GetNumGatheringSquads(state.player, RT_Food)
+	local gold = Player_GetNumGatheringSquads(state.player, RT_Gold)
+	local wood = Player_GetNumGatheringSquads(state.player, RT_Wood)
+	local stone = Player_GetNumGatheringSquads(state.player, RT_Stone)
+	food = Vils_CountOrZero(food)
+	gold = Vils_CountOrZero(gold)
+	wood = Vils_CountOrZero(wood)
+	stone = Vils_CountOrZero(stone)
+
+	local completed = true
+	if state.payload.food ~= nil then
+		completed = completed and food >= state.payload.food
+	end
+	if state.payload.gold ~= nil then
+		completed = completed and gold >= state.payload.gold
+	end
+	if state.payload.wood ~= nil then
+		completed = completed and wood >= state.payload.wood
+	end
+	if state.payload.stone ~= nil then
+		completed = completed and stone >= state.payload.stone
+	end
+
+	if completed then
+		BuildOrder_SetCheckComplete(checkID, true)
+	else
+		BuildOrder_SetCheckComplete(checkID, false)
+	end
+end
+
+function Vils_PollAll()
+	BuildOrder_BeginCheckUpdates()
+	for checkID, _ in pairs(VILS_STATE) do
+		Vils_Poll(checkID)
+	end
+	BuildOrder_EndCheckUpdates()
+end
+
+function Vils_Activate(check, objectiveID, context)
+	local player = context.localPlayer
+	if player == nil then
+		return
+	end
+
+	local state = {
+		player = context.localPlayer,
+		objectiveID = objectiveID,
+		payload = check.payload,
+	}
+	VILS_STATE[check.id] = state
+	if VILS_POLL_REGISTERED == false then
+		Rule_Add(Vils_PollAll)
+		VILS_POLL_REGISTERED = true
+	end
+	Vils_Poll(check.id)
+end
+
+function Vils_Deactivate(check, objectiveID, context)
+	local state = VILS_STATE[check.id]
+	if state == nil then
+		return
+	end
+
+	VILS_STATE[check.id] = nil
+	if next(VILS_STATE) == nil then
+		Rule_Remove(Vils_PollAll)
+		VILS_POLL_REGISTERED = false
+	end
+end
+
+BuildOrder_RegisterHandler("vils", {
+	activate = Vils_Activate,
+	deactivate = Vils_Deactivate,
+})

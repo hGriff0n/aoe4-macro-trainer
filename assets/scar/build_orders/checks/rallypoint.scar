@@ -1,0 +1,16 @@
+-- TEMPORARY: rally target classification is not yet reliable, so this handler auto-completes.
+local function Rallypoint_Activate(check, objectiveID, context)
+	if context.localPlayer == nil then
+		return
+	end
+
+	BuildOrder_SetCheckComplete(check.id, true)
+end
+
+local function Rallypoint_Deactivate(check, objectiveID, context)
+end
+
+BuildOrder_RegisterHandler("rallypoint", {
+	activate = Rallypoint_Activate,
+	deactivate = Rallypoint_Deactivate,
+})

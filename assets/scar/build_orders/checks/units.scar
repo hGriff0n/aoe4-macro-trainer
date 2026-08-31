@@ -1,0 +1,99 @@
+UNITS_STATE = {}
+UNITS_POLLING = false
+UNITS_SCAN_STATE = nil
+UNITS_POLL_INTERVAL_SECONDS = 1
+
+local function Units_BlueprintsEqual(left, right)
+	return left.PropertyBagGroupID == right.PropertyBagGroupID
+		and left.PropertyBagGroupModPackID == right.PropertyBagGroupModPackID
+		and left.PropertyBagGroupType == right.PropertyBagGroupType
+end
+
+function Units_ResolvePBGs(ids)
+	local pbgs = {}
+	for _, id in ipairs(ids) do
+		table.insert(pbgs, BP_GetSquadBlueprint(id))
+	end
+	return pbgs
+end
+
+function Units_MatchesPBG(pbgs, pbg)
+	for _, candidate in ipairs(pbgs) do
+		if Units_BlueprintsEqual(candidate, pbg) then
+			return true
+		end
+	end
+	return false
+end
+
+function Units_ScanSquad(groupID, squadIndex, squad)
+	local state = UNITS_SCAN_STATE
+	if state == nil then
+		return true
+	end
+	-- Player_GetSquads is player-scoped, but retain the owner guard for converted squads.
+	if Squad_GetPlayerOwner(squad) ~= state.player then
+		return false
+	end
+	if Units_MatchesPBG(state.pbgs, Squad_GetBlueprint(squad)) == false then
+		return false
+	end
+	if Squad_IsAlive(squad) == false then
+		return false
+	end
+	state.count = state.count + 1
+	return false
+end
+
+function Units_Poll()
+	BuildOrder_BeginCheckUpdates()
+	for _, state in pairs(UNITS_STATE) do
+		state.count = 0
+		if state.pbgs ~= nil then
+			UNITS_SCAN_STATE = state
+			SGroup_ForEach(Player_GetSquads(state.player), Units_ScanSquad)
+		end
+		UNITS_SCAN_STATE = nil
+		BuildOrder_SetCheckComplete(state.checkID, state.count >= state.payload.count)
+	end
+	BuildOrder_EndCheckUpdates()
+end
+
+function Units_Activate(check, objectiveID, context)
+	local player = context.localPlayer
+	if player == nil then
+		return
+	end
+
+	UNITS_STATE[check.id] = {
+		checkID = check.id,
+		player = player,
+		objectiveID = objectiveID,
+		payload = check.payload,
+		pbgs = Units_ResolvePBGs(check.payload.ids),
+		count = 0,
+	}
+	if UNITS_POLLING == false then
+		UNITS_POLLING = true
+		Rule_AddInterval(Units_Poll, UNITS_POLL_INTERVAL_SECONDS)
+	end
+	Units_Poll()
+end
+
+function Units_Deactivate(check, objectiveID, context)
+	local state = UNITS_STATE[check.id]
+	if state == nil then
+		return
+	end
+
+	UNITS_STATE[check.id] = nil
+	if next(UNITS_STATE) == nil and UNITS_POLLING then
+		Rule_Remove(Units_Poll)
+		UNITS_POLLING = false
+	end
+end
+
+BuildOrder_RegisterHandler("units", {
+	activate = Units_Activate,
+	deactivate = Units_Deactivate,
+})

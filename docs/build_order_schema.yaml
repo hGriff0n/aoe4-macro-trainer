@@ -3,6 +3,7 @@
 ##
 ## Note:
 ##  - All id strings MUST be displayed as the either the localized string or the icon (or maybe both) in the objective ui
+##  - Building, technology, and age-up author IDs are the lowercase underscore-normalized official base ID when that base ID is unique. When a base ID is ambiguous, use the lowercase underscore-normalized official item ID, including its distinguishing suffix. `produce` and `units` use the official gameplay unit-family ID described below.
 ##
 civ: string # game id of the civilization that must be selected for this build order
 title: string # in game display string to identify this build order. technically, the full display string is "icon(<civ>) - <title>" *unless the settings groups build order by civ)
@@ -14,27 +15,27 @@ steps: # a list of build order steps, the intention is for each build order to d
       stone: integer 
       wood: integer 
       no_collect: [ food, gold, stone, wood ]   # Experimental: A list of resources that the player should not be collecting during this step. Probably more useful to have as a hint
-    rallypoint: # an array of where each tc should be rallying new villagers to. We use an array to allow for 2tc builds with the index for each tc hardcoded to be in the order of construction (ie. [ main TC, 2nd TC, 3rd TC, ... ])
+    rallypoint: # TEMPORARY runtime behavior: descriptors auto-complete after confirming the engine supplied a human player. Target/resource detection is not yet implemented. The array shape remains reserved for TC construction order.
       - food/gold/stone/wood
-    built: # An array of checks for "building constructed" events for the given building ids.
-      - id: string # Only one of `id` or `oneof` may be set. If `id` is set, this is the in game id for the given building
-        oneof: [ string ] # If `oneof` is set, the check will look for a "building completed" event for any id in the oneof list.
+    built: # An array of checks for "building constructed" events using the author IDs described above.
+      - id: string # Only one of `id` or `oneof` may be set. If `id` is set, this is the author ID for the given building.
+        oneof: [ string ] # If `oneof` is set, every entry is a building author ID and any matching "building completed" event satisfies the check.
         count: integer # Defaults to 1. The minimum number of matching buildings that should be completed
         vils: integer # Optional hint indicating how many villagers should construct the building
         location: string # Optional non-empty hint describing where the building should be placed
-    age_up: # Event to specify that an age up has been started as that moment often becomes a remacro point in build orders. May be useful to generalize for TCs but it is also difficult as Templar/Horde/Abassid age ups are akin to upgrades instead of buildings
-      id: string # Only one of `id` or `oneof` may be set. If `id` is set, this is the in game id for the chosen age up option
-      oneof: [ string ] # If `oneof` is set, the check will look for an age up using either of the provided ids
+    age_up: # Event to specify that an age up has been started. Use the author IDs described above; the build-order civilization determines whether they resolve as buildings or technologies.
+      id: string # Only one of `id` or `oneof` may be set. If `id` is set, this is the author ID for the chosen age-up option.
+      oneof: [ string ] # If `oneof` is set, every entry is an age-up author ID and any matching age-up satisfies the check.
       vils: integer # Hint indicating how many villagers should be pulled (if building)
       location: string # Hint string describing where the age up should be placed
     upgrades: # An array of technologies that should be researched across all buildings with technology (ie. includes unit upgrades, military upgrades, and economic upgrades)
-      - id: string # In-game id of the upgrade to research
+      - id: string # Author ID described above for the technology to research.
         optional: bool # Experimental: Defaults to false. Allows build orders to specify recommended upgrades but to not block completion on them
         queued: bool # Defaults to false. If true, the upgrade only needs to be queued rather than completed
     produce: # A check to specify unit production situations across all production buildings. In general, constant villager production is assumed outside of situations where the build order requires the main TC to do something else.
-      - id: string # In-game id of the unit to produce.
+      - id: string # Official gameplay unit family ID for the unit to produce (for example, spearman). Generated age-specific aliases remain temporarily accepted for compatibility.
         count: integer # Defaults to 1. The minimum number of units that should be built
-        constant: bool # Defaults to false. An alternative flag to indicate that the user should be trying for constant unit production
+        constant: bool # Defaults to false. A non-blocking author hint that the user should aim for constant unit production; it completes after the requested matching human production count (the first completion by default), not by detecting idle gaps. When combined with `queued`, `constant` takes precedence.
         queued: bool # Experimental: Defaults to false. Modifies the check to only require that the unit was queued but does not require it to actually be produced. This is potentially something we will want to rework in the future as it is a bit of a hack to get around some very precise ordering of actions that the rest of the schema can't enforce. However, these orderings might be too detailed to be useful and so should be left as hints instead
     resources: # An objective that triggers when the user has the given amount of resources collected. This objective should uncomplete if the player's bank drops below the number. Given the game plays a sound effect when an age up is possible, this field is more useful for 2tc builds and such that may ask for precise remacros during feudal age.
       food: integer
@@ -42,9 +43,9 @@ steps: # a list of build order steps, the intention is for each build order to d
       stone: integer 
       wood: integer 
     buildings: # Experimental: A check that the player should have at least "X" instances of the given building built. This is intended to handle a potential issue with the `built` field only checking for the "building completed" event. In general, build order's are written to assume optimality and so "pre-building" isn't possible, but we can't assume "optimal play" in a training tool. We may instead choose to implement this as a fallback
-      - id: # In-game id of the building
+      - id: string # Author ID described above for the building.
         count: # Minimum number of built instances of the building
     units: # A check that the player should have "X" units of a given type alive. This may be swapable with `produce` in practice as the player may be unable to prevent opponents from killing the requisite unit, potentially soft-locking the build order
-      - id: string # In-game id of the unit that must be built.
+      - id: string # Official gameplay unit family ID for the unit that must be alive (for example, spearman). Generated age-specific aliases remain temporarily accepted for compatibility.
         count: integer # Defaults to 1. The minimum number of units that should be alive at the same time
     hints: [ string ] # An array of strings that can provide more contextual hints for what the player should be doing. These are sometimes checks that we don't currently have a way of representing in the schema
