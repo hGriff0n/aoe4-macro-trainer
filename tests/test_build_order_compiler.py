@@ -20,6 +20,8 @@ class BuildOrderCompilerTests(unittest.TestCase):
                         "archery_range": "building_archery_range_eng",
                         "barracks": "building_barracks_eng",
                         "council_hall": "building_landmark_age2_eng",
+                        "house": "building_house_eng",
+                        "outpost": "building_outpost_eng",
                         "council_hall_2": "building_landmark_age2_eng_2",
                         "palace_of_swabia_3": "building_landmark_age4_eng_3",
                         "stable": "building_stable_eng",
@@ -135,7 +137,7 @@ steps:
                 "Built: palace of swabia 3",
                 "Age Up: council hall 2",
                 "wheelbarrow 1",
-                "Constantly produce villager [unsupported: continuous production]",
+                "Constantly produce villager",
                 "Have 3 spearman active",
             ],
         )
@@ -225,9 +227,28 @@ steps:
 
     def test_compiles_single_mapping_with_canonical_immutable_model(self) -> None:
         catalog = self.compile({"opening.yaml": """civ: English\ntitle: 2 TC\nsteps:\n  - title: Opening\n    vils:\n      food: 7\n"""})
-        self.assertEqual(catalog, Catalog((BuildOrder("english-2-tc", "English", "2 TC", (Step("Opening", (CheckDescriptor("vils", "7 food villagers", False, {"resource": "food", "count": 7}),)),)),)))
+        self.assertEqual(catalog, Catalog((BuildOrder("english-2-tc", "English", "2 TC", (Step("Opening", (CheckDescriptor("vils", "7 food", False, {"food": 7}),)),)),)))
         with self.assertRaises(Exception):
             catalog.build_orders[0].title = "changed"
+
+    def test_vils_mapping_compiles_one_canonical_reversible_descriptor(self) -> None:
+        catalog = self.compile({"opening.yaml": """civ: English
+title: Villager split
+steps:
+  - vils: {stone: 2, wood: 4, gold: 3, food: 7}
+"""})
+        checks = catalog.build_orders[0].steps[0].checks
+        self.assertEqual(
+            checks,
+            (
+                CheckDescriptor(
+                    "vils",
+                    "7 food | 3 gold | 4 wood | 2 stone",
+                    False,
+                    {"food": 7, "gold": 3, "wood": 4, "stone": 2},
+                ),
+            ),
+        )
 
     def test_compiles_list_documents_yaml_and_yml_in_sorted_file_order(self) -> None:
         catalog = self.compile({
@@ -294,6 +315,50 @@ steps:
         self.assertEqual(
             checks[3].payload,
             {"id": "upgrade_horticulture_eng", "queued": False},
+        )
+
+    def test_compiles_age_up_presentation_suffixes_in_stable_order(self) -> None:
+        catalog = self.compile({"age-up.yaml": """civ: English
+title: Age Up
+steps:
+  - age_up: {oneof: [council_hall, town_center], vils: 4, location: gold}
+"""})
+        check = catalog.build_orders[0].steps[0].checks[0]
+        self.assertEqual(check.title, "Age Up: council hall or town center")
+        self.assertFalse(check.optional)
+        self.assertEqual(
+            check.payload,
+            {
+                "oneof": ["building_landmark_age2_eng", "building_town_center_eng"],
+                "vils": 4,
+                "location": "gold",
+            },
+    def test_formats_built_titles_from_count_choice_and_presentation_hints(self) -> None:
+        catalog = self.compile({"built.yaml": """civ: English
+title: Built titles
+steps:
+  - built:
+      - id: barracks
+      - id: house
+        count: 2
+      - id: barracks
+        count: 2
+      - oneof: [stable, archery_range]
+      - id: outpost
+        count: 2
+        vils: 3
+        location: wood
+"""})
+        checks = catalog.build_orders[0].steps[0].checks
+        self.assertEqual(
+            [check.title for check in checks],
+            [
+                "Built: barracks",
+                "Built: house",
+                "Built: barracks",
+                "Built: stable or archery range",
+                "Built: outpost",
+            ],
         )
 
     def test_rejects_invalid_extended_built_and_upgrade_fields(self) -> None:

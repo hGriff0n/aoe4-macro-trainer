@@ -11,7 +11,8 @@ from .identities import (
 )
 from .model import BuildOrder, Catalog, CheckDescriptor, Step, normalize_id
 
-RESOURCES = {"food", "gold", "stone", "wood"}
+RESOURCE_ORDER = ("food", "gold", "wood", "stone")
+RESOURCES = set(RESOURCE_ORDER)
 CHECK_FIELDS = {"vils", "rallypoint", "built", "age_up", "upgrades", "produce", "resources", "buildings", "units", "hints"}
 CHECK_ID_CATEGORIES = {
     "built": "entity",
@@ -171,22 +172,37 @@ def _resource_checks(kind: str, value: Any, file: Path, path: str, no_collect: b
         if resource not in RESOURCES:
             _error(file, item_path, "unsupported resource")
         number = _positive(count, file, item_path)
-        title = f"{number} {resource} villagers" if kind == "vils" else f"{number} {resource}"
+        if kind == "vils":
+            title = f"{number} {resource} villagers"
+        elif kind == "resources":
+            title = f"Collect at least {number} {resource}"
+        else:
+            title = f"{number} {resource}"
         checks.append(CheckDescriptor(kind, title, False, {"resource": resource, "count": number}))
     if not checks:
         _error(file, path, "must not be empty")
     return checks
 
 
-def _check_descriptors(
-    kind: str,
-    value: Any,
-    file: Path,
-    path: str,
-    civ: str,
-    identities: IdentityCatalog,
-) -> list[CheckDescriptor]:
-    if kind in {"vils", "resources"}:
+def _vils_check(value: Any, file: Path, path: str) -> list[CheckDescriptor]:
+    mapping = _mapping(value, file, path)
+    thresholds: dict[str, int] = {}
+    for resource in RESOURCE_ORDER:
+        if resource in mapping:
+            thresholds[resource] = _positive(mapping[resource], file, f"{path}.{resource}")
+    for resource in mapping:
+        if resource not in RESOURCES:
+            _error(file, f"{path}.{resource}", "unsupported resource")
+    if not thresholds:
+        _error(file, path, "must not be empty")
+    title = " | ".join(f"{count} {resource}" for resource, count in thresholds.items())
+    return [CheckDescriptor("vils", title, False, thresholds)]
+
+
+def _check_descriptors(kind: str, value: Any, file: Path, path: str) -> list[CheckDescriptor]:
+    if kind == "vils":
+        return _vils_check(value, file, path)
+    if kind == "resources":
         return _resource_checks(kind, value, file, path)
     if kind == "rallypoint":
         checks = []
@@ -246,13 +262,10 @@ def _check_descriptors(
                 queued = mapping.get("queued", False)
                 if not isinstance(queued, bool): _error(file, f"{item_path}.queued", "must be boolean")
                 payload["queued"] = queued
-            else:
-                payload["count"] = _positive(mapping.get("count", 1), file, f"{item_path}.count")
-                for flag in ("constant", "queued"):
-                    if flag in mapping:
-                        if not isinstance(mapping[flag], bool): _error(file, f"{item_path}.{flag}", "must be boolean")
-                        payload[flag] = mapping[flag]
-            if kind in {"produce", "units"}:
+                title = f"Queue {identifier} for research" if queued else f"Research {identifier}"
+                if optional:
+                    title = f"[Optional] {title}"
+            elif kind in {"produce", "units"}:
                 try:
                     family_id = _resolve_squad_family_payload(
                         payload,
@@ -272,7 +285,7 @@ def _check_descriptors(
                     unit = _humanize_identity_id(family_id)
                     counted_unit = unit if payload["count"] == 1 else _pluralize_unit(unit)
                     if payload.get("constant", False):
-                        title = f"Constantly produce {unit} [unsupported: continuous production]"
+                        title = f"Constantly produce {unit}"
                         optional = True
                     elif payload.get("queued", False):
                         title = f"Queue {payload['count']} {counted_unit}"
@@ -281,6 +294,11 @@ def _check_descriptors(
                 else:
                     title = f"Have {payload['count']} {_humanize_identity_id(family_id)} active"
             else:
+                payload["count"] = _positive(mapping.get("count", 1), file, f"{item_path}.count")
+                for flag in ("constant", "queued"):
+                    if flag in mapping:
+                        if not isinstance(mapping[flag], bool): _error(file, f"{item_path}.{flag}", "must be boolean")
+                        payload[flag] = mapping[flag]
                 _resolve_identity_payload(
                     payload,
                     kind=kind,

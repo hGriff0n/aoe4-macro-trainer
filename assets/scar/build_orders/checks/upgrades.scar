@@ -1,0 +1,211 @@
+UPGRADES_STATE = {}
+UPGRADES_EVENTS_REGISTERED = false
+UPGRADES_RECONCILIATION_PENDING = false
+
+function Upgrades_PBGsEqual(left, right)
+	return left ~= nil and right ~= nil
+		and left.PropertyBagGroupID == right.PropertyBagGroupID
+		and left.PropertyBagGroupModPackID == right.PropertyBagGroupModPackID
+		and left.PropertyBagGroupType == right.PropertyBagGroupType
+end
+
+local function Upgrades_GetExecuterOwner(context)
+	if context == nil or context.executer == nil then
+		return nil
+	end
+	if context.executer.PlayerID ~= nil then
+		return context.executer
+	end
+	if context.executer.EntityID ~= nil then
+		return Entity_GetPlayerOwner(context.executer)
+	end
+	return nil
+end
+
+local function Upgrades_IsCompletedResearch(state)
+	return Player_HasUpgrade(state.player, state.upgrade)
+end
+
+local function Upgrades_HasQueuedResearch(state)
+	local entities = Player_GetEntities(state.player)
+	for entityIndex = 1, EGroup_Count(entities) do
+		local entity = EGroup_GetEntityAt(entities, entityIndex)
+		-- Player_GetEntities is player-scoped, but retain the owner guard for converted entities.
+		if entity ~= nil and Entity_GetPlayerOwner(entity) == state.player then
+			for index = 0, Entity_GetProductionQueueSize(entity) - 1 do
+				local itemType = Entity_GetProductionQueueItemType(entity, index)
+				if (itemType == PITEM_Upgrade or itemType == PITEM_PlayerUpgrade)
+					and Upgrades_PBGsEqual(Entity_GetProductionQueueItem(entity, index), state.upgrade) then
+					return true
+				end
+			end
+		end
+	end
+	return false
+end
+
+local function Upgrades_SetCheckComplete(state, complete)
+	if state.checkComplete == complete then
+		return
+	end
+	state.checkComplete = complete
+	BuildOrder_SetCheckComplete(state.checkID, complete)
+end
+
+local function Upgrades_Complete(state)
+	state.completed = true
+	state.cancelPending = false
+	Upgrades_SetCheckComplete(state, true)
+end
+
+local function Upgrades_ActivateBaseline(state)
+	if Upgrades_IsCompletedResearch(state) then
+		Upgrades_Complete(state)
+	elseif state.queued then
+		Upgrades_SetCheckComplete(state, Upgrades_HasQueuedResearch(state))
+	end
+end
+
+function Upgrades_ScheduleReconciliation()
+	if UPGRADES_RECONCILIATION_PENDING then
+		return
+	end
+	UPGRADES_RECONCILIATION_PENDING = true
+	Rule_Add(Upgrades_ReconcileNextTick)
+end
+
+function Upgrades_ReconcileNextTick()
+	Rule_Remove(Upgrades_ReconcileNextTick)
+	UPGRADES_RECONCILIATION_PENDING = false
+	for _, state in pairs(UPGRADES_STATE) do
+		if state ~= nil and state.completed == false and state.cancelPending then
+			state.cancelPending = false
+			if Upgrades_IsCompletedResearch(state) then
+				Upgrades_Complete(state)
+			elseif state.queued then
+				Upgrades_SetCheckComplete(state, Upgrades_HasQueuedResearch(state))
+			end
+		end
+	end
+	Upgrades_UpdateObservers()
+end
+
+function Upgrades_OnUpgradeStart(context)
+	if context == nil or context.upgrade == nil then
+		return
+	end
+
+	local owner = Upgrades_GetExecuterOwner(context)
+	for _, state in pairs(UPGRADES_STATE) do
+		if state ~= nil and state.completed == false and state.queued then
+			if owner ~= state.player then
+				-- Never allow opponent research to satisfy a local-player objective.
+			elseif Upgrades_PBGsEqual(context.upgrade, state.upgrade) then
+				Upgrades_SetCheckComplete(state, true)
+			end
+		end
+	end
+end
+
+function Upgrades_OnUpgradeCancelled(context)
+	if context == nil or context.upgrade == nil then
+		return
+	end
+
+	local owner = Upgrades_GetExecuterOwner(context)
+	local shouldReconcile = false
+	for _, state in pairs(UPGRADES_STATE) do
+		if state ~= nil and state.completed == false and state.queued then
+			if owner ~= state.player then
+				-- Never allow opponent research to alter a local-player objective.
+			elseif Upgrades_PBGsEqual(context.upgrade, state.upgrade) then
+				state.cancelPending = true
+				shouldReconcile = true
+			end
+		end
+	end
+	if shouldReconcile then
+		Upgrades_ScheduleReconciliation()
+	end
+end
+
+function Upgrades_OnUpgradeComplete(context)
+	if context == nil or context.upgrade == nil then
+		return
+	end
+
+	local owner = Upgrades_GetExecuterOwner(context)
+	for _, state in pairs(UPGRADES_STATE) do
+		if state ~= nil and state.completed == false then
+			if owner ~= state.player then
+				-- Never allow opponent research to satisfy a local-player objective.
+			elseif Upgrades_PBGsEqual(context.upgrade, state.upgrade) then
+				Upgrades_Complete(state)
+			end
+		end
+	end
+	Upgrades_UpdateObservers()
+end
+
+function Upgrades_UpdateObservers()
+	local needsEvents = false
+	for _, state in pairs(UPGRADES_STATE) do
+		if state ~= nil and state.completed == false then
+			needsEvents = true
+		end
+	end
+
+	if needsEvents and not UPGRADES_EVENTS_REGISTERED then
+		Rule_AddGlobalEvent(Upgrades_OnUpgradeStart, GE_UpgradeStart)
+		Rule_AddGlobalEvent(Upgrades_OnUpgradeCancelled, GE_UpgradeCancelled)
+		Rule_AddGlobalEvent(Upgrades_OnUpgradeComplete, GE_UpgradeComplete)
+		UPGRADES_EVENTS_REGISTERED = true
+	elseif not needsEvents and UPGRADES_EVENTS_REGISTERED then
+		Rule_RemoveGlobalEvent(Upgrades_OnUpgradeStart)
+		Rule_RemoveGlobalEvent(Upgrades_OnUpgradeCancelled)
+		Rule_RemoveGlobalEvent(Upgrades_OnUpgradeComplete)
+		UPGRADES_EVENTS_REGISTERED = false
+	end
+
+	if not needsEvents and UPGRADES_RECONCILIATION_PENDING then
+		Rule_Remove(Upgrades_ReconcileNextTick)
+		UPGRADES_RECONCILIATION_PENDING = false
+	end
+end
+
+local function Upgrades_Activate(check, objectiveID, context)
+	local player = context.localPlayer
+	if player == nil then
+		return
+	end
+	if UPGRADES_STATE[check.id] ~= nil then
+		return
+	end
+
+	UPGRADES_STATE[check.id] = {
+		checkID = check.id,
+		objectiveID = objectiveID,
+		player = player,
+		upgrade = BP_GetUpgradeBlueprint(check.payload.id),
+		queued = check.payload.queued,
+		completed = false,
+		checkComplete = false,
+		cancelPending = false,
+	}
+	Upgrades_ActivateBaseline(UPGRADES_STATE[check.id])
+	Upgrades_UpdateObservers()
+end
+
+local function Upgrades_Deactivate(check, objectiveID, context)
+	if UPGRADES_STATE[check.id] == nil then
+		return
+	end
+
+	UPGRADES_STATE[check.id] = nil
+	Upgrades_UpdateObservers()
+end
+
+BuildOrder_RegisterHandler("upgrades", {
+	activate = Upgrades_Activate,
+	deactivate = Upgrades_Deactivate,
+})
