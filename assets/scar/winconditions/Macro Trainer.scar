@@ -7,6 +7,7 @@ import("cardinal.scar")							-- Contains sfx references, UI templates, and Civ/
 import("ScarUtil.scar")							-- Contains game helper functions
 import("generated/build_orders.scar")
 import("build_orders/objective_engine.scar")
+import("build_orders/checks/rallypoint.scar")
 import("build_orders/checks/resources.scar")
 import("build_orders/checks/upgrades.scar")
 import("build_orders/checks/units.scar")

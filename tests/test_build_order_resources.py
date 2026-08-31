@@ -82,6 +82,13 @@ class BuildOrderResourcesContractTests(unittest.TestCase):
         self.assertIn("for checkID, _ in pairs(RESOURCES_STATE) do", poll_all)
         self.assertIn("Resources_Poll(checkID)", poll_all)
 
+    def test_poll_batches_completion_updates_around_state_traversal(self) -> None:
+        poll_all = function_body(self.source, "Resources_PollAll")
+        self.assertIn("BuildOrder_BeginCheckUpdates()", poll_all)
+        self.assertIn("BuildOrder_EndCheckUpdates()", poll_all)
+        self.assertLess(poll_all.index("BuildOrder_BeginCheckUpdates()"), poll_all.index("pairs(RESOURCES_STATE)"))
+        self.assertLess(poll_all.index("pairs(RESOURCES_STATE)"), poll_all.index("BuildOrder_EndCheckUpdates()"))
+
     def test_poll_reads_only_the_stored_player_bank_for_the_descriptor_resource(self) -> None:
         poll = function_body(self.source, "Resources_Poll")
         self.assertIn("local state = RESOURCES_STATE[checkID]", poll)

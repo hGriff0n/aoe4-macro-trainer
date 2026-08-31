@@ -45,9 +45,11 @@ function Vils_Poll(checkID)
 end
 
 function Vils_PollAll()
+	BuildOrder_BeginCheckUpdates()
 	for checkID, _ in pairs(VILS_STATE) do
 		Vils_Poll(checkID)
 	end
+	BuildOrder_EndCheckUpdates()
 end
 
 function Vils_Activate(check, objectiveID, context)

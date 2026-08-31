@@ -44,6 +44,8 @@ The engine adds `BuildOrder_SetCheckComplete(checkID, completed)`. It performs a
 
 After setting a required child complete, the engine evaluates advancement. Optional children never block advancement. Once a step advances, its handlers are deactivated and late callbacks for its old check IDs are ignored.
 
+Callbacks that traverse handler state bracket completion reports with `BuildOrder_BeginCheckUpdates()` and `BuildOrder_EndCheckUpdates()`. The engine nests these batches and coalesces all completion transitions into one advancement attempt at the outermost end, after traversal has finished. This prevents step cleanup and next-step activation from deleting and inserting keys in a table while a callback is iterating it. Correctness does not depend on deferred rules, rule priority, or rule execution order.
+
 Activation occurs only after all child objectives for the step exist. Deactivation is idempotent and removes every rule, listener, temporary group, or other resource created by that activation. A handler must support more than one active descriptor of its kind without global-name collisions.
 
 ## Runtime Module Boundaries
@@ -58,15 +60,15 @@ The final integration branch owns the ordered imports of all handler modules. Su
 
 The compiler emits deterministic descriptors in YAML field and list order.
 
-- `vils` emits one required descriptor for the entire mapping. Its payload contains the configured resource thresholds. Its single title renders the four configured counts in `food | gold | wood | stone` order, omitting resources that were not set. The objective is reversible.
+- `vils` emits one required descriptor for the entire mapping. Its payload contains the configured resource thresholds. Its single title starts with `Assign` and renders the four configured counts in `food | gold | wood | stone` order, omitting resources that were not set. The objective is reversible. Separate `no_collect` titles remain `No <resource> villagers`.
 - `built` emits one required descriptor per list entry. Its payload preserves `id` or `oneof`, `count`, `vils`, and `location`. Completion is latched for the active step.
 - `age_up` emits one required descriptor containing `id` or `oneof`, plus `vils` and `location`. Completion is latched when progress actually starts; queueing alone is insufficient.
 - `resources` emits one required descriptor per configured resource in YAML order. Its payload contains `resource` and `count`. Each objective is reversible.
 - `upgrades` emits one descriptor per list entry with `id` and `queued`. The descriptor's existing `optional` metadata controls parent advancement. Completed research is latched. Queued research completes when a supported player-scoped queue signal or query proves it.
 - `produce` emits one descriptor per list entry with `id`, `count`, `constant`, and `queued`. Normal production counts human-player completion events and latches at the requested count. Queued and constant semantics must be backed by a supported player-scoped API; otherwise their displayed objective remains visibly non-blocking and the limitation is recorded during that issue's validation rather than silently simulating success.
-- `units` emits one required descriptor per list entry with `id` and `count`. It polls living units controlled by the human player and is reversible.
+- `units` emits one required descriptor per list entry with `id` and `count`. Its title is `Have <count> active <family label>`. It polls living units controlled by the human player and is reversible.
 - `hints` emits one optional descriptor per string. Its title is `[HINT] <hint>`. It has no runtime completion predicate and never blocks advancement.
-- `rallypoint` emits one descriptor per configured town center. A one-item list displays `Rally new vils to <resource>`. Longer lists label the first as the main town center and subsequent items by one-based construction order. The handler considers only human-owned town centers and is reversible while the step is active.
+- `rallypoint` currently emits one descriptor per configured resource. **Temporary implementation:** the registered handler requires the engine-bound human player and then auto-completes the descriptor. It performs no player discovery, target query, event subscription, rule, polling, or runtime state tracking until rally target resource classification is reliable.
 
 ## Presentation
 

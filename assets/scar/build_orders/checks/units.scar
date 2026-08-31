@@ -46,6 +46,7 @@ function Units_ScanSquad(groupID, squadIndex, squad)
 end
 
 function Units_Poll()
+	BuildOrder_BeginCheckUpdates()
 	for _, state in pairs(UNITS_STATE) do
 		state.count = 0
 		if state.pbgs ~= nil then
@@ -55,6 +56,7 @@ function Units_Poll()
 		UNITS_SCAN_STATE = nil
 		BuildOrder_SetCheckComplete(state.checkID, state.count >= state.payload.count)
 	end
+	BuildOrder_EndCheckUpdates()
 end
 
 function Units_Activate(check, objectiveID, context)

@@ -77,6 +77,7 @@ end
 function Upgrades_ReconcileNextTick()
 	Rule_Remove(Upgrades_ReconcileNextTick)
 	UPGRADES_RECONCILIATION_PENDING = false
+	BuildOrder_BeginCheckUpdates()
 	for _, state in pairs(UPGRADES_STATE) do
 		if state ~= nil and state.completed == false and state.cancelPending then
 			state.cancelPending = false
@@ -88,6 +89,7 @@ function Upgrades_ReconcileNextTick()
 		end
 	end
 	Upgrades_UpdateObservers()
+	BuildOrder_EndCheckUpdates()
 end
 
 function Upgrades_OnUpgradeStart(context)
@@ -96,6 +98,7 @@ function Upgrades_OnUpgradeStart(context)
 	end
 
 	local owner = Upgrades_GetExecuterOwner(context)
+	BuildOrder_BeginCheckUpdates()
 	for _, state in pairs(UPGRADES_STATE) do
 		if state ~= nil and state.completed == false and state.queued then
 			if owner ~= state.player then
@@ -105,6 +108,7 @@ function Upgrades_OnUpgradeStart(context)
 			end
 		end
 	end
+	BuildOrder_EndCheckUpdates()
 end
 
 function Upgrades_OnUpgradeCancelled(context)
@@ -135,6 +139,7 @@ function Upgrades_OnUpgradeComplete(context)
 	end
 
 	local owner = Upgrades_GetExecuterOwner(context)
+	BuildOrder_BeginCheckUpdates()
 	for _, state in pairs(UPGRADES_STATE) do
 		if state ~= nil and state.completed == false then
 			if owner ~= state.player then
@@ -145,6 +150,7 @@ function Upgrades_OnUpgradeComplete(context)
 		end
 	end
 	Upgrades_UpdateObservers()
+	BuildOrder_EndCheckUpdates()
 end
 
 function Upgrades_UpdateObservers()

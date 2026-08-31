@@ -62,7 +62,7 @@ Examples:
 
 ```text
 units: [{id: spearman, count: 2}]
-  -> Have 2 spearman active
+  -> Have 2 active spearman
 
 produce: [{id: spearman, count: 2, queued: true}]
   -> Queue 2 spearmen

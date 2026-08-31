@@ -29,9 +29,11 @@ function Resources_Poll(checkID)
 end
 
 function Resources_PollAll()
+	BuildOrder_BeginCheckUpdates()
 	for checkID, _ in pairs(RESOURCES_STATE) do
 		Resources_Poll(checkID)
 	end
+	BuildOrder_EndCheckUpdates()
 end
 
 function Resources_Activate(check, objectiveID, context)

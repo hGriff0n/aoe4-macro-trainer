@@ -9,6 +9,8 @@ BUILD_ORDER_STATE = {
 	handlerMap = {},
 	advancing = false,
 	activatingHandlers = false,
+	checkUpdateDepth = 0,
+	checkAdvancePending = false,
 }
 
 function BuildOrder_RegisterHandler(kind, handler)
@@ -41,6 +43,8 @@ end
 
 function BuildOrder_Stop()
 	BUILD_ORDER_STATE.advancing = true
+	BUILD_ORDER_STATE.checkUpdateDepth = 0
+	BUILD_ORDER_STATE.checkAdvancePending = false
 	BuildOrder_ClearActiveHierarchy()
 	BUILD_ORDER_STATE.localPlayer = nil
 	BUILD_ORDER_STATE.civ = nil
@@ -133,9 +137,29 @@ function BuildOrder_SetCheckComplete(checkID, completed)
 	child.completed = completed
 	if completed == true then
 		Obj_SetState(child.objectiveID, OS_Complete)
-		BuildOrder_TryAdvance()
+		if BUILD_ORDER_STATE.checkUpdateDepth > 0 then
+			BUILD_ORDER_STATE.checkAdvancePending = true
+		else
+			BuildOrder_TryAdvance()
+		end
 	else
 		Obj_SetState(child.objectiveID, OS_Incomplete)
+	end
+end
+
+function BuildOrder_BeginCheckUpdates()
+	BUILD_ORDER_STATE.checkUpdateDepth = BUILD_ORDER_STATE.checkUpdateDepth + 1
+end
+
+function BuildOrder_EndCheckUpdates()
+	if BUILD_ORDER_STATE.checkUpdateDepth <= 0 then
+		return
+	end
+
+	BUILD_ORDER_STATE.checkUpdateDepth = BUILD_ORDER_STATE.checkUpdateDepth - 1
+	if BUILD_ORDER_STATE.checkUpdateDepth == 0 and BUILD_ORDER_STATE.checkAdvancePending then
+		BUILD_ORDER_STATE.checkAdvancePending = false
+		BuildOrder_TryAdvance()
 	end
 end
 
@@ -148,6 +172,10 @@ function BuildOrder_TryAdvance()
 		return
 	end
 	if BUILD_ORDER_STATE.activatingHandlers == true then
+		return
+	end
+	if BUILD_ORDER_STATE.checkUpdateDepth > 0 then
+		BUILD_ORDER_STATE.checkAdvancePending = true
 		return
 	end
 

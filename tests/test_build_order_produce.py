@@ -398,6 +398,15 @@ class ProduceHandlerContractTests(unittest.TestCase):
         self.assertNotIn("Produce_Poll", self.source)
         self.assertNotIn("Rule_Add(Produce_Poll)", self.source)
 
+    def test_completion_and_reconciliation_batch_updates_around_state_traversal(self) -> None:
+        for name in ("Produce_OnBuildItemComplete", "Produce_ReconcileQueuedNextTick"):
+            with self.subTest(callback=name):
+                callback = function_body(self.source, name)
+                self.assertIn("BuildOrder_BeginCheckUpdates()", callback)
+                self.assertIn("BuildOrder_EndCheckUpdates()", callback)
+                self.assertLess(callback.index("BuildOrder_BeginCheckUpdates()"), callback.index("pairs(PRODUCE_STATE)"))
+                self.assertLess(callback.index("pairs(PRODUCE_STATE)"), callback.index("BuildOrder_EndCheckUpdates()"))
+
     def test_deactivation_is_idempotent_and_cleans_mixed_observers(self) -> None:
         deactivate = function_body(self.source, "Produce_Deactivate")
         self.assertIn("if state == nil then", deactivate)

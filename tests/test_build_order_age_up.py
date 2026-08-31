@@ -12,6 +12,17 @@ SCAR_ROOT = ROOT / "assets" / "scar"
 MAIN_WINCONDITION = SCAR_ROOT / "winconditions" / "Macro Trainer.scar"
 
 
+def function_body(source: str, name: str) -> str:
+    match = re.search(
+        rf"(?:local )?function {re.escape(name)}\([^)]*\)(.*?)(?=^(?:local )?function |\Z)",
+        source,
+        re.MULTILINE | re.DOTALL,
+    )
+    if match is None:
+        raise AssertionError(f"missing function {name}")
+    return match.group(1)
+
+
 def packaged_import_graph(root: Path) -> list[Path]:
     pending = [root]
     visited: list[Path] = []
@@ -210,6 +221,15 @@ class AgeUpHandlerContractTests(unittest.TestCase):
         self.assertNotIn("GE_ConstructionWorkerStart", self.source)
         self.assertNotIn("GE_ConstructionComplete", self.source)
         self.assertNotIn("GE_UpgradeComplete", self.source)
+
+    def test_start_callbacks_batch_completion_after_collecting_matches(self) -> None:
+        for name in ("AgeUp_OnConstructionStart", "AgeUp_OnUpgradeStart"):
+            with self.subTest(callback=name):
+                callback = function_body(self.source, name)
+                self.assertIn("BuildOrder_BeginCheckUpdates()", callback)
+                self.assertIn("BuildOrder_EndCheckUpdates()", callback)
+                self.assertLess(callback.index("BuildOrder_BeginCheckUpdates()"), callback.index("BuildOrder_SetCheckComplete"))
+                self.assertLess(callback.index("BuildOrder_SetCheckComplete"), callback.index("BuildOrder_EndCheckUpdates()"))
 
     def test_unsupported_civilization_logs_and_remains_incomplete(self) -> None:
         self.assertIn("AgeUp: unsupported civilization", self.source)

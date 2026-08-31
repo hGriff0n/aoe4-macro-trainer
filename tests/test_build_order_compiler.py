@@ -138,7 +138,7 @@ steps:
                 "Age Up: council hall 2",
                 "Queue wheelbarrow 1 for research",
                 "Constantly produce villager",
-                "Have 3 spearman active",
+                "Have 3 active spearman",
             ],
         )
         self.assertEqual(
@@ -185,7 +185,7 @@ steps:
         self.assertEqual(checks[3].payload, expected_units_payload)
         self.assertEqual(
             [check.title for check in checks],
-            ["Queue 2 spearmen", "Queue 2 spearmen", "Have 2 spearman active", "Have 2 spearman active"],
+            ["Queue 2 spearmen", "Queue 2 spearmen", "Have 2 active spearman", "Have 2 active spearman"],
         )
 
     def test_produce_title_retains_numeric_family_id_suffix(self) -> None:
@@ -227,7 +227,7 @@ steps:
 
     def test_compiles_single_mapping_with_canonical_immutable_model(self) -> None:
         catalog = self.compile({"opening.yaml": """civ: English\ntitle: 2 TC\nsteps:\n  - title: Opening\n    vils:\n      food: 7\n"""})
-        self.assertEqual(catalog, Catalog((BuildOrder("english-2-tc", "English", "2 TC", (Step("Opening", (CheckDescriptor("vils", "7 food", False, {"food": 7}),)),)),)))
+        self.assertEqual(catalog, Catalog((BuildOrder("english-2-tc", "English", "2 TC", (Step("Opening", (CheckDescriptor("vils", "Assign 7 food", False, {"food": 7}),)),)),)))
         with self.assertRaises(Exception):
             catalog.build_orders[0].title = "changed"
 
@@ -243,11 +243,23 @@ steps:
             (
                 CheckDescriptor(
                     "vils",
-                    "7 food | 3 gold | 4 wood | 2 stone",
+                    "Assign 7 food | 3 gold | 4 wood | 2 stone",
                     False,
                     {"food": 7, "gold": 3, "wood": 4, "stone": 2},
                 ),
             ),
+        )
+
+    def test_vils_title_uses_assign_prefix_and_keeps_no_collect_title(self) -> None:
+        catalog = self.compile({"vils.yaml": """civ: English
+title: Villager titles
+steps:
+  - vils: {wood: 1, food: 1, no_collect: [gold]}
+"""})
+
+        self.assertEqual(
+            [check.title for check in catalog.build_orders[0].steps[0].checks],
+            ["Assign 1 food | 1 wood", "No gold villagers"],
         )
 
     def test_compiles_list_documents_yaml_and_yml_in_sorted_file_order(self) -> None:

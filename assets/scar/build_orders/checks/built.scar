@@ -30,6 +30,12 @@ function Built_MatchesPBG(pbgs, pbg)
 end
 
 function Built_OnConstructionComplete(context)
+	if context == nil or context.player == nil or context.pbg == nil
+		or context.entity == nil or context.entity.EntityID == nil then
+		return
+	end
+
+	BuildOrder_BeginCheckUpdates()
 	for checkID, state in pairs(BUILT_STATE) do
 		if state ~= nil and state.remaining > 0 then
 			if context.player == state.player then
@@ -44,6 +50,7 @@ function Built_OnConstructionComplete(context)
 			end
 		end
 	end
+	BuildOrder_EndCheckUpdates()
 end
 
 function Built_EnsureEventRegistered()

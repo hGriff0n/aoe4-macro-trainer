@@ -111,8 +111,8 @@ class UnitsCompilerTests(unittest.TestCase):
         self.assertEqual(
             [(check.title, check.optional, check.payload) for check in checks],
             [
-                ("Have 3 spearman active", False, {"ids": ["unit_spearman_2_eng", "unit_spearman_3_eng", "unit_spearman_4_eng"], "count": 3}),
-                ("Have 1 longbowman active", False, {"ids": ["unit_archer_2_eng", "unit_archer_3_eng", "unit_archer_4_eng"], "count": 1}),
+                ("Have 3 active spearman", False, {"ids": ["unit_spearman_2_eng", "unit_spearman_3_eng", "unit_spearman_4_eng"], "count": 3}),
+                ("Have 1 active longbowman", False, {"ids": ["unit_archer_2_eng", "unit_archer_3_eng", "unit_archer_4_eng"], "count": 1}),
             ],
         )
 
@@ -173,6 +173,13 @@ class UnitsHandlerContractTests(unittest.TestCase):
         self.assertIn("BuildOrder_SetCheckComplete(state.checkID, state.count >= state.payload.count)", poll)
         self.assertNotIn("remaining", self.source)
         self.assertNotIn("seen", self.source)
+
+    def test_poll_batches_completion_updates_around_state_traversal(self) -> None:
+        poll = function_body(self.source, "Units_Poll")
+        self.assertIn("BuildOrder_BeginCheckUpdates()", poll)
+        self.assertIn("BuildOrder_EndCheckUpdates()", poll)
+        self.assertLess(poll.index("BuildOrder_BeginCheckUpdates()"), poll.index("pairs(UNITS_STATE)"))
+        self.assertLess(poll.index("pairs(UNITS_STATE)"), poll.index("BuildOrder_EndCheckUpdates()"))
 
     def test_deactivation_is_idempotent_and_removes_only_the_shared_poll_rule_after_last_check(self) -> None:
         deactivate = function_body(self.source, "Units_Deactivate")

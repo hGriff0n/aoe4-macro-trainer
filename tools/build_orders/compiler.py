@@ -204,7 +204,7 @@ def _vils_check(value: Any, file: Path, path: str) -> list[CheckDescriptor]:
             _error(file, f"{path}.{resource}", "unsupported resource")
     checks: list[CheckDescriptor] = []
     if thresholds:
-        title = " | ".join(f"{count} {resource}" for resource, count in thresholds.items())
+        title = "Assign " + " | ".join(f"{count} {resource}" for resource, count in thresholds.items())
         checks.append(CheckDescriptor("vils", title, False, thresholds))
     checks.extend(no_collect_checks)
     if not checks:
@@ -332,7 +332,7 @@ def _check_descriptors(
                     else:
                         title = f"Produce {payload['count']} {counted_unit}"
                 else:
-                    title = f"Have {payload['count']} {_humanize_identity_id(family_id)} active"
+                    title = f"Have {payload['count']} active {_humanize_identity_id(family_id)}"
             elif kind != "upgrades":
                 _resolve_identity_payload(
                     payload,

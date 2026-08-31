@@ -15,7 +15,7 @@ steps: # a list of build order steps, the intention is for each build order to d
       stone: integer 
       wood: integer 
       no_collect: [ food, gold, stone, wood ]   # Experimental: A list of resources that the player should not be collecting during this step. Probably more useful to have as a hint
-    rallypoint: # an array of where each tc should be rallying new villagers to. We use an array to allow for 2tc builds with the index for each tc hardcoded to be in the order of construction (ie. [ main TC, 2nd TC, 3rd TC, ... ])
+    rallypoint: # TEMPORARY runtime behavior: descriptors auto-complete after confirming the engine supplied a human player. Target/resource detection is not yet implemented. The array shape remains reserved for TC construction order.
       - food/gold/stone/wood
     built: # An array of checks for "building constructed" events using the author IDs described above.
       - id: string # Only one of `id` or `oneof` may be set. If `id` is set, this is the author ID for the given building.

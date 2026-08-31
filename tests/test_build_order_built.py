@@ -55,6 +55,13 @@ class BuiltCheckContractTests(unittest.TestCase):
         matcher = function_body(self.source, "Built_MatchesPBG")
         self.assertIn("ipairs(pbgs)", matcher)
 
+    def test_completion_event_batches_updates_around_state_traversal(self) -> None:
+        callback = function_body(self.source, "Built_OnConstructionComplete")
+        self.assertIn("BuildOrder_BeginCheckUpdates()", callback)
+        self.assertIn("BuildOrder_EndCheckUpdates()", callback)
+        self.assertLess(callback.index("BuildOrder_BeginCheckUpdates()"), callback.index("pairs(BUILT_STATE)"))
+        self.assertLess(callback.index("pairs(BUILT_STATE)"), callback.index("BuildOrder_EndCheckUpdates()"))
+
     def test_resolves_and_compares_the_complete_canonical_pbg_tuple(self) -> None:
         resolve = function_body(self.source, "Built_ResolvePBGs")
         self.assertIn("BP_GetEntityBlueprint(payload.id)", resolve)

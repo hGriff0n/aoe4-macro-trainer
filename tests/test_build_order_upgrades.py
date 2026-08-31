@@ -147,6 +147,19 @@ class BuildOrderUpgradeHandlerContractTests(unittest.TestCase):
         self.assertNotIn("context.pbg", callback)
         self.assertNotIn("context.pbg", cancel)
 
+    def test_update_callbacks_batch_completion_while_traversing_state(self) -> None:
+        for name in (
+            "Upgrades_ReconcileNextTick",
+            "Upgrades_OnUpgradeStart",
+            "Upgrades_OnUpgradeComplete",
+        ):
+            with self.subTest(callback=name):
+                callback = function_body(self.source, name)
+                self.assertIn("BuildOrder_BeginCheckUpdates()", callback)
+                self.assertIn("BuildOrder_EndCheckUpdates()", callback)
+                self.assertLess(callback.index("BuildOrder_BeginCheckUpdates()"), callback.index("pairs(UPGRADES_STATE)"))
+                self.assertLess(callback.index("pairs(UPGRADES_STATE)"), callback.index("BuildOrder_EndCheckUpdates()"))
+
 
 @dataclass(frozen=True)
 class QueueEntity:

@@ -68,11 +68,13 @@ function Produce_ReconcileQueuedNextTick()
 
 	local pending = PRODUCE_RECOUNT_PENDING
 	PRODUCE_RECOUNT_PENDING = {}
+	BuildOrder_BeginCheckUpdates()
 	for _, state in pairs(PRODUCE_STATE) do
 		if state ~= nil and Produce_IsQueued(state) and pending[state.checkID] == true then
 			BuildOrder_SetCheckComplete(state.checkID, Produce_QueueHasCount(state))
 		end
 	end
+	BuildOrder_EndCheckUpdates()
 end
 
 function Produce_ScheduleQueueReconciliation(checkID)
@@ -112,6 +114,7 @@ function Produce_OnBuildItemComplete(context)
 		return
 	end
 
+	BuildOrder_BeginCheckUpdates()
 	for checkID, state in pairs(PRODUCE_STATE) do
 		if state ~= nil and context.player == state.player then
 			if Produce_IsQueued(state) then
@@ -131,6 +134,7 @@ function Produce_OnBuildItemComplete(context)
 			end
 		end
 	end
+	BuildOrder_EndCheckUpdates()
 end
 
 local function Produce_EnsureCommandEventRegistered()

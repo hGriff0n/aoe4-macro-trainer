@@ -142,6 +142,7 @@ function AgeUp_OnConstructionStart(context)
 		return
 	end
 
+	BuildOrder_BeginCheckUpdates()
 	local completedCheckIDs = {}
 	for checkID, state in pairs(AGE_UP_STATE) do
 		if state.completed == false and state.unsupported == false
@@ -160,6 +161,7 @@ function AgeUp_OnConstructionStart(context)
 		BuildOrder_SetCheckComplete(checkID, true)
 	end
 	AgeUp_UpdateObservers()
+	BuildOrder_EndCheckUpdates()
 end
 
 local function AgeUp_GetExecuterOwner(context)
@@ -181,6 +183,7 @@ function AgeUp_OnUpgradeStart(context)
 	end
 
 	local owner = AgeUp_GetExecuterOwner(context)
+	BuildOrder_BeginCheckUpdates()
 	local completedCheckIDs = {}
 	for checkID, state in pairs(AGE_UP_STATE) do
 		if state.completed == false and state.unsupported == false
@@ -197,6 +200,7 @@ function AgeUp_OnUpgradeStart(context)
 		BuildOrder_SetCheckComplete(checkID, true)
 	end
 	AgeUp_UpdateObservers()
+	BuildOrder_EndCheckUpdates()
 end
 
 function AgeUp_UpdateObservers()

@@ -19,7 +19,7 @@ The probe registered 177 runtime-available global events, skipped 8 unavailable 
 | `upgrades` (GRI-59) | `GE_UpgradeComplete` for completed research; `GE_UpgradeStart` for active research | Use completion events plus activation reconciliation. Queue insertion remains unresolved because both tested upgrades started on idle executors. Handle either entity- or player-shaped executor ownership. |
 | `produce` (GRI-60) | `GE_BuildItemComplete` | Use for completed production. It provides product PBG, player, and spawned squad. No typed queue/start event fired. |
 | `units` (GRI-62) | Periodic authoritative reconciliation | Retain periodic owner-filtered squad polling. `GE_BuildItemComplete` and death/ownership events may trigger extra recounts, but the observed event set is incomplete for conversions, grants, despawns, and ownership changes. |
-| `rallypoint` (GRI-80) | `GE_EntityCommandIssued`, observed `EntityCommandType(12)` | The change is observable, but the callback exposes only the source entity and target instance/position—not a canonical resource. Keep the check optional/inert unless runtime target inspection proves resource classification. |
+| `rallypoint` (GRI-80) | `GE_EntityCommandIssued`, observed `EntityCommandType(12)` | The change is observable, but the callback exposes only the source entity and target instance/position—not a canonical resource. The temporary registered handler therefore auto-completes after requiring the engine-bound human player and creates no runtime observation state. |
 | `vils` (GRI-55) | None established by this session | Keep authoritative polling. Command events describe intent and do not expose authoritative current worker allocation. |
 | `resources` (GRI-58) | None suitable | `GE_PlayerAddResource` fired 2,172 times and is delta/noise-oriented, not a reliable threshold state. Keep authoritative polling. |
 | `hints` (GRI-63) | Not applicable | Presentation-only optional descriptors have no runtime condition. No event-driven change is needed. |
@@ -138,7 +138,7 @@ The event context does not include:
 - a resource enum;
 - a stable Town Center ordinal.
 
-An implementation would need to resolve the source entity owner and blueprint, then resolve or inspect the target instance at callback time. The probe establishes that rally changes are observable but does not establish a safe generic mapping from target to `food`, `wood`, `gold`, or `stone`. Until that mapping is proven, `rallypoint` descriptors should remain visible but optional and non-blocking.
+An implementation would need to resolve the source entity owner and blueprint, then resolve or inspect the target instance at callback time. The probe establishes that rally changes are observable but does not establish a safe generic mapping from target to `food`, `wood`, `gold`, or `stone`. Until that mapping is proven, the temporary `rallypoint` handler visibly registers the descriptor but auto-completes it after requiring `context.localPlayer`; it uses no event, query, rule, polling, or state table.
 
 ## Active unit counts and deaths
 

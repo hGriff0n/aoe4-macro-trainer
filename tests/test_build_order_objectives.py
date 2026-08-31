@@ -18,6 +18,62 @@ FAKE_HANDLER_FIXTURE = '''local fakeHandler = {
 BuildOrder_RegisterHandler("fake", fakeHandler)'''
 
 
+class CheckUpdateBatchModel:
+    """Executable model of the engine's same-callback advancement boundary."""
+
+    def __init__(self) -> None:
+        self.depth = 0
+        self.advance_pending = False
+        self.advance_calls = 0
+        self.active_step = 3
+        self.vils_state = {"step-3-vils": True}
+        self.poll_registered = True
+        self.observed_during_poll: list[tuple[int, tuple[str, ...]]] = []
+
+    def begin(self) -> None:
+        self.depth += 1
+
+    def end(self) -> None:
+        if self.depth == 0:
+            return
+        self.depth -= 1
+        if self.depth == 0 and self.advance_pending:
+            self.advance_pending = False
+            self.try_advance()
+
+    def set_complete(self, completed: bool) -> None:
+        if not completed:
+            return
+        if self.depth > 0:
+            self.advance_pending = True
+        else:
+            self.try_advance()
+
+    def try_advance(self) -> None:
+        self.advance_calls += 1
+        if self.active_step == 3:
+            self.vils_state.pop("step-3-vils")
+            self.poll_registered = False
+            self.active_step = 4
+            self.vils_state["step-4-vils"] = False
+            self.poll_registered = True
+
+    def poll_vils(self) -> None:
+        self.begin()
+        for check_id, completed in self.vils_state.items():
+            self.set_complete(completed)
+            self.observed_during_poll.append(
+                (self.active_step, tuple(self.vils_state))
+            )
+        self.end()
+
+    def stop(self) -> None:
+        self.depth = 0
+        self.advance_pending = False
+        self.vils_state = {}
+        self.poll_registered = False
+
+
 def function_body(source: str, name: str) -> str:
     match = re.search(
         rf"function {re.escape(name)}\([^)]*\)(.*?)(?=^function |\Z)",
@@ -110,6 +166,8 @@ class BuildOrderObjectiveContractTests(unittest.TestCase):
             "childRecords",
             "handlerMap",
             "advancing",
+            "checkUpdateDepth",
+            "checkAdvancePending",
         ):
             self.assertRegex(self.engine, rf"\b{field}\s*=")
 
@@ -120,6 +178,8 @@ class BuildOrderObjectiveContractTests(unittest.TestCase):
             "BuildOrder_NotifyComplete",
             "BuildOrder_TryAdvance",
             "BuildOrder_Stop",
+            "BuildOrder_BeginCheckUpdates",
+            "BuildOrder_EndCheckUpdates",
         ):
             function_body(self.engine, name)
 
@@ -194,6 +254,68 @@ class BuildOrderObjectiveContractTests(unittest.TestCase):
         self.assertIn("OS_Incomplete", body)
         self.assertIn("if completed == true then", body)
         self.assertIn("BuildOrder_TryAdvance()", body)
+
+    def test_state_api_coalesces_advancement_until_outermost_update_batch_ends(self) -> None:
+        begin = function_body(self.engine, "BuildOrder_BeginCheckUpdates")
+        end = function_body(self.engine, "BuildOrder_EndCheckUpdates")
+        setter = function_body(self.engine, "BuildOrder_SetCheckComplete")
+        self.assertIn("BUILD_ORDER_STATE.checkUpdateDepth + 1", begin)
+        self.assertIn("BUILD_ORDER_STATE.checkUpdateDepth - 1", end)
+        self.assertIn("BUILD_ORDER_STATE.checkAdvancePending = false", end)
+        self.assertIn("BuildOrder_TryAdvance()", end)
+        self.assertIn("BUILD_ORDER_STATE.checkUpdateDepth > 0", setter)
+        self.assertIn("BUILD_ORDER_STATE.checkAdvancePending = true", setter)
+
+    def test_consecutive_vils_steps_transition_only_after_poll_traversal(self) -> None:
+        model = CheckUpdateBatchModel()
+
+        model.poll_vils()
+
+        self.assertEqual(
+            model.observed_during_poll,
+            [(3, ("step-3-vils",))],
+        )
+        self.assertEqual(model.active_step, 4)
+        self.assertEqual(model.vils_state, {"step-4-vils": False})
+        self.assertTrue(model.poll_registered)
+        self.assertEqual(model.advance_calls, 1)
+
+        model.poll_vils()
+
+        self.assertEqual(model.active_step, 4)
+        self.assertEqual(model.vils_state, {"step-4-vils": False})
+        self.assertEqual(model.advance_calls, 1)
+
+    def test_nested_batches_coalesce_multiple_completions_into_one_advance(self) -> None:
+        model = CheckUpdateBatchModel()
+        model.begin()
+        model.begin()
+        model.set_complete(True)
+        model.set_complete(True)
+
+        model.end()
+        self.assertEqual(model.advance_calls, 0)
+        model.end()
+
+        self.assertEqual(model.advance_calls, 1)
+        self.assertEqual(model.depth, 0)
+        self.assertFalse(model.advance_pending)
+
+    def test_stop_resets_unfinished_update_batch_defensively(self) -> None:
+        model = CheckUpdateBatchModel()
+        model.begin()
+        model.set_complete(True)
+
+        model.stop()
+        model.end()
+
+        self.assertEqual(model.depth, 0)
+        self.assertFalse(model.advance_pending)
+        self.assertEqual(model.advance_calls, 0)
+
+        stop = function_body(self.engine, "BuildOrder_Stop")
+        self.assertIn("BUILD_ORDER_STATE.checkUpdateDepth = 0", stop)
+        self.assertIn("BUILD_ORDER_STATE.checkAdvancePending = false", stop)
 
     def test_notify_complete_wraps_explicit_state_api(self) -> None:
         body = function_body(self.engine, "BuildOrder_NotifyComplete")

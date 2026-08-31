@@ -80,11 +80,17 @@ BuildOrder_SetCheckComplete(check.id, predicateIsTrue)
 
 For a latched event counter, call it with `true` once the human player's counter reaches its threshold. For a reversible polling check, call it after each poll with the current predicate result. Repeating the current state is safe and must not replay completion effects.
 
+When a polling, event, or reconciliation callback traverses a handler state table and can report completion, wrap the traversal in `BuildOrder_BeginCheckUpdates()` and `BuildOrder_EndCheckUpdates()`. Nested batches are supported. The outermost end coalesces advancement to one attempt after traversal, so step cleanup cannot mutate the table under `pairs`. Validate callback context before beginning a batch and ensure every begun batch reaches its matching end; do not use deferred rules or rule ordering as an advancement barrier.
+
 `BuildOrder_NotifyComplete(check.id)` is retained for compatibility, but new handlers should prefer the explicit state API.
 
 The engine ignores unknown check IDs and repeated assignments of the current state. A transition to `true` marks the child objective complete and asks the engine to advance when all required checks are complete; a transition to `false` marks it incomplete without advancing.
 
 An old callback may fire after a transition. The engine ignores unknown inactive check IDs, and the handler callback should also return immediately when its per-check state is absent.
+
+## Temporary Rallypoint Handler
+
+Rallypoint detection is intentionally a conspicuous temporary stub. Its activation first requires non-nil `context.localPlayer`, then marks the check complete. It creates no state, queries, subscriptions, rules, or polling. Replace this only after rally targets can be classified to canonical resources while retaining human-player ownership filtering.
 
 ## Activation and Cleanup
 

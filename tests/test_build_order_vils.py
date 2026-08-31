@@ -78,6 +78,13 @@ class BuildOrderVilsContractTests(unittest.TestCase):
         self.assertNotIn("Rule_Add(function", self.source)
         self.assertNotIn("state.pollRule = function()", self.source)
 
+    def test_poll_batch_prevents_step_mutation_during_state_traversal(self) -> None:
+        poll_all = function_body(self.source, "Vils_PollAll")
+        self.assertIn("BuildOrder_BeginCheckUpdates()", poll_all)
+        self.assertIn("BuildOrder_EndCheckUpdates()", poll_all)
+        self.assertLess(poll_all.index("BuildOrder_BeginCheckUpdates()"), poll_all.index("pairs(VILS_STATE)"))
+        self.assertLess(poll_all.index("pairs(VILS_STATE)"), poll_all.index("BuildOrder_EndCheckUpdates()"))
+
     def test_removes_the_shared_rule_only_after_the_last_active_check(self) -> None:
         deactivate = function_body(self.source, "Vils_Deactivate")
         self.assertIn("VILS_STATE[check.id] = nil", deactivate)
