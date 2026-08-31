@@ -6,6 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 ENGINE_PATH = ROOT / "assets" / "scar" / "build_orders" / "objective_engine.scar"
 MAIN_PATH = ROOT / "assets" / "scar" / "winconditions" / "Macro Trainer.scar"
+IMPORT_PATTERN = re.compile(r'^\s*import\("([^"]+)"\)', re.MULTILINE)
 
 FAKE_HANDLER_FIXTURE = '''local fakeHandler = {
     activate = function(check, objectiveID, context)
@@ -28,6 +29,24 @@ def function_body(source: str, name: str) -> str:
     return match.group(1)
 
 
+def imported_scar_edges(entry: str, sources: dict[str, str]) -> list[tuple[str, str]]:
+    """Traverse available packaged SCAR sources, retaining all import edges."""
+    edges: list[tuple[str, str]] = []
+    visited: set[str] = set()
+
+    def walk(path: str) -> None:
+        if path in visited:
+            return
+        visited.add(path)
+        for imported in IMPORT_PATTERN.findall(sources[path]):
+            edges.append((path, imported))
+            if imported in sources:
+                walk(imported)
+
+    walk(entry)
+    return edges
+
+
 class BuildOrderObjectiveContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -43,6 +62,43 @@ class BuildOrderObjectiveContractTests(unittest.TestCase):
         self.assertIn(generated, self.main)
         self.assertIn(engine, self.main)
         self.assertLess(self.main.index(generated), self.main.index(engine))
+
+    def test_packaged_import_graph_loads_units_handler_once_after_engine(self) -> None:
+        root = "winconditions/Macro Trainer.scar"
+        engine = "build_orders/objective_engine.scar"
+        units = "build_orders/checks/units.scar"
+        startup = "build_orders/startup.scar"
+        sources = {
+            root: self.main,
+            engine: self.engine,
+            units: (ROOT / "assets" / "scar" / units).read_text(encoding="utf-8"),
+        }
+
+        edges = imported_scar_edges(root, sources)
+
+        self.assertEqual(edges.count((root, units)), 1)
+        self.assertLess(edges.index((root, engine)), edges.index((root, units)))
+        self.assertLess(edges.index((root, units)), edges.index((root, startup)))
+
+    def test_import_traversal_records_duplicate_edge_from_each_parent_before_visited_guard(self) -> None:
+        sources = {
+            "root.scar": 'import("left.scar")\nimport("right.scar")',
+            "left.scar": 'import("shared.scar")',
+            "right.scar": 'import("shared.scar")',
+            "shared.scar": "",
+        }
+
+        edges = imported_scar_edges("root.scar", sources)
+
+        self.assertIn(("left.scar", "shared.scar"), edges)
+        self.assertIn(("right.scar", "shared.scar"), edges)
+    def test_main_imports_built_handler_once_after_engine_and_before_startup(self) -> None:
+        engine = 'import("build_orders/objective_engine.scar")'
+        built = 'import("build_orders/checks/built.scar")'
+        startup = 'import("build_orders/startup.scar")'
+        self.assertEqual(self.main.count(built), 1)
+        self.assertLess(self.main.index(engine), self.main.index(built))
+        self.assertLess(self.main.index(built), self.main.index(startup))
 
     def test_engine_tracks_active_hierarchy_handlers_and_advancement(self) -> None:
         for field in (
@@ -118,11 +174,17 @@ class BuildOrderObjectiveContractTests(unittest.TestCase):
         activate = function_body(self.engine, "BuildOrder_ActivateStep")
         setter = function_body(self.engine, "BuildOrder_SetCheckComplete")
         self.assertIn("Obj_SetState(childID, OS_Incomplete)", activate)
-        self.assertIn("if handler ~= nil and handler.activate ~= nil then", activate)
+        self.assertIn("BuildOrder_LogMissingHandler(child.check)", activate)
+        self.assertIn("elseif handler.activate ~= nil then", activate)
         self.assertIn("if child == nil or child.completed == completed then", setter)
         self.assertIn("child.completed = completed", setter)
         self.assertIn("Obj_SetState(child.objectiveID, OS_Complete)", setter)
         self.assertIn("BuildOrder_TryAdvance()", setter)
+
+    def test_missing_registered_handler_logs_check_kind_and_id_without_completing_it(self) -> None:
+        logger = function_body(self.engine, "BuildOrder_LogMissingHandler")
+        self.assertIn('print("BuildOrder: no registered handler for " .. tostring(check.kind) .. " (check " .. tostring(check.id) .. ")")', logger)
+        self.assertNotIn("BuildOrder_SetCheckComplete", logger)
 
     def test_state_api_is_idempotent_reversible_and_advances_only_on_completion(self) -> None:
         body = function_body(self.engine, "BuildOrder_SetCheckComplete")
@@ -181,6 +243,19 @@ class BuildOrderObjectiveContractTests(unittest.TestCase):
         advance = function_body(self.engine, "BuildOrder_TryAdvance")
         self.assert_order(start, "BuildOrder_Stop()", "BuildOrder_ActivateStep(1)")
         self.assert_order(advance, "BuildOrder_ClearActiveHierarchy()", "BuildOrder_ActivateStep(nextStepIndex)")
+
+    def test_engine_exposes_selected_build_civilization_to_handlers(self) -> None:
+        self.assertIn("civ = nil", self.engine)
+        self.assertIn("BUILD_ORDER_STATE.civ = string.lower(buildOrder.civ)", self.engine)
+        activation = self.engine[self.engine.index("function BuildOrder_Start"):]
+        self.assertLess(
+            activation.index("BUILD_ORDER_STATE.civ = string.lower(buildOrder.civ)"),
+            activation.index("BuildOrder_ActivateStep(1)"),
+        )
+
+    def test_stop_clears_civilization_context(self) -> None:
+        stop = function_body(self.engine, "BuildOrder_Stop")
+        self.assertIn("BUILD_ORDER_STATE.civ = nil", stop)
 
     def test_fake_handler_fixture_exercises_public_lifecycle_without_shipping_one(self) -> None:
         self.assertIn("BuildOrder_RegisterHandler(\"fake\", fakeHandler)", FAKE_HANDLER_FIXTURE)
