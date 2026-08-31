@@ -227,11 +227,11 @@ steps:
 
     def test_compiles_single_mapping_with_canonical_immutable_model(self) -> None:
         catalog = self.compile({"opening.yaml": """civ: English\ntitle: 2 TC\nsteps:\n  - title: Opening\n    vils:\n      food: 7\n"""})
-        self.assertEqual(catalog, Catalog((BuildOrder("english-2-tc", "English", "2 TC", (Step("Opening", (CheckDescriptor("vils", "7 food villagers", False, {"resource": "food", "count": 7}),)),)),)))
+        self.assertEqual(catalog, Catalog((BuildOrder("english-2-tc", "English", "2 TC", (Step("Opening", (CheckDescriptor("vils", "7 food", False, {"food": 7}),)),)),)))
         with self.assertRaises(Exception):
             catalog.build_orders[0].title = "changed"
 
-    def test_vils_mapping_expands_resource_thresholds_in_yaml_order(self) -> None:
+    def test_vils_mapping_compiles_one_aggregate_descriptor_in_resource_order(self) -> None:
         catalog = self.compile({"opening.yaml": """civ: English
 title: Villager split
 steps:
@@ -241,10 +241,12 @@ steps:
         self.assertEqual(
             checks,
             (
-                CheckDescriptor("vils", "2 stone villagers", False, {"resource": "stone", "count": 2}),
-                CheckDescriptor("vils", "4 wood villagers", False, {"resource": "wood", "count": 4}),
-                CheckDescriptor("vils", "3 gold villagers", False, {"resource": "gold", "count": 3}),
-                CheckDescriptor("vils", "7 food villagers", False, {"resource": "food", "count": 7}),
+                CheckDescriptor(
+                    "vils",
+                    "7 food | 3 gold | 4 wood | 2 stone",
+                    False,
+                    {"food": 7, "gold": 3, "wood": 4, "stone": 2},
+                ),
             ),
         )
 

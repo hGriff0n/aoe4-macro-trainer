@@ -10,7 +10,7 @@
 
 - Built check titles are `Build <label>` or `Build <count> <label>`, including counted `oneof` entries.
 - The compiler helper accepts the caller's `civ` and `IdentityCatalog`, preserves squad-family resolution, restores non-upgrade count initialization, resolves upgrades canonically, and humanizes author IDs before completed/optional/queued title composition. Covered examples include `Queue fitted leatherwork for research` and `Queue wheelbarrow 1 for research`.
-- Villager/resource descriptor handling uses the shared per-resource path, restoring `no_collect` support and the generated `7 food villagers` presentation contract.
+- Resource descriptors remain per-resource; positive villager splits compile as one aggregate descriptor with compact ordered titles, while `no_collect` constraints remain separate villager descriptors.
 - Resources use one named `Resources_PollAll` interval listener, added on the first active descriptor and removed after the last; the handler remains scoped to `context.localPlayer` / stored state player.
 - The packaged root imports resources and upgrades once each after the objective engine and before startup. Manual verification confirmed all seven handlers (`vils`, `built`, `age_up`, `resources`, `upgrades`, `produce`, `units`) appear exactly once in that interval.
 
@@ -46,3 +46,13 @@ Green results:
 - Built, resource, and upgrade flows retain local-human player scoping; no handler import was duplicated or removed.
 - The constant-production implementation and squad-family IDs/titles are covered by the passing compiler/produce-related tests and were not reverted.
 - Final integration commit: `fix: reconcile post-merge objective checks` (this commit contains the report).
+
+## Fix round: restore GRI-55 aggregate villager splits
+
+Review identified that the first reconciliation incorrectly routed `vils` through `_resource_checks`. The user-validated `codex/gri-55-vils-check` head `6a99d47` instead compiles positive splits into one descriptor with the payload `{food, gold, wood, stone}` and a compact resource-order title.
+
+- Red: after restoring aggregate expectations, `python -m unittest tests.test_build_order_compiler.BuildOrderCompilerTests.test_compiles_single_mapping_with_canonical_immutable_model tests.test_build_order_compiler.BuildOrderCompilerTests.test_vils_mapping_compiles_one_aggregate_descriptor_in_resource_order tests.test_build_order_compiler.BuildOrderCompilerTests.test_supports_all_documented_check_shapes -v` failed 2 assertions: current output used individual `villagers` titles/payloads. The `no_collect` shape still passed.
+- Fix: restored `RESOURCE_ORDER` and `_vils_check`; it builds exactly one positive threshold descriptor in food/gold/wood/stone order and appends validated `no_collect` descriptors separately. Resources continue using `_resource_checks`.
+- Green: `python -m unittest tests.test_build_order_compiler tests.test_build_order_vils tests.test_build_order_build -v` — 51 tests, OK.
+- Final verification: full discovery with host temp access — 241 tests, OK; `python tools/build_mod.py --build-orders 'E:\Docs\github\aoemod\build orders' --generate-only` — exit 0; `git diff --check` — exit 0.
+- Fix-round commit: `fix: restore aggregate villager splits` (this commit appends this evidence).

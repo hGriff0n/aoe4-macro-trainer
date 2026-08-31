@@ -11,7 +11,8 @@ from .identities import (
 )
 from .model import BuildOrder, Catalog, CheckDescriptor, Step, normalize_id
 
-RESOURCES = {"food", "gold", "stone", "wood"}
+RESOURCE_ORDER = ("food", "gold", "wood", "stone")
+RESOURCES = set(RESOURCE_ORDER)
 CHECK_FIELDS = {"vils", "rallypoint", "built", "age_up", "upgrades", "produce", "resources", "buildings", "units", "hints"}
 CHECK_ID_CATEGORIES = {
     "built": "entity",
@@ -183,6 +184,34 @@ def _resource_checks(kind: str, value: Any, file: Path, path: str, no_collect: b
     return checks
 
 
+def _vils_check(value: Any, file: Path, path: str) -> list[CheckDescriptor]:
+    mapping = _mapping(value, file, path)
+    thresholds: dict[str, int] = {}
+    no_collect_checks: list[CheckDescriptor] = []
+    for resource in RESOURCE_ORDER:
+        if resource in mapping:
+            thresholds[resource] = _positive(mapping[resource], file, f"{path}.{resource}")
+    if "no_collect" in mapping:
+        for index, item in enumerate(_list(mapping["no_collect"], file, f"{path}.no_collect")):
+            resource = _string(item, file, f"{path}.no_collect[{index}]")
+            if resource not in RESOURCES:
+                _error(file, f"{path}.no_collect[{index}]", "unsupported resource")
+            no_collect_checks.append(
+                CheckDescriptor("vils", f"No {resource} villagers", False, {"resource": resource, "no_collect": True})
+            )
+    for resource in mapping:
+        if resource not in RESOURCES and resource != "no_collect":
+            _error(file, f"{path}.{resource}", "unsupported resource")
+    checks: list[CheckDescriptor] = []
+    if thresholds:
+        title = " | ".join(f"{count} {resource}" for resource, count in thresholds.items())
+        checks.append(CheckDescriptor("vils", title, False, thresholds))
+    checks.extend(no_collect_checks)
+    if not checks:
+        _error(file, path, "must not be empty")
+    return checks
+
+
 def _check_descriptors(
     kind: str,
     value: Any,
@@ -191,7 +220,9 @@ def _check_descriptors(
     civ: str,
     identities: IdentityCatalog,
 ) -> list[CheckDescriptor]:
-    if kind in {"vils", "resources"}:
+    if kind == "vils":
+        return _vils_check(value, file, path)
+    if kind == "resources":
         return _resource_checks(kind, value, file, path)
     if kind == "rallypoint":
         checks = []
