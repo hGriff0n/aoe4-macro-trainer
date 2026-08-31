@@ -1,5 +1,6 @@
 local RESOURCES_STATE = {}
 local RESOURCES_POLL_INTERVAL_SECONDS = 1
+local RESOURCES_ACTIVE_COUNT = 0
 
 function Resources_ResourceType(resource)
 	if resource == "food" then
@@ -27,6 +28,12 @@ function Resources_Poll(checkID)
 	BuildOrder_SetCheckComplete(checkID, amount >= state.payload.count)
 end
 
+function Resources_PollAll()
+	for checkID, _ in pairs(RESOURCES_STATE) do
+		Resources_Poll(checkID)
+	end
+end
+
 function Resources_Activate(check, objectiveID, context)
 	local player = context.localPlayer
 	if player == nil then
@@ -45,10 +52,10 @@ function Resources_Activate(check, objectiveID, context)
 		resourceType = resourceType,
 	}
 	RESOURCES_STATE[check.id] = state
-	state.pollRule = function()
-		Resources_Poll(check.id)
+	if RESOURCES_ACTIVE_COUNT == 0 then
+		Rule_AddInterval(Resources_PollAll, RESOURCES_POLL_INTERVAL_SECONDS)
 	end
-	Rule_AddInterval(state.pollRule, RESOURCES_POLL_INTERVAL_SECONDS)
+	RESOURCES_ACTIVE_COUNT = RESOURCES_ACTIVE_COUNT + 1
 	Resources_Poll(check.id)
 end
 
@@ -58,8 +65,11 @@ function Resources_Deactivate(check, objectiveID, context)
 		return
 	end
 
-	Rule_Remove(state.pollRule)
 	RESOURCES_STATE[check.id] = nil
+	RESOURCES_ACTIVE_COUNT = RESOURCES_ACTIVE_COUNT - 1
+	if RESOURCES_ACTIVE_COUNT == 0 then
+		Rule_Remove(Resources_PollAll)
+	end
 end
 
 BuildOrder_RegisterHandler("resources", {

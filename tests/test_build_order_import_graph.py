@@ -35,6 +35,34 @@ def walk_import_edges(root: str, sources: dict[str, str]) -> list[tuple[str, str
 
 
 class BuildOrderImportGraphTests(unittest.TestCase):
+    def test_packaged_root_imports_resources_handler_after_engine_before_startup(self) -> None:
+        edges = walk_import_edges(MAIN_SCRIPT, packaged_scar_sources())
+        root_edges = [target for source, target in edges if source == MAIN_SCRIPT]
+
+        self.assertEqual(root_edges.count("build_orders/checks/resources.scar"), 1)
+        self.assertLess(
+            root_edges.index("build_orders/objective_engine.scar"),
+            root_edges.index("build_orders/checks/resources.scar"),
+        )
+        self.assertLess(
+            root_edges.index("build_orders/checks/resources.scar"),
+            root_edges.index("build_orders/startup.scar"),
+        )
+
+    def test_packaged_root_imports_upgrades_handler_after_engine_before_startup(self) -> None:
+        edges = walk_import_edges(MAIN_SCRIPT, packaged_scar_sources())
+        root_edges = [target for source, target in edges if source == MAIN_SCRIPT]
+
+        self.assertEqual(root_edges.count("build_orders/checks/upgrades.scar"), 1)
+        self.assertLess(
+            root_edges.index("build_orders/objective_engine.scar"),
+            root_edges.index("build_orders/checks/upgrades.scar"),
+        )
+        self.assertLess(
+            root_edges.index("build_orders/checks/upgrades.scar"),
+            root_edges.index("build_orders/startup.scar"),
+        )
+
     def test_packaged_root_imports_produce_handler_after_engine_before_startup(self) -> None:
         edges = walk_import_edges(MAIN_SCRIPT, packaged_scar_sources())
         root_edges = [target for source, target in edges if source == MAIN_SCRIPT]

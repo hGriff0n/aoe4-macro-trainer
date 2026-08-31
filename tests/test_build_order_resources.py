@@ -57,13 +57,30 @@ class BuildOrderResourcesContractTests(unittest.TestCase):
         self.assertIn("activate = Resources_Activate", self.source)
         self.assertIn("deactivate = Resources_Deactivate", self.source)
 
-    def test_activation_keeps_one_local_player_state_and_rule_per_descriptor(self) -> None:
+    def test_activation_keeps_one_local_player_state_and_evaluates_it_immediately(self) -> None:
         activate = function_body(self.source, "Resources_Activate")
         self.assertIn("RESOURCES_STATE[check.id] = state", activate)
         self.assertIn("player = context.localPlayer", activate)
         self.assertIn("payload = check.payload", activate)
-        self.assertIn("state.pollRule = function()", activate)
-        self.assertIn("Rule_AddInterval(state.pollRule, RESOURCES_POLL_INTERVAL_SECONDS)", activate)
+        self.assertIn("Resources_Poll(check.id)", activate)
+
+    def test_multiple_descriptors_share_a_named_poll_rule_with_first_last_lifecycle(self) -> None:
+        activate = function_body(self.source, "Resources_Activate")
+        deactivate = function_body(self.source, "Resources_Deactivate")
+        poll_all = function_body(self.source, "Resources_PollAll")
+
+        self.assertNotIn("state.pollRule = function()", self.source)
+        self.assertIn("RESOURCES_ACTIVE_COUNT = RESOURCES_ACTIVE_COUNT + 1", activate)
+        self.assertIn("if RESOURCES_ACTIVE_COUNT == 0 then", activate)
+        self.assertIn(
+            "Rule_AddInterval(Resources_PollAll, RESOURCES_POLL_INTERVAL_SECONDS)",
+            activate,
+        )
+        self.assertIn("RESOURCES_ACTIVE_COUNT = RESOURCES_ACTIVE_COUNT - 1", deactivate)
+        self.assertIn("if RESOURCES_ACTIVE_COUNT == 0 then", deactivate)
+        self.assertIn("Rule_Remove(Resources_PollAll)", deactivate)
+        self.assertIn("for checkID, _ in pairs(RESOURCES_STATE) do", poll_all)
+        self.assertIn("Resources_Poll(checkID)", poll_all)
 
     def test_poll_reads_only_the_stored_player_bank_for_the_descriptor_resource(self) -> None:
         poll = function_body(self.source, "Resources_Poll")
@@ -88,10 +105,9 @@ class BuildOrderResourcesContractTests(unittest.TestCase):
             self.assertIn(f'resource == "{resource}"', resource_type)
             self.assertIn(f"return {resource_type_name}", resource_type)
 
-    def test_deactivation_removes_only_its_rule_and_is_idempotent(self) -> None:
+    def test_deactivation_removes_its_state_and_is_idempotent(self) -> None:
         deactivate = function_body(self.source, "Resources_Deactivate")
         self.assertIn("if state == nil then", deactivate)
-        self.assertIn("Rule_Remove(state.pollRule)", deactivate)
         self.assertIn("RESOURCES_STATE[check.id] = nil", deactivate)
 
 

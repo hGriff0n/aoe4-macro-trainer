@@ -44,7 +44,7 @@ steps:
             [
                 ("Research wheelbarrow", False, {"id": "upgrade_unit_town_center_wheelbarrow_1", "queued": False}),
                 ("[Optional] Research horticulture", True, {"id": "upgrade_econ_resource_food_harvest_rate_2", "queued": False}),
-                ("Queue fitted_leatherwork for research", False, {"id": "upgrade_melee_armor_i", "queued": True}),
+                ("Queue fitted leatherwork for research", False, {"id": "upgrade_melee_armor_i", "queued": True}),
             ],
         )
 

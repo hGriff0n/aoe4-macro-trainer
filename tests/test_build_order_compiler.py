@@ -118,7 +118,7 @@ steps:
             check.payload["oneof"],
             ["building_stable_eng", "building_archery_range_eng"],
         )
-        self.assertEqual(check.title, "Built: stable or archery range")
+        self.assertEqual(check.title, "Build stable or archery range")
 
     def test_family_ids_drive_squad_titles_and_payloads(self) -> None:
         checks = self.compile({"order.yaml": """civ: english
@@ -134,9 +134,9 @@ steps:
         self.assertEqual(
             [check.title for check in checks],
             [
-                "Built: palace of swabia 3",
+                "Build palace of swabia 3",
                 "Age Up: council hall 2",
-                "wheelbarrow 1",
+                "Queue wheelbarrow 1 for research",
                 "Constantly produce villager",
                 "Have 3 spearman active",
             ],
@@ -227,11 +227,11 @@ steps:
 
     def test_compiles_single_mapping_with_canonical_immutable_model(self) -> None:
         catalog = self.compile({"opening.yaml": """civ: English\ntitle: 2 TC\nsteps:\n  - title: Opening\n    vils:\n      food: 7\n"""})
-        self.assertEqual(catalog, Catalog((BuildOrder("english-2-tc", "English", "2 TC", (Step("Opening", (CheckDescriptor("vils", "7 food", False, {"food": 7}),)),)),)))
+        self.assertEqual(catalog, Catalog((BuildOrder("english-2-tc", "English", "2 TC", (Step("Opening", (CheckDescriptor("vils", "7 food villagers", False, {"resource": "food", "count": 7}),)),)),)))
         with self.assertRaises(Exception):
             catalog.build_orders[0].title = "changed"
 
-    def test_vils_mapping_compiles_one_canonical_reversible_descriptor(self) -> None:
+    def test_vils_mapping_expands_resource_thresholds_in_yaml_order(self) -> None:
         catalog = self.compile({"opening.yaml": """civ: English
 title: Villager split
 steps:
@@ -241,12 +241,10 @@ steps:
         self.assertEqual(
             checks,
             (
-                CheckDescriptor(
-                    "vils",
-                    "7 food | 3 gold | 4 wood | 2 stone",
-                    False,
-                    {"food": 7, "gold": 3, "wood": 4, "stone": 2},
-                ),
+                CheckDescriptor("vils", "2 stone villagers", False, {"resource": "stone", "count": 2}),
+                CheckDescriptor("vils", "4 wood villagers", False, {"resource": "wood", "count": 4}),
+                CheckDescriptor("vils", "3 gold villagers", False, {"resource": "gold", "count": 3}),
+                CheckDescriptor("vils", "7 food villagers", False, {"resource": "food", "count": 7}),
             ),
         )
 
@@ -333,6 +331,8 @@ steps:
                 "vils": 4,
                 "location": "gold",
             },
+        )
+
     def test_formats_built_titles_from_count_choice_and_presentation_hints(self) -> None:
         catalog = self.compile({"built.yaml": """civ: English
 title: Built titles
@@ -344,6 +344,7 @@ steps:
       - id: barracks
         count: 2
       - oneof: [stable, archery_range]
+        count: 2
       - id: outpost
         count: 2
         vils: 3
@@ -353,11 +354,11 @@ steps:
         self.assertEqual(
             [check.title for check in checks],
             [
-                "Built: barracks",
-                "Built: house",
-                "Built: barracks",
-                "Built: stable or archery range",
-                "Built: outpost",
+                "Build barracks",
+                "Build 2 house",
+                "Build 2 barracks",
+                "Build 2 stable or archery range",
+                "Build 2 outpost",
             ],
         )
 
