@@ -72,9 +72,13 @@ def _id_or_oneof(value: Any, file: Path, path: str, allowed: set[str]) -> dict[s
     return {"oneof": [_string(item, file, f"{path}.oneof[{index}]") for index, item in enumerate(choices)]}
 
 
+def _age_up_trigger(civ: str) -> str:
+    return "upgrade" if normalize_identity_id(civ) in UPGRADE_AGE_UP_CIVS else "construction"
+
+
 def _identity_category(kind: str, civ: str) -> str:
     if kind == "age_up":
-        return "upgrade" if normalize_identity_id(civ) in UPGRADE_AGE_UP_CIVS else "entity"
+        return "upgrade" if _age_up_trigger(civ) == "upgrade" else "entity"
     return CHECK_ID_CATEGORIES[kind]
 
 
@@ -262,6 +266,8 @@ def _check_descriptors(
                 file=file,
                 path=item_path,
             )
+            if kind == "age_up":
+                payload["trigger"] = _age_up_trigger(civ)
             if kind == "built":
                 count_label = "" if payload["count"] == 1 else f'{payload["count"]} '
                 title = f"Build {count_label}{label}"
