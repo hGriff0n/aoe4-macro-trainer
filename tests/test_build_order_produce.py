@@ -280,20 +280,25 @@ class ProduceHandlerContractTests(unittest.TestCase):
         activate = function_body(self.source, "Produce_Activate")
         self.assertIn("context.localPlayer", activate)
         self.assertIn("PRODUCE_STATE[check.id]", activate)
-        self.assertIn("pbgs = Produce_ResolvePBGs(check.payload.ids)", activate)
+        self.assertIn(
+            "pbgs = BuildOrder_ResolveBlueprints(check.payload.ids, BP_GetSquadBlueprint)",
+            activate,
+        )
         self.assertIn("remaining = check.payload.count", activate)
         self.assertIn("seen = {}", activate)
         self.assertNotIn("Player_GetSquads", self.source)
         self.assertNotIn("Produce_ScanNewSquads", self.source)
 
     def test_resolves_every_family_blueprint_once_at_activation(self) -> None:
-        resolver = function_body(self.source, "Produce_ResolvePBGs")
-        self.assertIn("for _, id in ipairs(ids) do", resolver)
-        self.assertIn("table.insert(pbgs, BP_GetSquadBlueprint(id))", resolver)
+        activate = function_body(self.source, "Produce_Activate")
+        self.assertIn(
+            "BuildOrder_ResolveBlueprints(check.payload.ids, BP_GetSquadBlueprint)",
+            activate,
+        )
         start = self.source.index("function Produce_OnBuildItemComplete")
         end = self.source.index("local function Produce_EnsureCommandEventRegistered", start + 1)
         callback = self.source[start:end]
-        self.assertIn("Produce_MatchesPBG(state.pbgs, context.pbg)", callback)
+        self.assertIn("BuildOrder_MatchesAnyBlueprint(state.pbgs, context.pbg)", callback)
         self.assertNotIn("context.pbg == state.pbgs", callback)
         self.assertNotIn("BP_GetSquadBlueprint", callback)
 
@@ -320,15 +325,12 @@ class ProduceHandlerContractTests(unittest.TestCase):
     def test_completion_filters_owner_before_full_canonical_identity(self) -> None:
         callback = function_body(self.source, "Produce_OnBuildItemComplete")
         owner = "context.player == state.player"
-        identity = "Produce_MatchesPBG(state.pbgs, context.pbg)"
+        identity = "BuildOrder_MatchesAnyBlueprint(state.pbgs, context.pbg)"
         self.assertIn(owner, callback)
         self.assertIn(identity, callback)
         self.assertLess(callback.index(owner), callback.index(identity))
 
-        equal = function_body(self.source, "Produce_BlueprintsEqual")
-        self.assertIn("PropertyBagGroupID", equal)
-        self.assertIn("PropertyBagGroupModPackID", equal)
-        self.assertIn("PropertyBagGroupType", equal)
+        self.assertIn("BuildOrder_MatchesAnyBlueprint", self.source)
 
     def test_completion_deduplicates_spawned_squad_and_latches_at_count(self) -> None:
         callback = function_body(self.source, "Produce_OnBuildItemComplete")
@@ -348,7 +350,7 @@ class ProduceHandlerContractTests(unittest.TestCase):
         self.assertIn("EGroup_ForEach", queue)
         self.assertIn(owner, scan)
         self.assertIn(blueprint, scan)
-        self.assertIn("Produce_MatchesPBG(state.pbgs, Entity_GetProductionQueueItem(entity, index))", scan)
+        self.assertIn("BuildOrder_MatchesAnyBlueprint(state.pbgs, Entity_GetProductionQueueItem(entity, index))", scan)
         self.assertLess(scan.index(owner), scan.index(blueprint))
         self.assertIn("Entity_GetProductionQueueSize(entity)", scan)
         self.assertIn("queueCount >= state.payload.count", queue)

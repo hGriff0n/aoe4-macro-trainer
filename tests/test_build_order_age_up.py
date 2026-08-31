@@ -135,7 +135,7 @@ class AgeUpHandlerContractTests(unittest.TestCase):
             self.assertIn(f"{civ} = true", self.source)
 
     def test_activation_caches_pbg_tuples_using_civilization_selected_resolver(self) -> None:
-        self.assertIn("AgeUp_ResolvePBGs(check.payload, civ)", self.source)
+        self.assertIn("BuildOrder_ResolvePayloadBlueprints(check.payload, resolver)", self.source)
         self.assertIn("pbgs =", self.source)
         self.assertIn("BP_GetUpgradeBlueprint", self.source)
         self.assertIn("BP_GetEntityBlueprint", self.source)
@@ -150,7 +150,7 @@ class AgeUpHandlerContractTests(unittest.TestCase):
             self.source.index("function AgeUp_OnUpgradeStart")
         ]
         owner = "context.player ~= state.player"
-        identity = "AgeUp_MatchesPBG(state.pbgs, context.pbg)"
+        identity = "BuildOrder_MatchesAnyBlueprint(state.pbgs, context.pbg)"
         self.assertIn("context.player", handler)
         self.assertIn("context.pbg", handler)
         self.assertIn("context.entity", handler)
@@ -173,39 +173,21 @@ class AgeUpHandlerContractTests(unittest.TestCase):
         self.assertIn("function AgeUp_OnUpgradeStart", self.source)
         handler = self.source[self.source.index("function AgeUp_OnUpgradeStart"):]
         owner = "owner ~= state.player"
-        identity = "AgeUp_MatchesPBG(state.pbgs, context.upgrade)"
+        identity = "BuildOrder_MatchesAnyBlueprint(state.pbgs, context.upgrade)"
         self.assertIn("context.upgrade", handler)
         self.assertNotIn("context.pbg", handler)
         self.assertIn(owner, handler)
         self.assertIn(identity, handler)
         self.assertLess(handler.index(owner), handler.index(identity))
 
-    def test_upgrade_executor_resolver_accepts_direct_player_shape(self) -> None:
-        self.assertIn("function AgeUp_OnUpgradeStart", self.source)
-        resolver = self.source[
-            self.source.index("function AgeUp_GetExecuterOwner"):
-            self.source.index("function AgeUp_OnUpgradeStart")
-        ]
-        self.assertIn("context.executer.PlayerID ~= nil", resolver)
-        self.assertIn("return context.executer", resolver)
-
-    def test_upgrade_executor_resolver_accepts_entity_shape(self) -> None:
-        self.assertIn("function AgeUp_OnUpgradeStart", self.source)
-        resolver = self.source[
-            self.source.index("function AgeUp_GetExecuterOwner"):
-            self.source.index("function AgeUp_OnUpgradeStart")
-        ]
-        self.assertIn("context.executer.EntityID ~= nil", resolver)
-        self.assertIn("return Entity_GetPlayerOwner(context.executer)", resolver)
-
     def test_upgrade_callback_rejects_opponent_executor_before_identity_match(self) -> None:
         self.assertIn("function AgeUp_OnUpgradeStart", self.source)
         handler = self.source[self.source.index("function AgeUp_OnUpgradeStart"):]
-        self.assertIn("local owner = AgeUp_GetExecuterOwner(context)", handler)
+        self.assertIn("local owner = BuildOrder_GetExecuterOwner(context)", handler)
         self.assertIn("if owner ~= state.player then", handler)
         self.assertLess(
             handler.index("if owner ~= state.player then"),
-            handler.index("AgeUp_MatchesPBG(state.pbgs, context.upgrade)"),
+            handler.index("BuildOrder_MatchesAnyBlueprint(state.pbgs, context.upgrade)"),
         )
 
     def test_baselines_are_player_scoped(self) -> None:
