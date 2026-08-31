@@ -2,12 +2,35 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from tools.build_orders.compiler import BuildOrderValidationError, compile_directory
+from tools.build_orders.compiler import (
+    CHECK_COMPILERS,
+    CHECK_FIELDS,
+    BuildOrderValidationError,
+    compile_directory,
+)
 from tools.build_orders.identities import IdentityCatalog, SquadFamilyIdentity
 from tools.build_orders.model import BuildOrder, Catalog, CheckDescriptor, Step, normalize_id
 
 
 class BuildOrderCompilerTests(unittest.TestCase):
+    def test_check_compiler_registry_covers_documented_fields(self) -> None:
+        self.assertEqual(
+            set(CHECK_COMPILERS),
+            {
+                "vils",
+                "resources",
+                "rallypoint",
+                "built",
+                "age_up",
+                "upgrades",
+                "produce",
+                "buildings",
+                "units",
+                "hints",
+            },
+        )
+        self.assertEqual(CHECK_FIELDS, set(CHECK_COMPILERS))
+
     def setUp(self) -> None:
         self.identities = IdentityCatalog(
             {
