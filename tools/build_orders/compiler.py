@@ -285,7 +285,7 @@ def _check_descriptors(kind: str, value: Any, file: Path, path: str) -> list[Che
                     unit = _humanize_identity_id(family_id)
                     counted_unit = unit if payload["count"] == 1 else _pluralize_unit(unit)
                     if payload.get("constant", False):
-                        title = f"Constantly produce {unit} [unsupported: continuous production]"
+                        title = f"Constantly produce {unit}"
                         optional = True
                     elif payload.get("queued", False):
                         title = f"Queue {payload['count']} {counted_unit}"
