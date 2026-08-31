@@ -6,6 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 ENGINE_PATH = ROOT / "assets" / "scar" / "build_orders" / "objective_engine.scar"
 MAIN_PATH = ROOT / "assets" / "scar" / "winconditions" / "Macro Trainer.scar"
+IMPORT_PATTERN = re.compile(r'^\s*import\("([^"]+)"\)', re.MULTILINE)
 
 FAKE_HANDLER_FIXTURE = '''local fakeHandler = {
     activate = function(check, objectiveID, context)
@@ -28,6 +29,24 @@ def function_body(source: str, name: str) -> str:
     return match.group(1)
 
 
+def imported_scar_edges(entry: str, sources: dict[str, str]) -> list[tuple[str, str]]:
+    """Traverse available packaged SCAR sources, retaining all import edges."""
+    edges: list[tuple[str, str]] = []
+    visited: set[str] = set()
+
+    def walk(path: str) -> None:
+        if path in visited:
+            return
+        visited.add(path)
+        for imported in IMPORT_PATTERN.findall(sources[path]):
+            edges.append((path, imported))
+            if imported in sources:
+                walk(imported)
+
+    walk(entry)
+    return edges
+
+
 class BuildOrderObjectiveContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -44,6 +63,35 @@ class BuildOrderObjectiveContractTests(unittest.TestCase):
         self.assertIn(engine, self.main)
         self.assertLess(self.main.index(generated), self.main.index(engine))
 
+    def test_packaged_import_graph_loads_units_handler_once_after_engine(self) -> None:
+        root = "winconditions/Macro Trainer.scar"
+        engine = "build_orders/objective_engine.scar"
+        units = "build_orders/checks/units.scar"
+        startup = "build_orders/startup.scar"
+        sources = {
+            root: self.main,
+            engine: self.engine,
+            units: (ROOT / "assets" / "scar" / units).read_text(encoding="utf-8"),
+        }
+
+        edges = imported_scar_edges(root, sources)
+
+        self.assertEqual(edges.count((root, units)), 1)
+        self.assertLess(edges.index((root, engine)), edges.index((root, units)))
+        self.assertLess(edges.index((root, units)), edges.index((root, startup)))
+
+    def test_import_traversal_records_duplicate_edge_from_each_parent_before_visited_guard(self) -> None:
+        sources = {
+            "root.scar": 'import("left.scar")\nimport("right.scar")',
+            "left.scar": 'import("shared.scar")',
+            "right.scar": 'import("shared.scar")',
+            "shared.scar": "",
+        }
+
+        edges = imported_scar_edges("root.scar", sources)
+
+        self.assertIn(("left.scar", "shared.scar"), edges)
+        self.assertIn(("right.scar", "shared.scar"), edges)
     def test_main_imports_built_handler_once_after_engine_and_before_startup(self) -> None:
         engine = 'import("build_orders/objective_engine.scar")'
         built = 'import("build_orders/checks/built.scar")'
