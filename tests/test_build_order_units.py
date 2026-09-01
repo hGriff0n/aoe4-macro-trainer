@@ -128,13 +128,19 @@ class UnitsHandlerContractTests(unittest.TestCase):
         activate = function_body(self.source, "Units_Activate")
         self.assertIn("local player = context.localPlayer", activate)
         self.assertIn("UNITS_STATE[check.id]", activate)
-        self.assertIn("pbgs = Units_ResolvePBGs(check.payload.ids)", activate)
+        self.assertIn(
+            "pbgs = BuildOrder_ResolveBlueprints(check.payload.ids, BP_GetSquadBlueprint)",
+            activate,
+        )
         self.assertIn("Rule_AddInterval(Units_Poll", activate)
         self.assertIn("Units_Poll()", activate)
 
     def test_resolves_every_unit_family_blueprint_at_activation_not_each_poll(self) -> None:
-        resolver = function_body(self.source, "Units_ResolvePBGs")
-        self.assertIn("BP_GetSquadBlueprint", resolver)
+        activate = function_body(self.source, "Units_Activate")
+        self.assertIn(
+            "BuildOrder_ResolveBlueprints(check.payload.ids, BP_GetSquadBlueprint)",
+            activate,
+        )
         start = self.source.index("function Units_Poll")
         end = self.source.index("function Units_Activate", start + 1)
         poll = self.source[start:end]
@@ -142,19 +148,14 @@ class UnitsHandlerContractTests(unittest.TestCase):
         self.assertIn("state.pbgs", poll)
 
     def test_matches_squad_blueprints_by_pbg_tuple_value(self) -> None:
-        matcher = function_body(self.source, "Units_BlueprintsEqual")
-        self.assertIn("left.PropertyBagGroupID == right.PropertyBagGroupID", matcher)
-        self.assertIn("left.PropertyBagGroupModPackID == right.PropertyBagGroupModPackID", matcher)
-        self.assertIn("left.PropertyBagGroupType == right.PropertyBagGroupType", matcher)
-        matcher = function_body(self.source, "Units_MatchesPBG")
-        self.assertIn("Units_BlueprintsEqual(candidate, pbg)", matcher)
+        self.assertIn("BuildOrder_MatchesAnyBlueprint", self.source)
         scan = function_body(self.source, "Units_ScanSquad")
-        self.assertIn("Units_MatchesPBG(state.pbgs, Squad_GetBlueprint(squad)) == false", scan)
+        self.assertIn("BuildOrder_MatchesAnyBlueprint(state.pbgs, Squad_GetBlueprint(squad)) == false", scan)
 
     def test_recomputes_human_owned_living_canonical_squads_before_each_threshold(self) -> None:
         scan = function_body(self.source, "Units_ScanSquad")
         owner = "Squad_GetPlayerOwner(squad) ~= state.player"
-        blueprint = "Units_MatchesPBG(state.pbgs, Squad_GetBlueprint(squad)) == false"
+        blueprint = "BuildOrder_MatchesAnyBlueprint(state.pbgs, Squad_GetBlueprint(squad)) == false"
         alive = "Squad_IsAlive(squad) == false"
         self.assertIn(owner, scan)
         self.assertIn(blueprint, scan)

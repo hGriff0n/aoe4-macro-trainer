@@ -48,12 +48,11 @@ class BuiltCheckContractTests(unittest.TestCase):
     def test_checks_owner_before_blueprint_and_accepts_id_or_oneof(self) -> None:
         callback = function_body(self.source, "Built_OnConstructionComplete")
         owner = "context.player == state.player"
-        blueprint = "Built_MatchesPBG(state.pbgs, context.pbg)"
+        blueprint = "BuildOrder_MatchesAnyBlueprint(state.pbgs, context.pbg)"
         self.assertIn(owner, callback)
         self.assertIn(blueprint, callback)
         self.assertLess(callback.index(owner), callback.index(blueprint))
-        matcher = function_body(self.source, "Built_MatchesPBG")
-        self.assertIn("ipairs(pbgs)", matcher)
+        self.assertIn("BuildOrder_MatchesAnyBlueprint", self.source)
 
     def test_completion_event_batches_updates_around_state_traversal(self) -> None:
         callback = function_body(self.source, "Built_OnConstructionComplete")
@@ -63,22 +62,22 @@ class BuiltCheckContractTests(unittest.TestCase):
         self.assertLess(callback.index("pairs(BUILT_STATE)"), callback.index("BuildOrder_EndCheckUpdates()"))
 
     def test_resolves_and_compares_the_complete_canonical_pbg_tuple(self) -> None:
-        resolve = function_body(self.source, "Built_ResolvePBGs")
-        self.assertIn("BP_GetEntityBlueprint(payload.id)", resolve)
-        self.assertIn("BP_GetEntityBlueprint(candidate)", resolve)
-
-        equal = function_body(self.source, "Built_BlueprintsEqual")
-        self.assertIn("PropertyBagGroupID", equal)
-        self.assertIn("PropertyBagGroupModPackID", equal)
-        self.assertIn("PropertyBagGroupType", equal)
+        activate = function_body(self.source, "Built_Activate")
+        self.assertIn(
+            "BuildOrder_ResolvePayloadBlueprints(check.payload, BP_GetEntityBlueprint)",
+            activate,
+        )
 
     def test_resolves_entity_blueprints_only_during_activation(self) -> None:
         activate = function_body(self.source, "Built_Activate")
-        self.assertIn("pbgs = Built_ResolvePBGs(check.payload)", activate)
+        self.assertIn(
+            "pbgs = BuildOrder_ResolvePayloadBlueprints(check.payload, BP_GetEntityBlueprint)",
+            activate,
+        )
 
         callback = function_body(self.source, "Built_OnConstructionComplete")
         self.assertNotIn("BP_GetEntityBlueprint", callback)
-        self.assertIn("Built_MatchesPBG(state.pbgs, context.pbg)", callback)
+        self.assertIn("BuildOrder_MatchesAnyBlueprint(state.pbgs, context.pbg)", callback)
 
     def test_only_matching_human_completed_buildings_decrement_and_latch(self) -> None:
         callback = function_body(self.source, "Built_OnConstructionComplete")

@@ -73,7 +73,7 @@ class BuildOrderUpgradeHandlerContractTests(unittest.TestCase):
         queued = function_body(self.source, "Upgrades_HasQueuedResearch")
 
         self.assertIn("upgrade = BP_GetUpgradeBlueprint(check.payload.id)", activate)
-        self.assertIn("Upgrades_PBGsEqual(context.upgrade, state.upgrade)", callback)
+        self.assertIn("BuildOrder_BlueprintsEqual(context.upgrade, state.upgrade)", callback)
         self.assertIn("state.upgrade", queued)
         self.assertNotIn("BP_GetUpgradeBlueprint", callback)
         self.assertNotIn("BP_GetUpgradeBlueprint", queued)
@@ -84,7 +84,7 @@ class BuildOrderUpgradeHandlerContractTests(unittest.TestCase):
         self.assertIn("Entity_GetPlayerOwner(entity) == state.player", scan)
         self.assertIn("Entity_GetProductionQueueSize(entity)", scan)
         self.assertIn("Entity_GetProductionQueueItemType(entity, index)", scan)
-        self.assertIn("Upgrades_PBGsEqual(Entity_GetProductionQueueItem(entity, index), state.upgrade)", scan)
+        self.assertIn("BuildOrder_BlueprintsEqual(Entity_GetProductionQueueItem(entity, index), state.upgrade)", scan)
         self.assertIn("PITEM_Upgrade", scan)
         self.assertIn("PITEM_PlayerUpgrade", scan)
 
@@ -103,14 +103,10 @@ class BuildOrderUpgradeHandlerContractTests(unittest.TestCase):
         self.assertNotIn("Rule_Remove(Upgrades_Poll)", self.source)
 
     def test_completion_event_filters_polymorphic_owner_before_canonical_upgrade(self) -> None:
-        owner = function_body(self.source, "Upgrades_GetExecuterOwner")
-        self.assertIn("context.executer.PlayerID", owner)
-        self.assertIn("context.executer.EntityID", owner)
-        self.assertIn("Entity_GetPlayerOwner(context.executer)", owner)
-
         callback = function_body(self.source, "Upgrades_OnUpgradeComplete")
         owner_match = "owner ~= state.player"
-        upgrade_match = "Upgrades_PBGsEqual(context.upgrade, state.upgrade)"
+        upgrade_match = "BuildOrder_BlueprintsEqual(context.upgrade, state.upgrade)"
+        self.assertIn("BuildOrder_GetExecuterOwner(context)", callback)
         self.assertIn(owner_match, callback)
         self.assertIn(upgrade_match, callback)
         self.assertLess(callback.index(owner_match), callback.index(upgrade_match))

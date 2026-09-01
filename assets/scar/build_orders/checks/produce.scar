@@ -5,29 +5,6 @@ PRODUCE_RECOUNT_RULE_ACTIVE = false
 PRODUCE_COMMAND_EVENT_REGISTERED = false
 PRODUCE_COMPLETION_EVENT_REGISTERED = false
 
-local function Produce_BlueprintsEqual(left, right)
-	return left.PropertyBagGroupID == right.PropertyBagGroupID
-		and left.PropertyBagGroupModPackID == right.PropertyBagGroupModPackID
-		and left.PropertyBagGroupType == right.PropertyBagGroupType
-end
-
-function Produce_ResolvePBGs(ids)
-	local pbgs = {}
-	for _, id in ipairs(ids) do
-		table.insert(pbgs, BP_GetSquadBlueprint(id))
-	end
-	return pbgs
-end
-
-function Produce_MatchesPBG(pbgs, pbg)
-	for _, candidate in ipairs(pbgs) do
-		if Produce_BlueprintsEqual(candidate, pbg) then
-			return true
-		end
-	end
-	return false
-end
-
 function Produce_IsQueued(state)
 	return state.payload.queued and state.payload.constant ~= true
 end
@@ -47,7 +24,7 @@ function Produce_ScanQueueEntity(groupID, entityIndex, entity)
 	local queueSize = Entity_GetProductionQueueSize(entity)
 	for index = 0, queueSize - 1 do
 		if Entity_GetProductionQueueItemType(entity, index) == PITEM_Spawn
-			and Produce_MatchesPBG(state.pbgs, Entity_GetProductionQueueItem(entity, index)) then
+			and BuildOrder_MatchesAnyBlueprint(state.pbgs, Entity_GetProductionQueueItem(entity, index)) then
 			state.queueCount = state.queueCount + 1
 		end
 	end
@@ -121,7 +98,7 @@ function Produce_OnBuildItemComplete(context)
 				-- Completion does not identify the producer; recount every human queue next tick.
 				Produce_ScheduleQueueReconciliation(state.checkID)
 			elseif state.remaining > 0 and context.pbg ~= nil and context.spawnedSquad ~= nil then
-				if Produce_MatchesPBG(state.pbgs, context.pbg) then
+				if BuildOrder_MatchesAnyBlueprint(state.pbgs, context.pbg) then
 					local squadID = context.spawnedSquad.SquadID
 					if state.seen[squadID] ~= true then
 						state.seen[squadID] = true
@@ -201,7 +178,7 @@ function Produce_Activate(check, objectiveID, context)
 		objectiveID = objectiveID,
 		player = player,
 		payload = check.payload,
-		pbgs = Produce_ResolvePBGs(check.payload.ids),
+		pbgs = BuildOrder_ResolveBlueprints(check.payload.ids, BP_GetSquadBlueprint),
 		remaining = check.payload.count,
 		seen = {},
 	}

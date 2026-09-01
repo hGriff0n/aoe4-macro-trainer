@@ -3,29 +3,6 @@ UNITS_POLLING = false
 UNITS_SCAN_STATE = nil
 UNITS_POLL_INTERVAL_SECONDS = 1
 
-local function Units_BlueprintsEqual(left, right)
-	return left.PropertyBagGroupID == right.PropertyBagGroupID
-		and left.PropertyBagGroupModPackID == right.PropertyBagGroupModPackID
-		and left.PropertyBagGroupType == right.PropertyBagGroupType
-end
-
-function Units_ResolvePBGs(ids)
-	local pbgs = {}
-	for _, id in ipairs(ids) do
-		table.insert(pbgs, BP_GetSquadBlueprint(id))
-	end
-	return pbgs
-end
-
-function Units_MatchesPBG(pbgs, pbg)
-	for _, candidate in ipairs(pbgs) do
-		if Units_BlueprintsEqual(candidate, pbg) then
-			return true
-		end
-	end
-	return false
-end
-
 function Units_ScanSquad(groupID, squadIndex, squad)
 	local state = UNITS_SCAN_STATE
 	if state == nil then
@@ -35,7 +12,7 @@ function Units_ScanSquad(groupID, squadIndex, squad)
 	if Squad_GetPlayerOwner(squad) ~= state.player then
 		return false
 	end
-	if Units_MatchesPBG(state.pbgs, Squad_GetBlueprint(squad)) == false then
+	if BuildOrder_MatchesAnyBlueprint(state.pbgs, Squad_GetBlueprint(squad)) == false then
 		return false
 	end
 	if Squad_IsAlive(squad) == false then
@@ -70,7 +47,7 @@ function Units_Activate(check, objectiveID, context)
 		player = player,
 		objectiveID = objectiveID,
 		payload = check.payload,
-		pbgs = Units_ResolvePBGs(check.payload.ids),
+		pbgs = BuildOrder_ResolveBlueprints(check.payload.ids, BP_GetSquadBlueprint),
 		count = 0,
 	}
 	if UNITS_POLLING == false then

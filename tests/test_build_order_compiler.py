@@ -2,12 +2,35 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from tools.build_orders.compiler import BuildOrderValidationError, compile_directory
+from tools.build_orders.compiler import (
+    CHECK_COMPILERS,
+    CHECK_FIELDS,
+    BuildOrderValidationError,
+    compile_directory,
+)
 from tools.build_orders.identities import IdentityCatalog, SquadFamilyIdentity
 from tools.build_orders.model import BuildOrder, Catalog, CheckDescriptor, Step, normalize_id
 
 
 class BuildOrderCompilerTests(unittest.TestCase):
+    def test_check_compiler_registry_covers_documented_fields(self) -> None:
+        self.assertEqual(
+            set(CHECK_COMPILERS),
+            {
+                "vils",
+                "resources",
+                "rallypoint",
+                "built",
+                "age_up",
+                "upgrades",
+                "produce",
+                "buildings",
+                "units",
+                "hints",
+            },
+        )
+        self.assertEqual(CHECK_FIELDS, set(CHECK_COMPILERS))
+
     def setUp(self) -> None:
         self.identities = IdentityCatalog(
             {
@@ -100,13 +123,45 @@ steps:
         self.assertEqual(payloads[1]["ids"], ["unit_scout_1_eng"])
         self.assertEqual(payloads[2]["ids"], ["unit_scout_1_eng"])
         self.assertEqual(payloads[3]["id"], "upgrade_wheelbarrow_eng")
-        self.assertEqual(payloads[4]["id"], "building_landmark_age2_eng")
+        self.assertEqual(
+            payloads[4],
+            {"id": "building_landmark_age2_eng", "trigger": "construction"},
+        )
 
-    def test_age_up_category_depends_on_civilization(self) -> None:
+    def test_age_up_category_and_trigger_depend_on_civilization(self) -> None:
         english = self.compile_age("english", "council_hall")
         abbasid = self.compile_age("abbasid", "economic_wing")
-        self.assertEqual(english.payload["id"], "building_landmark_age2_eng")
-        self.assertEqual(abbasid.payload["id"], "upgrade_add_economy_wing")
+        self.assertEqual(
+            english.payload,
+            {"id": "building_landmark_age2_eng", "trigger": "construction"},
+        )
+        self.assertEqual(
+            abbasid.payload,
+            {"id": "upgrade_add_economy_wing", "trigger": "upgrade"},
+        )
+
+    def test_future_civilization_age_up_defaults_to_construction_trigger(self) -> None:
+        identities = IdentityCatalog(
+            {
+                "future_civilization": {
+                    "entity": {"future_landmark": "building_future_landmark"},
+                    "upgrade": {},
+                },
+            },
+            {},
+        )
+
+        check = self.compile(
+            {
+                "future.yaml": "civ: future_civilization\ntitle: Future\nsteps:\n  - age_up: {id: future_landmark}\n",
+            },
+            identities=identities,
+        ).build_orders[0].steps[0].checks[0]
+
+        self.assertEqual(
+            check.payload,
+            {"id": "building_future_landmark", "trigger": "construction"},
+        )
 
     def test_resolves_oneof_in_order_and_preserves_human_readable_title(self) -> None:
         check = self.compile({"order.yaml": """civ: english
@@ -374,6 +429,7 @@ steps:
                 "oneof": ["building_landmark_age2_eng", "building_town_center_eng"],
                 "vils": 4,
                 "location": "gold",
+                "trigger": "construction",
             },
         )
 
