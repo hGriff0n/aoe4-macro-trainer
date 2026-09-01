@@ -1,12 +1,14 @@
 import argparse
 import html
+from http.client import HTTPException
 import json
 from pathlib import Path
 import re
+import sys
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 import yaml
 
@@ -70,10 +72,20 @@ OVERLAY_ROOT_FIELDS = {
 OVERLAY_STEP_FIELDS = {"age", "population_count", "time", "villager_count", "resources", "notes"}
 OVERLAY_RESOURCE_FIELDS = {"food", "wood", "gold", "stone", "builder"}
 OVERLAY_TIME = re.compile(r"^\d+:[0-5]\d$")
+MAX_OVERLAY_RESPONSE_BYTES = 2 * 1024 * 1024
 
 
 class BuildOrderValidationError(ValueError):
     pass
+
+
+class RejectRedirectHandler(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def build_overlay_opener():
+    return build_opener(RejectRedirectHandler())
 
 
 def translate_overlay_document(document: Any, source: Path | str) -> dict[str, object]:
@@ -176,8 +188,13 @@ def fetch_overlay_document(url: str) -> Any:
         headers={"Accept": "application/json", "User-Agent": "aoe4-macro-trainer"},
     )
     try:
-        with urlopen(request, timeout=30) as response:
-            body = response.read().decode("utf-8")
+        with build_overlay_opener().open(request, timeout=30) as response:
+            body_bytes = response.read(MAX_OVERLAY_RESPONSE_BYTES + 1)
+            if len(body_bytes) > MAX_OVERLAY_RESPONSE_BYTES:
+                raise BuildOrderValidationError(
+                    f"{url}: aoe4guides response exceeds {MAX_OVERLAY_RESPONSE_BYTES} bytes"
+                )
+            body = body_bytes.decode("utf-8")
     except HTTPError as exc:
         if exc.code == 404:
             raise BuildOrderValidationError(f"{url}: aoe4guides build not found (HTTP 404)") from exc
@@ -186,6 +203,14 @@ def fetch_overlay_document(url: str) -> Any:
         raise BuildOrderValidationError(f"{url}: aoe4guides request failed (HTTP {exc.code})") from exc
     except URLError as exc:
         raise BuildOrderValidationError(f"{url}: unable to reach aoe4guides: {exc.reason}") from exc
+    except UnicodeDecodeError as exc:
+        raise BuildOrderValidationError(
+            f"{url}: aoe4guides returned non-UTF-8 data: {exc}"
+        ) from exc
+    except HTTPException as exc:
+        raise BuildOrderValidationError(
+            f"{url}: aoe4guides response was interrupted: {exc}"
+        ) from exc
     try:
         return json.loads(body)
     except json.JSONDecodeError as exc:
@@ -646,21 +671,27 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output", type=Path, required=True, help="YAML file to write")
     args = parser.parse_args(argv)
 
-    if args.import_file is not None:
-        try:
-            document = json.loads(args.import_file.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
-            raise BuildOrderValidationError(f"{args.import_file}: unable to read overlay JSON: {exc}") from exc
-        source: Path | str = args.import_file
-    else:
-        document = fetch_overlay_document(args.import_url)
-        source = args.import_url
-    translated = translate_overlay_document(document, source)
-    args.output.write_text(
-        yaml.safe_dump(translated, sort_keys=False, allow_unicode=True),
-        encoding="utf-8",
-        newline="",
-    )
+    try:
+        if args.import_file is not None:
+            try:
+                document = json.loads(args.import_file.read_text(encoding="utf-8"))
+            except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+                raise BuildOrderValidationError(
+                    f"{args.import_file}: unable to read overlay JSON: {exc}"
+                ) from exc
+            source: Path | str = args.import_file
+        else:
+            document = fetch_overlay_document(args.import_url)
+            source = args.import_url
+        translated = translate_overlay_document(document, source)
+        args.output.write_text(
+            yaml.safe_dump(translated, sort_keys=False, allow_unicode=True),
+            encoding="utf-8",
+            newline="",
+        )
+    except (BuildOrderValidationError, OSError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
     return 0
 
 

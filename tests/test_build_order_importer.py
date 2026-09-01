@@ -2,8 +2,12 @@ import copy
 import json
 import tempfile
 import unittest
-from io import BytesIO
+from contextlib import redirect_stderr
+from http.client import IncompleteRead
+from io import BytesIO, StringIO
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from threading import Thread
 from unittest import mock
 from urllib.error import HTTPError
 
@@ -119,20 +123,23 @@ class BuildOrderImporterTests(unittest.TestCase):
             def __exit__(self, exc_type, exc_value, traceback):
                 return False
 
-            def read(self) -> bytes:
+            def read(self, size=-1) -> bytes:
                 return json.dumps(OVERLAY_BUILD).encode("utf-8")
 
         def open_url(request, timeout):
             requested_urls.append((request.full_url, timeout))
             return Response()
 
+        class Opener:
+            def open(self, request, timeout):
+                return open_url(request, timeout)
+
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             output = root / "templar_2tc.yaml"
             with mock.patch(
-                "tools.build_orders.compiler.urlopen",
-                side_effect=open_url,
-                create=True,
+                "tools.build_orders.compiler.build_overlay_opener",
+                return_value=Opener(),
             ):
                 try:
                     result = compiler.main(
@@ -287,7 +294,7 @@ class BuildOrderImporterTests(unittest.TestCase):
 
         for url in invalid_urls:
             with self.subTest(url=url), mock.patch(
-                "tools.build_orders.compiler.urlopen",
+                "tools.build_orders.compiler.build_overlay_opener",
                 side_effect=AssertionError("network must not be called"),
             ):
                 try:
@@ -310,7 +317,9 @@ class BuildOrderImporterTests(unittest.TestCase):
             BytesIO(b'{"reason":""}'),
         )
 
-        with mock.patch("tools.build_orders.compiler.urlopen", side_effect=response):
+        opener = mock.Mock()
+        opener.open.side_effect = response
+        with mock.patch("tools.build_orders.compiler.build_overlay_opener", return_value=opener):
             try:
                 compiler.fetch_overlay_document(page_url)
             except BuildOrderValidationError as caught:
@@ -322,6 +331,92 @@ class BuildOrderImporterTests(unittest.TestCase):
                 self.fail(f"wrong exception type {type(exc).__name__}: {exc}")
             else:
                 self.fail("BuildOrderValidationError not raised")
+
+    def test_url_import_rejects_oversized_responses(self) -> None:
+        page_url = "https://aoe4guides.com/builds/oversized"
+
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc_value, traceback):
+                return False
+
+            def read(self, size=-1):
+                return b"x" * size
+
+        opener = mock.Mock()
+        opener.open.return_value = Response()
+        with mock.patch("tools.build_orders.compiler.build_overlay_opener", return_value=opener):
+            with self.assertRaises(BuildOrderValidationError) as caught:
+                compiler.fetch_overlay_document(page_url)
+
+        self.assertEqual(
+            str(caught.exception),
+            f"{page_url}: aoe4guides response exceeds 2097152 bytes",
+        )
+
+    def test_url_import_reports_invalid_utf8_as_validation_error(self) -> None:
+        page_url = "https://aoe4guides.com/builds/invalid-utf8"
+
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc_value, traceback):
+                return False
+
+            def read(self, size=-1):
+                return b"\xff"
+
+        opener = mock.Mock()
+        opener.open.return_value = Response()
+        with mock.patch("tools.build_orders.compiler.build_overlay_opener", return_value=opener):
+            with self.assertRaises(BuildOrderValidationError) as caught:
+                compiler.fetch_overlay_document(page_url)
+
+        self.assertIn(
+            f"{page_url}: aoe4guides returned non-UTF-8 data:",
+            str(caught.exception),
+        )
+
+    def test_url_import_reports_truncated_response_as_validation_error(self) -> None:
+        page_url = "https://aoe4guides.com/builds/truncated"
+
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc_value, traceback):
+                return False
+
+            def read(self, size=-1):
+                raise IncompleteRead(b'{"partial":', 10)
+
+        opener = mock.Mock()
+        opener.open.return_value = Response()
+        with mock.patch("tools.build_orders.compiler.build_overlay_opener", return_value=opener):
+            with self.assertRaises(BuildOrderValidationError) as caught:
+                compiler.fetch_overlay_document(page_url)
+
+        self.assertIn(
+            f"{page_url}: aoe4guides response was interrupted:",
+            str(caught.exception),
+        )
+
+    def test_cli_reports_import_errors_without_a_traceback(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            missing = Path(temp) / "missing.bo"
+            output = Path(temp) / "output.yaml"
+            stderr = StringIO()
+            with redirect_stderr(stderr):
+                result = compiler.main(
+                    ["--import-file", str(missing), "--output", str(output)]
+                )
+
+        self.assertEqual(result, 1)
+        self.assertIn(f"error: {missing}: unable to read overlay JSON:", stderr.getvalue())
+        self.assertNotIn("Traceback", stderr.getvalue())
 
     def test_remote_validation_errors_preserve_the_source_url(self) -> None:
         source_url = "https://aoe4guides.com/builds/nlxHE4i1PhNNXqD2XTAP"
@@ -335,6 +430,57 @@ class BuildOrderImporterTests(unittest.TestCase):
             str(caught.exception),
             f"{source_url}: civilization: must be a non-empty string",
         )
+
+    def test_overlay_http_opener_rejects_redirects_before_contacting_target(self) -> None:
+        opener_factory = getattr(compiler, "build_overlay_opener", None)
+        if opener_factory is None:
+            self.fail("tools.build_orders.compiler.build_overlay_opener is missing")
+
+        target_hits = []
+
+        class TargetHandler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                target_hits.append(self.path)
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b"{}")
+
+            def log_message(self, format, *args):
+                pass
+
+        target_server = ThreadingHTTPServer(("127.0.0.1", 0), TargetHandler)
+        target_url = f"http://127.0.0.1:{target_server.server_port}/target"
+
+        class RedirectHandler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(302)
+                self.send_header("Location", target_url)
+                self.end_headers()
+
+            def log_message(self, format, *args):
+                pass
+
+        redirect_server = ThreadingHTTPServer(("127.0.0.1", 0), RedirectHandler)
+        threads = [
+            Thread(target=target_server.serve_forever, daemon=True),
+            Thread(target=redirect_server.serve_forever, daemon=True),
+        ]
+        for thread in threads:
+            thread.start()
+
+        try:
+            redirect_url = f"http://127.0.0.1:{redirect_server.server_port}/redirect"
+            with self.assertRaises(HTTPError) as caught:
+                opener_factory().open(redirect_url, timeout=2)
+            self.assertEqual(caught.exception.code, 302)
+            self.assertEqual(target_hits, [])
+        finally:
+            redirect_server.shutdown()
+            target_server.shutdown()
+            redirect_server.server_close()
+            target_server.server_close()
+            for thread in threads:
+                thread.join(timeout=2)
 
 
 if __name__ == "__main__":
