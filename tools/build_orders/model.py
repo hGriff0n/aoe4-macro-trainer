@@ -23,6 +23,7 @@ class BuildOrder:
     civ: str
     title: str
     steps: tuple[Step, ...]
+    link: str | None = None
 
 
 @dataclass(frozen=True)
