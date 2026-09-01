@@ -38,10 +38,12 @@ only the explicit import command accesses aoe4guides.
 The baseline translation preserves source-step ordering. A step's timestamp is
 used as its title, positive food/gold/wood/stone allocations become a `vils`
 check, and non-empty notes become ordered hints after HTML entity decoding.
-Zero allocations do not create checks. Age, population, total-villager, and
-builder fields are validated but are not converted into inferred actions.
-Likewise, icon markup and arbitrary-language prose remain hints; later,
-reviewable translation passes may derive additional checks from them.
+RTS Overlay image tokens are rendered as readable labels, such as `Town Center`
+or `Gold`; unknown tokens fall back to a humanized filename. Zero allocations do
+not create checks. Age, population, total-villager, and builder fields are
+validated but are not converted into inferred actions. Arbitrary-language prose
+remains unchanged, and later reviewable translation passes may derive additional
+checks from it.
 
 Catalog regeneration is a developer-only operation:
 

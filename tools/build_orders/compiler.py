@@ -72,6 +72,18 @@ OVERLAY_ROOT_FIELDS = {
 OVERLAY_STEP_FIELDS = {"age", "population_count", "time", "villager_count", "resources", "notes"}
 OVERLAY_RESOURCE_FIELDS = {"food", "wood", "gold", "stone", "builder"}
 OVERLAY_TIME = re.compile(r"^\d+:[0-5]\d$")
+OVERLAY_NOTE_TOKEN = re.compile(
+    r"@(?P<token>[^@\s/]+/(?P<name>[^@\s/]+))\.webp@"
+)
+OVERLAY_NOTE_LABELS = {
+    "civilization_flag/ayy": "Ayyubids",
+    "civilization_flag/eng": "English",
+    "civilization_flag/hos": "House of Lancaster",
+    "civilization_flag/mon": "Mongols",
+    "resource/berrybush": "Berry Bush",
+    "resource/gaiatreeprototypetree": "Tree",
+    "technology_templar/safepassage": "Safe Passage",
+}
 MAX_OVERLAY_RESPONSE_BYTES = 2 * 1024 * 1024
 
 
@@ -86,6 +98,29 @@ class RejectRedirectHandler(HTTPRedirectHandler):
 
 def build_overlay_opener():
     return build_opener(RejectRedirectHandler())
+
+
+def render_overlay_note(note: str) -> str:
+    decoded = html.unescape(note)
+
+    def readable_token(match: re.Match[str]) -> str:
+        name = match.group("name")
+        if name.startswith("resource_"):
+            name = name.removeprefix("resource_")
+        label = OVERLAY_NOTE_LABELS.get(
+            match.group("token"),
+            name.replace("-", " ").replace("_", " ").title(),
+        )
+        if match.start() > 0 and (
+            decoded[match.start() - 1].isalnum()
+            or decoded[match.start() - 1] == "@"
+        ):
+            label = " " + label
+        if match.end() < len(decoded) and decoded[match.end()].isalnum():
+            label += " "
+        return label
+
+    return OVERLAY_NOTE_TOKEN.sub(readable_token, decoded)
 
 
 def translate_overlay_document(document: Any, source: Path | str) -> dict[str, object]:
@@ -143,7 +178,7 @@ def translate_overlay_document(document: Any, source: Path | str) -> dict[str, o
             if not isinstance(note, str):
                 _error(source, f"{step_path}.notes[{note_index}]", "must be a string")
             if note:
-                notes.append(html.unescape(note))
+                notes.append(render_overlay_note(note))
         if notes:
             translated["hints"] = notes
         if not allocations and not notes:

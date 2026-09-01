@@ -90,13 +90,13 @@ class BuildOrderImporterTests(unittest.TestCase):
                             "title": "0:00",
                             "vils": {"food": 6},
                             "hints": [
-                                "6 @unit_worker/villager.webp@ on @resource/sheep.webp@",
-                                "@resource/rally.webp@ -> @resource/resource_gold.webp@",
+                                "6 Villager on Sheep",
+                                "Rally -> Gold",
                             ],
                         },
                         {
                             "hints": [
-                                "Build @building_economy/town-center.webp@",
+                                "Build Town Center",
                             ],
                         },
                     ],
@@ -165,7 +165,7 @@ class BuildOrderImporterTests(unittest.TestCase):
             )
             self.assertEqual(
                 yaml.safe_load(output.read_text(encoding="utf-8"))["steps"][0]["hints"][1],
-                "@resource/rally.webp@ -> @resource/resource_gold.webp@",
+                "Rally -> Gold",
             )
             self.assertEqual(compile_directory(root).build_orders[0].id, "templar-2-tc")
 
@@ -205,6 +205,62 @@ class BuildOrderImporterTests(unittest.TestCase):
                 except BuildOrderValidationError as exc:
                     self.fail(f"supported civilization was rejected: {exc}")
                 self.assertEqual(translated["civ"], catalog_id)
+
+    def test_renders_overlay_note_tokens_as_readable_text_with_spacing(self) -> None:
+        document = copy.deepcopy(OVERLAY_BUILD)
+        document["build_order"][0]["notes"] = [
+            "6 @unit_worker/villager.webp@ on "
+            "@resource/resource_gold.webp@@unit_worker/villager.webp@ -> "
+            "@building_economy/town-center.webp@ &amp; "
+            "@technology_templar/safe_passage.webp@"
+        ]
+
+        translated = compiler.translate_overlay_document(document, "fixture.bo")
+
+        self.assertEqual(
+            translated["steps"][0]["hints"],
+            ["6 Villager on Gold Villager -> Town Center & Safe Passage"],
+        )
+
+    def test_renders_known_opaque_tokens_and_falls_back_for_unknown_tokens(self) -> None:
+        document = copy.deepcopy(OVERLAY_BUILD)
+        document["build_order"][0]["notes"] = [
+            "@civilization_flag/hos.webp@, "
+            "@resource/gaiatreeprototypetree.webp@, "
+            "@resource/berrybush.webp@, "
+            "@technology_templar/safepassage.webp@, "
+            "@custom/siege-workshop_mk2.webp@."
+        ]
+
+        translated = compiler.translate_overlay_document(document, "fixture.bo")
+
+        self.assertEqual(
+            translated["steps"][0]["hints"],
+            [
+                "House of Lancaster, Tree, Berry Bush, Safe Passage, "
+                "Siege Workshop Mk2."
+            ],
+        )
+
+    def test_renders_adjacent_civilization_tokens_from_downloaded_sample(self) -> None:
+        document = copy.deepcopy(OVERLAY_BUILD)
+        document["build_order"][0]["notes"] = [
+            "Build @building_military/barracks.webp@ "
+            "(If @civilization_flag/eng.webp@ build "
+            "@building_military/stable.webp@, elif "
+            "@civilization_flag/mon.webp@@civilization_flag/ayy.webp@ build "
+            "@building_military/archery-range.webp@)"
+        ]
+
+        translated = compiler.translate_overlay_document(document, "2 TC.bo")
+
+        self.assertEqual(
+            translated["steps"][0]["hints"],
+            [
+                "Build Barracks (If English build Stable, elif "
+                "Mongols Ayyubids build Archery Range)"
+            ],
+        )
 
     def test_rejects_malformed_overlay_fields_with_source_paths(self) -> None:
         cases = [
