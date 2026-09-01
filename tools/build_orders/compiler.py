@@ -1,6 +1,12 @@
+import argparse
+import html
+import json
 from pathlib import Path
+import re
 from typing import Any
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
+from urllib.request import Request, urlopen
 
 import yaml
 
@@ -23,14 +29,208 @@ CHECK_ID_CATEGORIES = {
     "upgrades": "upgrade",
 }
 UPGRADE_AGE_UP_CIVS = frozenset({"abbasid", "ayyubids", "templar", "golden_horde"})
+OVERLAY_CIVILIZATIONS = {
+    "Abbasid Dynasty": "abbasid",
+    "Ayyubids": "ayyubids",
+    "Byzantines": "byzantines",
+    "Chinese": "chinese",
+    "Delhi Sultanate": "delhi",
+    "English": "english",
+    "French": "french",
+    "Golden Horde": "golden_horde",
+    "House of Lancaster": "house_of_lancaster",
+    "Holy Roman Empire": "hre",
+    "Japanese": "japanese",
+    "Jeanne d'Arc": "jeanne_darc",
+    "Jin Dynasty": "jin_dynasty",
+    "Knights Templar": "templar",
+    "Macedonian Dynasty": "macedonian_dynasty",
+    "Malians": "malians",
+    "Mongols": "mongols",
+    "Order of the Dragon": "order_of_the_dragon",
+    "Ottomans": "ottomans",
+    "Rus": "rus",
+    "Sengoku Daimyo": "sengoku_daimyo",
+    "Tughlaq Dynasty": "tughlaq_dynasty",
+    "Zhu Xi's Legacy": "zhu_xi",
+}
+AOE4GUIDES_BUILD_ID = re.compile(r"^[A-Za-z0-9_-]+$")
+OVERLAY_ROOT_FIELDS = {
+    "description",
+    "civilization",
+    "name",
+    "author",
+    "source",
+    "build_order",
+    "video",
+    "season",
+    "map",
+    "strategy",
+}
+OVERLAY_STEP_FIELDS = {"age", "population_count", "time", "villager_count", "resources", "notes"}
+OVERLAY_RESOURCE_FIELDS = {"food", "wood", "gold", "stone", "builder"}
+OVERLAY_TIME = re.compile(r"^\d+:[0-5]\d$")
 
 
 class BuildOrderValidationError(ValueError):
     pass
 
 
+def translate_overlay_document(document: Any, source: Path | str) -> dict[str, object]:
+    file = source
+    overlay = _mapping(document, file, "")
+    _reject_unknown_fields(overlay, OVERLAY_ROOT_FIELDS, source, "")
+    _overlay_text(overlay.get("description"), source, "description")
+    for field in ("author", "video"):
+        if field in overlay:
+            _overlay_text(overlay[field], source, field)
+    for field in ("season", "map", "strategy"):
+        if field in overlay and overlay[field] is not None:
+            if not isinstance(overlay[field], str):
+                _error(source, field, "must be a string or null")
+    civilization = _string(overlay.get("civilization"), file, "civilization")
+    if civilization not in OVERLAY_CIVILIZATIONS:
+        _error(source, "civilization", f"unsupported civilization '{civilization}'")
+
+    steps = []
+    raw_steps = _list(overlay.get("build_order"), file, "build_order")
+    if not raw_steps:
+        _error(source, "build_order", "must not be empty")
+    for index, raw_step in enumerate(raw_steps):
+        step_path = f"build_order[{index}]"
+        step = _mapping(raw_step, file, step_path)
+        _reject_unknown_fields(step, OVERLAY_STEP_FIELDS, source, step_path)
+        _overlay_integer(step.get("age"), source, f"{step_path}.age", minimum=-1, maximum=4)
+        _overlay_integer(step.get("population_count"), source, f"{step_path}.population_count", minimum=-1)
+        _overlay_integer(step.get("villager_count"), source, f"{step_path}.villager_count", minimum=-1)
+        resources_path = f"{step_path}.resources"
+        resources = _mapping(step.get("resources"), file, resources_path)
+        _reject_unknown_fields(resources, OVERLAY_RESOURCE_FIELDS, source, resources_path)
+        translated: dict[str, object] = {}
+        if "time" in step:
+            time = _string(step["time"], file, f"{step_path}.time")
+            if not OVERLAY_TIME.fullmatch(time):
+                _error(source, f"{step_path}.time", "must use M:SS time format")
+            translated["title"] = time
+        allocations = {}
+        for resource in RESOURCE_ORDER:
+            count = _overlay_integer(
+                resources.get(resource),
+                source,
+                f"{resources_path}.{resource}",
+                minimum=0,
+                range_message="must be a non-negative integer",
+            )
+            if count > 0:
+                allocations[resource] = count
+        _overlay_integer(resources.get("builder"), source, f"{resources_path}.builder", minimum=-1)
+        if allocations:
+            translated["vils"] = allocations
+        notes = []
+        for note_index, note in enumerate(_list(step.get("notes"), file, f"{step_path}.notes")):
+            if not isinstance(note, str):
+                _error(source, f"{step_path}.notes[{note_index}]", "must be a string")
+            if note:
+                notes.append(html.unescape(note))
+        if notes:
+            translated["hints"] = notes
+        if not allocations and not notes:
+            _error(source, step_path, "has no translatable checks or hints")
+        steps.append(translated)
+
+    return {
+        "civ": OVERLAY_CIVILIZATIONS[civilization],
+        "title": _string(overlay.get("name"), file, "name"),
+        "link": _source_link(overlay.get("source"), file, "source"),
+        "steps": steps,
+    }
+
+
+def fetch_overlay_document(url: str) -> Any:
+    try:
+        parsed = urlsplit(url)
+        port = parsed.port
+    except ValueError as exc:
+        raise BuildOrderValidationError(f"{url}: invalid aoe4guides build URL: {exc}") from exc
+    if (
+        parsed.scheme.lower() != "https"
+        or parsed.hostname not in {"aoe4guides.com", "www.aoe4guides.com"}
+        or port is not None
+        or parsed.username is not None
+        or parsed.password is not None
+    ):
+        raise BuildOrderValidationError(f"{url}: expected an HTTPS aoe4guides.com build URL")
+    path_parts = [part for part in parsed.path.split("/") if part]
+    if len(path_parts) == 2 and path_parts[0] == "builds":
+        build_id = path_parts[1]
+    elif len(path_parts) == 3 and path_parts[:2] == ["api", "builds"]:
+        build_id = path_parts[2]
+    else:
+        raise BuildOrderValidationError(f"{url}: expected an aoe4guides.com build URL")
+    if not AOE4GUIDES_BUILD_ID.fullmatch(build_id):
+        raise BuildOrderValidationError(f"{url}: invalid aoe4guides build ID")
+
+    endpoint = f"https://aoe4guides.com/api/builds/{build_id}?overlay=true"
+    request = Request(
+        endpoint,
+        headers={"Accept": "application/json", "User-Agent": "aoe4-macro-trainer"},
+    )
+    try:
+        with urlopen(request, timeout=30) as response:
+            body = response.read().decode("utf-8")
+    except HTTPError as exc:
+        if exc.code == 404:
+            raise BuildOrderValidationError(f"{url}: aoe4guides build not found (HTTP 404)") from exc
+        if exc.code == 429:
+            raise BuildOrderValidationError(f"{url}: aoe4guides rate limit exceeded (HTTP 429)") from exc
+        raise BuildOrderValidationError(f"{url}: aoe4guides request failed (HTTP {exc.code})") from exc
+    except URLError as exc:
+        raise BuildOrderValidationError(f"{url}: unable to reach aoe4guides: {exc.reason}") from exc
+    try:
+        return json.loads(body)
+    except json.JSONDecodeError as exc:
+        raise BuildOrderValidationError(f"{url}: aoe4guides returned invalid JSON: {exc}") from exc
+
+
 def _error(file: Path | str, path: str, message: str) -> None:
     raise BuildOrderValidationError(f"{file}: {path}: {message}")
+
+
+def _reject_unknown_fields(
+    mapping: dict[str, Any], allowed: set[str], file: Path | str, path: str
+) -> None:
+    unknown = set(mapping) - allowed
+    if unknown:
+        field = sorted(unknown)[0]
+        _error(file, f"{path}.{field}" if path else field, "unknown field")
+
+
+def _overlay_integer(
+    value: Any,
+    file: Path | str,
+    path: str,
+    *,
+    minimum: int | None = None,
+    maximum: int | None = None,
+    range_message: str | None = None,
+) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        _error(file, path, "must be an integer")
+    if (minimum is not None and value < minimum) or (maximum is not None and value > maximum):
+        if range_message is not None:
+            _error(file, path, range_message)
+        if minimum is not None and maximum is not None:
+            _error(file, path, f"must be between {minimum} and {maximum}")
+        if minimum is not None:
+            _error(file, path, f"must be at least {minimum}")
+        _error(file, path, f"must be at most {maximum}")
+    return value
+
+
+def _overlay_text(value: Any, file: Path | str, path: str) -> str:
+    if not isinstance(value, str):
+        _error(file, path, "must be a string")
+    return value
 
 
 def _mapping(value: Any, file: Path, path: str) -> dict[str, Any]:
@@ -436,3 +636,33 @@ def compile_directory(input_dir: Path, identities: IdentityCatalog | None = None
             raise BuildOrderValidationError(f"duplicate generated id '{order.id}'")
         seen.add(order.id)
     return Catalog(tuple(orders))
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Compile or import Macro Trainer build orders.")
+    inputs = parser.add_mutually_exclusive_group(required=True)
+    inputs.add_argument("--import-file", type=Path, help="RTS Overlay .bo JSON file to import")
+    inputs.add_argument("--import-url", help="aoe4guides build page or API URL to import")
+    parser.add_argument("--output", type=Path, required=True, help="YAML file to write")
+    args = parser.parse_args(argv)
+
+    if args.import_file is not None:
+        try:
+            document = json.loads(args.import_file.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise BuildOrderValidationError(f"{args.import_file}: unable to read overlay JSON: {exc}") from exc
+        source: Path | str = args.import_file
+    else:
+        document = fetch_overlay_document(args.import_url)
+        source = args.import_url
+    translated = translate_overlay_document(document, source)
+    args.output.write_text(
+        yaml.safe_dump(translated, sort_keys=False, allow_unicode=True),
+        encoding="utf-8",
+        newline="",
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
