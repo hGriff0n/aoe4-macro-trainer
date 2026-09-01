@@ -16,5 +16,47 @@ approval_mode = "approve"
 [mcp_servers.aoe4_mcp.tools.find_api]
 approval_mode = "approve"
 
+[mcp_servers.aoe4_mcp.tools.inspect_project_layout]
+approval_mode = "approve"
+
+[mcp_servers.aoe4_mcp.tools.explain_rdo_config]
+approval_mode = "approve"
+
+[mcp_servers.aoe4_mcp.tools.explain_rdo_options]
+approval_mode = "approve"
+
+[mcp_servers.aoe4_mcp.tools.find_usage]
+approval_mode = "approve"
+
+[mcp_servers.aoe4_mcp.tools.resolve_task]
+approval_mode = "approve"
+
+[mcp_servers.aoe4_mcp.tools.draft_solution]
+approval_mode = "approve"
+
+[mcp_servers.aoe4_mcp.tools.inspect_symbol]
+approval_mode = "approve"
+
+[mcp_servers.aoe4_mcp.tools.find_base_data]
+approval_mode = "approve"
+
+[mcp_servers.aoe4_mcp.tools.find_identifier_refs]
+approval_mode = "approve"
+
+[mcp_servers.aoe4_mcp.tools.lookup_official_loc]
+approval_mode = "approve"
+
+[mcp_servers.aoe4_mcp.tools.find_project_symbol]
+approval_mode = "approve"
+
+[mcp_servers.aoe4_mcp.tools.trace_delegate]
+approval_mode = "approve"
+
+[mcp_servers.aoe4_mcp.tools.find_module]
+approval_mode = "approve"
+
+[mcp_servers.aoe4_mcp.tools.trace_event]
+approval_mode = "approve"
+
 [windows]
 sandbox = "unelevated"  # https://github.com/openai/codex/issues/9062

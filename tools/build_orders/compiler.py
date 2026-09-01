@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import Any, Callable
+from urllib.parse import urlsplit
 
 import yaml
 
@@ -46,6 +47,18 @@ def _list(value: Any, file: Path, path: str) -> list[Any]:
 def _string(value: Any, file: Path, path: str) -> str:
     if not isinstance(value, str) or not value:
         _error(file, path, "must be a non-empty string")
+    return value
+
+
+def _source_link(value: Any, file: Path, path: str) -> str:
+    if not isinstance(value, str) or not value or any(character.isspace() for character in value):
+        _error(file, path, "must be an absolute HTTP(S) URL")
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
+        _error(file, path, "must be an absolute HTTP(S) URL")
+    if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
+        _error(file, path, "must be an absolute HTTP(S) URL")
     return value
 
 
@@ -520,11 +533,12 @@ def _check_descriptors(
 def _compile_order(document: Any, file: Path, index: int | None, identities: IdentityCatalog) -> BuildOrder:
     base = "" if index is None else f"[{index}]."
     order = _mapping(document, file, base.rstrip("."))
-    unknown = set(order) - {"civ", "title", "steps"}
+    unknown = set(order) - {"civ", "title", "link", "steps"}
     if unknown:
         _error(file, f"{base}{next(iter(unknown))}", "unknown field")
     civ = _string(order.get("civ"), file, f"{base}civ")
     title = _string(order.get("title"), file, f"{base}title")
+    link = _source_link(order["link"], file, f"{base}link") if "link" in order else None
     steps = _list(order.get("steps"), file, f"{base}steps")
     compiled_steps = []
     for step_index, raw_step in enumerate(steps):
@@ -554,7 +568,7 @@ def _compile_order(document: Any, file: Path, index: int | None, identities: Ide
         compiled_steps.append(Step(step_title, tuple(checks)))
     if not compiled_steps:
         _error(file, f"{base}steps", "must not be empty")
-    return BuildOrder(normalize_id(civ, title), civ, title, tuple(compiled_steps))
+    return BuildOrder(normalize_id(civ, title), civ, title, tuple(compiled_steps), link)
 
 
 def compile_directory(input_dir: Path, identities: IdentityCatalog | None = None) -> Catalog:

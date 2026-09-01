@@ -77,6 +77,25 @@ class BuildOrderBuildTests(unittest.TestCase):
         self.assertNotIn('title = "7 food villagers"', scar)
         self.assertFalse(list(self.root.rglob("*.tmp")))
 
+    def test_source_link_is_not_emitted_to_game_assets(self) -> None:
+        source_link = "https://example.com/build-orders/framework-test"
+        (self.orders / "framework.yaml").write_text(
+            VALID.replace("title: Framework Test\n", f"title: Framework Test\nlink: {source_link}\n"),
+            encoding="utf-8",
+        )
+        reset_outputs(self.paths)
+        emit_outputs(compile_directory(self.orders), self.paths)
+
+        generated_assets = "\n".join(
+            output.read_text(encoding="utf-8")
+            for output in (
+                self.paths.rdo_output,
+                self.paths.locdb_output,
+                self.paths.scar_output,
+            )
+        )
+        self.assertNotIn(source_link, generated_assets)
+
     def test_emits_extended_built_and_upgrade_payload_fields(self) -> None:
         (self.orders / "extended.yaml").write_text(
             """civ: english
