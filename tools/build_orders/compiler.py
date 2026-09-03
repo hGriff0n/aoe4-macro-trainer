@@ -1,9 +1,14 @@
+from __future__ import annotations
+
+import argparse
 from pathlib import Path
+import sys
 from typing import Any
 from urllib.parse import urlsplit
 
 import yaml
 
+from .datastore import DatastoreError, load_datastore, write_datastore
 from .identities import (
     DEFAULT_IDENTITY_CATALOG,
     IdentityCatalog,
@@ -11,6 +16,7 @@ from .identities import (
     normalize_identity_id,
 )
 from .model import BuildOrder, Catalog, CheckDescriptor, Step, normalize_id
+from .profiles import ProfileResolutionError, resolve_datastore_path
 
 RESOURCE_ORDER = ("food", "gold", "wood", "stone")
 RESOURCES = set(RESOURCE_ORDER)
@@ -408,16 +414,18 @@ def _compile_order(document: Any, file: Path, index: int | None, identities: Ide
     return BuildOrder(normalize_id(civ, title), civ, title, tuple(compiled_steps), link)
 
 
-def compile_directory(input_dir: Path, identities: IdentityCatalog | None = None) -> Catalog:
-    if identities is None:
-        identities = IdentityCatalog.load(DEFAULT_IDENTITY_CATALOG)
+def _compile_files(
+    files: list[tuple[Path, str]],
+    identities: IdentityCatalog,
+) -> Catalog:
     orders: list[BuildOrder] = []
-    for file in sorted((path for path in input_dir.rglob("*") if path.suffix.lower() in {".yaml", ".yml"}), key=lambda path: path.relative_to(input_dir).as_posix()):
-        source = file.relative_to(input_dir).as_posix()
+    for file, source in files:
         try:
             document = yaml.safe_load(file.read_text(encoding="utf-8"))
         except yaml.YAMLError as exc:
             raise BuildOrderValidationError(f"{source}: invalid YAML: {exc}") from exc
+        except OSError as exc:
+            raise BuildOrderValidationError(f"{source}: could not read YAML: {exc}") from exc
         documents = document if isinstance(document, list) else [document]
         if not isinstance(document, (dict, list)):
             _error(source, "", "root must be a mapping or list of mappings")
@@ -436,3 +444,349 @@ def compile_directory(input_dir: Path, identities: IdentityCatalog | None = None
             raise BuildOrderValidationError(f"duplicate generated id '{order.id}'")
         seen.add(order.id)
     return Catalog(tuple(orders))
+
+
+def compile_inputs(
+    inputs: list[Path],
+    identities: IdentityCatalog | None = None,
+) -> Catalog:
+    if identities is None:
+        identities = IdentityCatalog.load(DEFAULT_IDENTITY_CATALOG)
+    if not inputs:
+        raise BuildOrderValidationError("at least one YAML file or directory is required")
+    files: list[tuple[Path, str]] = []
+    for input_path in inputs:
+        if input_path.is_file():
+            if input_path.suffix.lower() not in {".yaml", ".yml"}:
+                raise BuildOrderValidationError(
+                    f"{input_path}: input file must have a .yaml or .yml extension"
+                )
+            files.append((input_path, input_path.name))
+        elif input_path.is_dir():
+            files.extend(
+                (path, path.relative_to(input_path).as_posix())
+                for path in sorted(
+                    (
+                        path
+                        for path in input_path.rglob("*")
+                        if path.suffix.lower() in {".yaml", ".yml"}
+                    ),
+                    key=lambda path: path.relative_to(input_path).as_posix(),
+                )
+            )
+        else:
+            raise BuildOrderValidationError(f"{input_path}: input path does not exist")
+    return _compile_files(files, identities)
+
+
+def compile_directory(
+    input_dir: Path,
+    identities: IdentityCatalog | None = None,
+) -> Catalog:
+    return compile_inputs([input_dir], identities=identities)
+
+
+def merge_catalog(existing: Catalog, incoming: Catalog) -> Catalog:
+    merged: dict[str, BuildOrder] = {}
+    for order in existing.build_orders:
+        if order.id in merged:
+            raise BuildOrderValidationError(
+                f"duplicate existing datastore id '{order.id}'"
+            )
+        merged[order.id] = order
+    incoming_ids: set[str] = set()
+    for order in incoming.build_orders:
+        if order.id in incoming_ids:
+            raise BuildOrderValidationError(
+                f"duplicate generated id '{order.id}'"
+            )
+        incoming_ids.add(order.id)
+        merged[order.id] = order
+    return Catalog(tuple(merged[identifier] for identifier in sorted(merged)))
+
+
+def _reverse_identity(
+    identities: IdentityCatalog, civ: str, category: str, canonical: str
+) -> str:
+    normalized_civ = normalize_identity_id(civ)
+    aliases = identities.civilizations.get(normalized_civ, {}).get(category, {})
+    matches = [alias for alias, value in aliases.items() if value == canonical]
+    if not matches:
+        raise BuildOrderValidationError(
+            f"cannot extract unknown canonical {category} ID {canonical!r} for {normalized_civ}"
+        )
+    return min(matches, key=lambda item: (len(item), item))
+
+
+def _reverse_squad_family(
+    identities: IdentityCatalog, civ: str, canonical_ids: object
+) -> str:
+    if not isinstance(canonical_ids, list) or not all(
+        isinstance(item, str) for item in canonical_ids
+    ):
+        raise BuildOrderValidationError("cannot extract malformed squad family payload")
+    expected = tuple(canonical_ids)
+    aliases = identities.squad_aliases.get(normalize_identity_id(civ), {})
+    families = {
+        family.family_id
+        for family in aliases.values()
+        if family.canonical_ids == expected
+    }
+    if not families:
+        raise BuildOrderValidationError(
+            f"cannot extract unknown canonical squad family for {normalize_identity_id(civ)}"
+        )
+    return min(families)
+
+
+def _identity_payload(
+    payload: dict[str, object], *, kind: str, civ: str, identities: IdentityCatalog
+) -> dict[str, object]:
+    category = _identity_category(kind, civ)
+    result: dict[str, object] = {}
+    if "id" in payload:
+        result["id"] = _reverse_identity(
+            identities, civ, category, str(payload["id"])
+        )
+    elif "oneof" in payload and isinstance(payload["oneof"], list):
+        result["oneof"] = [
+            _reverse_identity(identities, civ, category, str(item))
+            for item in payload["oneof"]
+        ]
+    else:
+        raise BuildOrderValidationError(
+            f"cannot extract malformed {kind} identity payload"
+        )
+    return result
+
+
+def _step_to_yaml(
+    step: Step, civ: str, identities: IdentityCatalog
+) -> dict[str, object]:
+    document: dict[str, object] = {}
+    if step.title is not None:
+        document["title"] = step.title
+    grouped: dict[str, list[CheckDescriptor]] = {}
+    order: list[str] = []
+    for check in step.checks:
+        if check.kind not in CHECK_FIELDS:
+            raise BuildOrderValidationError(
+                f"cannot extract unsupported check kind {check.kind!r}"
+            )
+        if check.kind not in grouped:
+            grouped[check.kind] = []
+            order.append(check.kind)
+        grouped[check.kind].append(check)
+
+    for kind in order:
+        checks = grouped[kind]
+        if kind == "vils":
+            value: dict[str, object] = {}
+            no_collect: list[str] = []
+            for check in checks:
+                if check.payload.get("no_collect") is True:
+                    no_collect.append(str(check.payload.get("resource")))
+                else:
+                    for resource in RESOURCE_ORDER:
+                        if resource in check.payload:
+                            value[resource] = check.payload[resource]
+            if no_collect:
+                value["no_collect"] = no_collect
+            document[kind] = value
+        elif kind == "resources":
+            document[kind] = {
+                str(check.payload["resource"]): check.payload["count"]
+                for check in checks
+            }
+        elif kind == "rallypoint":
+            document[kind] = [str(check.payload["resource"]) for check in checks]
+        elif kind in {"built", "age_up"}:
+            entries: list[dict[str, object]] = []
+            for check in checks:
+                entry = _identity_payload(
+                    check.payload, kind=kind, civ=civ, identities=identities
+                )
+                for field in ("count", "vils", "location"):
+                    if field in check.payload:
+                        entry[field] = check.payload[field]
+                entries.append(entry)
+            if kind == "age_up":
+                if len(entries) != 1:
+                    raise BuildOrderValidationError(
+                        "cannot extract a step with multiple age_up checks"
+                    )
+                document[kind] = entries[0]
+            else:
+                document[kind] = entries
+        elif kind == "upgrades":
+            entries = []
+            for check in checks:
+                entry = _identity_payload(
+                    check.payload, kind=kind, civ=civ, identities=identities
+                )
+                if check.payload.get("queued") is True:
+                    entry["queued"] = True
+                if check.optional:
+                    entry["optional"] = True
+                entries.append(entry)
+            document[kind] = entries
+        elif kind in {"produce", "units"}:
+            entries = []
+            for check in checks:
+                entry = {
+                    "id": _reverse_squad_family(
+                        identities, civ, check.payload.get("ids")
+                    ),
+                    "count": check.payload["count"],
+                }
+                for flag in ("constant", "queued"):
+                    if check.payload.get(flag) is True:
+                        entry[flag] = True
+                entries.append(entry)
+            document[kind] = entries
+        elif kind == "buildings":
+            document[kind] = [
+                {
+                    "id": _reverse_identity(
+                        identities, civ, "entity", str(check.payload["id"])
+                    ),
+                    "count": check.payload["count"],
+                }
+                for check in checks
+            ]
+        elif kind == "hints":
+            document[kind] = [str(check.payload["text"]) for check in checks]
+    return document
+
+
+def order_to_yaml(order: BuildOrder, identities: IdentityCatalog) -> str:
+    document: dict[str, object] = {"civ": order.civ, "title": order.title}
+    if order.link is not None:
+        document["link"] = order.link
+    document["steps"] = [
+        _step_to_yaml(step, order.civ, identities) for step in order.steps
+    ]
+    return yaml.safe_dump(document, sort_keys=False, allow_unicode=True)
+
+
+def _print_catalog(catalog: Catalog) -> None:
+    headers = ("ID", "CIV", "TITLE", "SOURCE")
+    rows = [
+        (order.id, order.civ, order.title, order.link or "")
+        for order in sorted(catalog.build_orders, key=lambda item: item.id)
+    ]
+    widths = [
+        max([len(headers[index]), *(len(row[index]) for row in rows)])
+        for index in range(len(headers))
+    ]
+    print("  ".join(value.ljust(widths[index]) for index, value in enumerate(headers)))
+    print("  ".join("-" * width for width in widths))
+    for row in rows:
+        print("  ".join(value.ljust(widths[index]) for index, value in enumerate(row)))
+
+
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Manage Macro Trainer build orders")
+    commands = parser.add_subparsers(dest="command", required=True)
+    build = commands.add_parser("build", help="compile YAML into the datastore")
+    build.add_argument("inputs", nargs="*", type=Path, default=[Path("build_orders")])
+    listing = commands.add_parser("list", help="list compiled build orders")
+    delete = commands.add_parser("delete", help="delete compiled build orders")
+    delete.add_argument("ids", nargs="+")
+    extract = commands.add_parser("extract", help="extract normalized YAML")
+    extract.add_argument("ids", nargs="+")
+    extract.add_argument("--output-dir", type=Path, default=Path.cwd())
+    for command in (build, listing, delete, extract):
+        command.add_argument("--profile")
+    return parser
+
+
+def _forward_default_build(arguments: list[str]) -> list[str]:
+    if not arguments:
+        return ["build"]
+    if arguments[0] in {"-h", "--help", "build", "list", "delete", "extract"}:
+        return arguments
+    return ["build", *arguments]
+
+
+def main(argv: list[str] | None = None) -> int:
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    try:
+        options = _parser().parse_args(_forward_default_build(arguments))
+        datastore_path = resolve_datastore_path(options.profile)
+        existing = load_datastore(datastore_path)
+        if options.command == "build":
+            incoming = compile_inputs(options.inputs)
+            merged = merge_catalog(existing, incoming)
+            write_datastore(datastore_path, merged)
+            print(f"Stored {len(incoming.build_orders)} build order(s) in {datastore_path}")
+        elif options.command == "list":
+            _print_catalog(existing)
+        elif options.command == "delete":
+            if len(options.ids) != len(set(options.ids)):
+                raise BuildOrderValidationError("duplicate build order IDs requested")
+            by_id = {order.id: order for order in existing.build_orders}
+            unknown = [identifier for identifier in options.ids if identifier not in by_id]
+            if unknown:
+                raise BuildOrderValidationError(
+                    f"unknown build order ID(s): {', '.join(unknown)}"
+                )
+            write_datastore(
+                datastore_path,
+                Catalog(tuple(by_id[key] for key in sorted(set(by_id) - set(options.ids)))),
+            )
+            print(f"Deleted {len(options.ids)} build order(s)")
+        elif options.command == "extract":
+            if len(options.ids) != len(set(options.ids)):
+                raise BuildOrderValidationError("duplicate build order IDs requested")
+            by_id = {order.id: order for order in existing.build_orders}
+            unknown = [identifier for identifier in options.ids if identifier not in by_id]
+            if unknown:
+                raise BuildOrderValidationError(
+                    f"unknown build order ID(s): {', '.join(unknown)}"
+                )
+            identities = IdentityCatalog.load(DEFAULT_IDENTITY_CATALOG)
+            outputs: list[tuple[Path, str]] = []
+            for identifier in options.ids:
+                normalized_filename = normalize_id("", identifier)
+                if not normalized_filename:
+                    raise BuildOrderValidationError(
+                        f"build order ID {identifier!r} cannot form a safe filename"
+                    )
+                filename = f"{normalized_filename}.yaml"
+                outputs.append(
+                    (options.output_dir / filename, order_to_yaml(by_id[identifier], identities))
+                )
+            paths = [path for path, _ in outputs]
+            if len(paths) != len(set(paths)):
+                raise BuildOrderValidationError("extracted build order filename collision")
+            existing_outputs = [path for path in paths if path.exists()]
+            if existing_outputs:
+                raise BuildOrderValidationError(
+                    f"output file already exists: {existing_outputs[0]}"
+                )
+            options.output_dir.mkdir(parents=True, exist_ok=True)
+            temporary: list[tuple[Path, Path]] = []
+            try:
+                for path, content in outputs:
+                    temp = path.with_name(path.name + ".tmp")
+                    temp.write_text(content, encoding="utf-8", newline="")
+                    temporary.append((temp, path))
+                for temp, path in temporary:
+                    temp.replace(path)
+            finally:
+                for temp, _ in temporary:
+                    if temp.exists():
+                        temp.unlink()
+            print(f"Extracted {len(outputs)} build order(s) to {options.output_dir}")
+        return 0
+    except BuildOrderValidationError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    except (DatastoreError, ProfileResolutionError, IdentityCatalogError, OSError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 3
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
