@@ -8,6 +8,20 @@
 civ: string # game id of the civilization that must be selected for this build order
 title: string # in game display string to identify this build order. technically, the full display string is "icon(<civ>) - <title>" *unless the settings groups build order by civ)
 link: string # optional absolute HTTP(S) URL for the source of the build order. Stored as metadata by the compiler but not used by checks or emitted into game assets
+import_metadata: # optional review metadata emitted by deterministic import passes; validated by the compiler but omitted from the runtime model
+  rule_set: integer # positive extraction rule-set version
+  extractions:
+    - source_step: integer # zero-based RTS Overlay source-step index
+      source_note: integer # zero-based note index within the source step
+      span: [ integer, integer ] # zero-based, half-open character offsets in the HTML-decoded source note
+      rule: string # stable extraction rule ID
+      target: string # generated YAML path, including any synthetic threshold step
+  diagnostics:
+    - source_step: integer
+      source_note: integer
+      span: [ integer, integer ]
+      code: string # stable machine-readable diagnostic code
+      message: string # review-facing explanation
 steps: # a list of build order steps, the intention is for each build order to describe the state that the player should be in when moving to the next step under ideal circumstances. However, the actual checks the objectives do are more loose as games generally don't go to plan
   - title: string # optional player-facing step title
     vils: # ils typically specifies the minimum number of gatherers on the specified resource. This does not prevent vils being assigned to other resources and does not show a warning if the number is exceeded - both limitations are deliberate because games are dynamic and players may need to deviate at times

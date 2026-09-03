@@ -316,6 +316,29 @@ steps:
                     "file.yaml: link: must be an absolute HTTP(S) URL",
                 )
 
+    def test_validates_and_ignores_import_metadata_when_compiling_runtime_model(self) -> None:
+        order = self.compile({"opening.yaml": """civ: English
+title: Imported
+steps:
+  - built: [{id: barracks}]
+import_metadata:
+  rule_set: 1
+  extractions:
+    - {source_step: 0, source_note: 0, span: [0, 12], rule: built.imperative.v1, target: "steps[0].built[0]"}
+  diagnostics:
+    - {source_step: 0, source_note: 1, span: [4, 8], code: unused_token, message: token was unused}
+"""}).build_orders[0]
+
+        self.assertEqual(order.title, "Imported")
+        self.assertEqual(len(order.steps[0].checks), 1)
+
+    def test_rejects_malformed_import_metadata(self) -> None:
+        self.assert_invalid(
+            "civ: english\ntitle: x\nsteps: [{hints: [x]}]\n"
+            "import_metadata: {rule_set: 1, extractions: [{source_step: -1, source_note: 0, span: [0, 1], rule: x, target: x}], diagnostics: []}\n",
+            "file.yaml: import_metadata.extractions[0].source_step: must be a non-negative integer",
+        )
+
     def test_vils_mapping_compiles_one_aggregate_descriptor_in_resource_order(self) -> None:
         catalog = self.compile({"opening.yaml": """civ: English
 title: Villager split
