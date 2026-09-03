@@ -2,15 +2,17 @@ BUILD_ORDER_STARTUP_NO_SYSTEMS_TITLE = "$dfb5645698a84afb91cf7a2dfb0f4a4e:25"
 BUILD_ORDER_STARTUP_NO_SYSTEMS_MESSAGE = "$dfb5645698a84afb91cf7a2dfb0f4a4e:26"
 BUILD_ORDER_STARTUP_INVALID_TITLE = "$dfb5645698a84afb91cf7a2dfb0f4a4e:27"
 BUILD_ORDER_STARTUP_MISSING_BUILD_TITLE = "$dfb5645698a84afb91cf7a2dfb0f4a4e:28"
+BUILD_ORDER_STARTUP_CHOOSE_TITLE = "$dfb5645698a84afb91cf7a2dfb0f4a4e:29"
+BUILD_ORDER_STARTUP_NO_SELECTION_MESSAGE = "$dfb5645698a84afb91cf7a2dfb0f4a4e:30"
 
 function BuildOrderStartup_Start()
+	if _mod.buildOrderStarted then
+		return
+	end
+
 	local selectedID = _mod.selectedBuildOrderID
 	if selectedID == nil then
-		if _mod.simspeedEnabled then
-			Mod_StartSimspeedCycle()
-		else
-			BuildOrderStartup_ShowNoSystemsError()
-		end
+		BuildOrderStartup_ShowNoSelectionError()
 		return
 	end
 
@@ -27,6 +29,26 @@ function BuildOrderStartup_Start()
 		return
 	end
 
+	BuildOrderStartup_StartSelected(buildOrder)
+end
+
+function BuildOrderStartup_StartSelected(buildOrder)
+	if _mod.buildOrderStarted then
+		return
+	end
+
+	local localPlayer = Game_GetLocalPlayer()
+	local actualCiv = string.lower(Player_GetRaceName(localPlayer))
+	if type(buildOrder) ~= "table" or type(buildOrder.civ) ~= "string" or actualCiv ~= string.lower(buildOrder.civ) then
+		BuildOrderStartup_ShowInvalidBuildError(buildOrder or { civ = "unknown" }, actualCiv)
+		return
+	end
+
+	_mod.buildOrderStarted = true
+	_mod.buildOrderDisabled = false
+	_mod.startupAlertOpen = false
+	Rule_Remove(BuildOrderStartup_PauseNextTick)
+	Misc_SetSimRate(NORMAL_SIM_RATE)
 	BuildOrder_Start(buildOrder, localPlayer)
 	if _mod.simspeedEnabled then
 		Mod_StartSimspeedCycle()
@@ -37,6 +59,12 @@ function BuildOrderStartup_ShowNoSystemsError()
 	BuildOrderStartup_ShowError(
 		BUILD_ORDER_STARTUP_NO_SYSTEMS_TITLE,
 		BUILD_ORDER_STARTUP_NO_SYSTEMS_MESSAGE)
+end
+
+function BuildOrderStartup_ShowNoSelectionError()
+	BuildOrderStartup_ShowError(
+		BUILD_ORDER_STARTUP_CHOOSE_TITLE,
+		BUILD_ORDER_STARTUP_NO_SELECTION_MESSAGE)
 end
 
 function BuildOrderStartup_ShowInvalidBuildError(buildOrder, actualCiv)
@@ -50,9 +78,53 @@ function BuildOrderStartup_ShowMissingBuildError()
 		BUILD_ORDER_STARTUP_MISSING_BUILD_TITLE)
 end
 
+function BuildOrderStartup_ResetButtons()
+	UI_MessageBoxSetButton(DB_Button1, "", "", "", false)
+	UI_MessageBoxSetButton(DB_Button2, "", "", "", false)
+	UI_MessageBoxSetButton(DB_Button3, "", "", "", false)
+	UI_MessageBoxSetButton(DB_Button4, "", "", "", false)
+end
+
+function BuildOrderStartup_ChoiceComesBefore(leftID, rightID)
+	local left = BUILD_ORDER_CATALOG[leftID]
+	local right = BUILD_ORDER_CATALOG[rightID]
+	local leftTitle = string.lower(left.title)
+	local rightTitle = string.lower(right.title)
+	if leftTitle ~= rightTitle then
+		return leftTitle < rightTitle
+	end
+	return leftID < rightID
+end
+
+function BuildOrderStartup_CollectCompatible()
+	local actualCiv = string.lower(Player_GetRaceName(Game_GetLocalPlayer()))
+	local compatible = {}
+	for id, buildOrder in pairs(BUILD_ORDER_CATALOG) do
+		if type(buildOrder) == "table" and type(buildOrder.civ) == "string" and type(buildOrder.title) == "string" and string.lower(buildOrder.civ) == actualCiv then
+			local insertAt = #compatible + 1
+			for index, existingID in ipairs(compatible) do
+				if BuildOrderStartup_ChoiceComesBefore(id, existingID) then
+					insertAt = index
+					break
+				end
+			end
+			for index = #compatible, insertAt, -1 do
+				compatible[index + 1] = compatible[index]
+			end
+			compatible[insertAt] = id
+		end
+	end
+	_mod.compatibleBuildOrderIDs = compatible
+	_mod.buildOrderChoiceIndex = 1
+end
+
 function BuildOrderStartup_ShowError(title, message)
 	_mod.buildOrderDisabled = true
 	_mod.startupAlertOpen = true
+	_mod.startupErrorTitle = title
+	_mod.startupErrorMessage = message
+	BuildOrderStartup_CollectCompatible()
+	BuildOrderStartup_ResetButtons()
 	UI_MessageBoxSetText(title, message)
 	UI_MessageBoxSetButton(
 		DB_Button1,
@@ -60,7 +132,13 @@ function BuildOrderStartup_ShowError(title, message)
 		"Resume the match without build-order objectives.",
 		"",
 		true)
-	UI_MessageBoxShow(DC_Default, BuildOrderStartup_Continue)
+	UI_MessageBoxSetButton(
+		DB_Button2,
+		"Choose Build Order",
+		"Select from build orders loaded for this civilization.",
+		"",
+		#_mod.compatibleBuildOrderIDs > 0)
+	UI_MessageBoxShow(DC_Default, BuildOrderStartup_HandleErrorChoice)
 	Rule_Remove(BuildOrderStartup_PauseNextTick)
 	Rule_Add(BuildOrderStartup_PauseNextTick)
 end
@@ -72,8 +150,8 @@ function BuildOrderStartup_PauseNextTick()
 	end
 end
 
-function BuildOrderStartup_Continue(button)
-	if not _mod.startupAlertOpen or button ~= DB_Button1 then
+function BuildOrderStartup_ContinueWithoutBuildOrder()
+	if not _mod.startupAlertOpen then
 		return
 	end
 
@@ -85,7 +163,80 @@ function BuildOrderStartup_Continue(button)
 	end
 end
 
+function BuildOrderStartup_HandleErrorChoice(button)
+	if not _mod.startupAlertOpen then
+		return
+	end
+	if button == DB_Button1 then
+		BuildOrderStartup_ContinueWithoutBuildOrder()
+	elseif button == DB_Button2 and #_mod.compatibleBuildOrderIDs > 0 then
+		BuildOrderStartup_ShowChooser()
+	end
+end
+
+function BuildOrderStartup_WrapChoiceIndex(index, count)
+	if index < 1 then
+		return count
+	end
+	if index > count then
+		return 1
+	end
+	return index
+end
+
+function BuildOrderStartup_ShowChooser()
+	local count = #_mod.compatibleBuildOrderIDs
+	if count == 0 then
+		BuildOrderStartup_ShowError(_mod.startupErrorTitle, _mod.startupErrorMessage)
+		return
+	end
+
+	_mod.buildOrderChoiceIndex = BuildOrderStartup_WrapChoiceIndex(_mod.buildOrderChoiceIndex, count)
+	local selectedID = _mod.compatibleBuildOrderIDs[_mod.buildOrderChoiceIndex]
+	local buildOrder = BUILD_ORDER_CATALOG[selectedID]
+	local message = "[" .. _mod.buildOrderChoiceIndex .. "/" .. count .. "] " .. buildOrder.title
+	message = message .. "\nCivilization: " .. buildOrder.civ
+	if type(buildOrder.source) == "string" and buildOrder.source ~= "" then
+		message = message .. "\nSource: " .. buildOrder.source
+	end
+
+	BuildOrderStartup_ResetButtons()
+	UI_MessageBoxSetText(BUILD_ORDER_STARTUP_CHOOSE_TITLE, message)
+	UI_MessageBoxSetButton(DB_Button1, "Use This Build Order", "Start objectives for this build order.", "", true)
+	UI_MessageBoxSetButton(DB_Button2, "Next", "Show the next compatible build order.", "", count > 1)
+	UI_MessageBoxSetButton(DB_Button3, "Previous", "Show the previous compatible build order.", "", count > 1)
+	UI_MessageBoxSetButton(DB_Button4, "Cancel", "Return to the startup warning.", "", true)
+	UI_MessageBoxShow(DC_Default, BuildOrderStartup_HandleChooserChoice)
+end
+
+function BuildOrderStartup_HandleChooserChoice(button)
+	if not _mod.startupAlertOpen then
+		return
+	end
+
+	local count = #_mod.compatibleBuildOrderIDs
+	if button == DB_Button2 then
+		_mod.buildOrderChoiceIndex = BuildOrderStartup_WrapChoiceIndex(_mod.buildOrderChoiceIndex + 1, count)
+		BuildOrderStartup_ShowChooser()
+	elseif button == DB_Button3 then
+		_mod.buildOrderChoiceIndex = BuildOrderStartup_WrapChoiceIndex(_mod.buildOrderChoiceIndex - 1, count)
+		BuildOrderStartup_ShowChooser()
+	elseif button == DB_Button4 then
+		BuildOrderStartup_ShowError(_mod.startupErrorTitle, _mod.startupErrorMessage)
+	elseif button == DB_Button1 then
+		local selectedID = _mod.compatibleBuildOrderIDs[_mod.buildOrderChoiceIndex]
+		local buildOrder = BUILD_ORDER_CATALOG[selectedID]
+		if buildOrder == nil then
+			BuildOrderStartup_ShowMissingBuildError()
+			return
+		end
+		_mod.selectedBuildOrderID = selectedID
+		BuildOrderStartup_StartSelected(buildOrder)
+	end
+end
+
 function BuildOrderStartup_Stop()
 	_mod.startupAlertOpen = false
+	_mod.compatibleBuildOrderIDs = {}
 	Rule_Remove(BuildOrderStartup_PauseNextTick)
 end

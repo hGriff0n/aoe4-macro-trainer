@@ -94,6 +94,24 @@ class BuildOrderDatastoreContractTests(unittest.TestCase):
             validate,
         )
         self.assertIn('type(buildOrder.steps) ~= "table"', validate)
+        self.assertIn("#buildOrder.steps == 0", validate)
+        self.assertIn(
+            "if not BuildOrderDatastore_IsValidStep(step) then", validate
+        )
+
+        step = function_body(self.datastore, "BuildOrderDatastore_IsValidStep")
+        self.assertIn('type(step.title) ~= "string" or step.title == ""', step)
+        self.assertIn('type(step.checks) ~= "table" or #step.checks == 0', step)
+        self.assertIn(
+            "if not BuildOrderDatastore_IsValidCheck(check) then", step
+        )
+
+        check = function_body(self.datastore, "BuildOrderDatastore_IsValidCheck")
+        self.assertIn('type(check.id) ~= "string" or check.id == ""', check)
+        self.assertIn('type(check.kind) ~= "string" or check.kind == ""', check)
+        self.assertIn('type(check.title) ~= "string" or check.title == ""', check)
+        self.assertIn('type(check.optional) ~= "boolean"', check)
+        self.assertIn('type(check.payload) ~= "table"', check)
 
     def test_invalid_store_reaches_callback_without_clearing_bundled_catalog(self) -> None:
         finish = function_body(self.datastore, "BuildOrderDatastore_FinishLoad")

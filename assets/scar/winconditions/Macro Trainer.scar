@@ -52,6 +52,11 @@ _mod = {
 	simspeedStarted = false,
 	buildOrderDisabled = false,
 	startupAlertOpen = false,
+	startupErrorTitle = nil,
+	startupErrorMessage = nil,
+	compatibleBuildOrderIDs = {},
+	buildOrderChoiceIndex = 1,
+	buildOrderStarted = false,
 }
 
 NORMAL_SIM_RATE = 8

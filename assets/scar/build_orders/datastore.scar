@@ -3,6 +3,46 @@ BUILD_ORDER_DATASTORE_SCHEMA_VERSION = 1
 BUILD_ORDER_DATASTORE_ON_COMPLETE = nil
 BUILD_ORDER_DATASTORE_LOADING = false
 
+function BuildOrderDatastore_IsValidCheck(check)
+	if type(check) ~= "table" then
+		return false
+	end
+	if type(check.id) ~= "string" or check.id == "" then
+		return false
+	end
+	if type(check.kind) ~= "string" or check.kind == "" then
+		return false
+	end
+	if type(check.title) ~= "string" or check.title == "" then
+		return false
+	end
+	if type(check.optional) ~= "boolean" then
+		return false
+	end
+	if type(check.payload) ~= "table" then
+		return false
+	end
+	return true
+end
+
+function BuildOrderDatastore_IsValidStep(step)
+	if type(step) ~= "table" then
+		return false
+	end
+	if type(step.title) ~= "string" or step.title == "" then
+		return false
+	end
+	if type(step.checks) ~= "table" or #step.checks == 0 then
+		return false
+	end
+	for _, check in ipairs(step.checks) do
+		if not BuildOrderDatastore_IsValidCheck(check) then
+			return false
+		end
+	end
+	return true
+end
+
 function BuildOrderDatastore_IsValidOrder(id, buildOrder)
 	if type(id) ~= "string" or id == "" then
 		return false
@@ -19,8 +59,13 @@ function BuildOrderDatastore_IsValidOrder(id, buildOrder)
 	if type(buildOrder.title) ~= "string" or buildOrder.title == "" then
 		return false
 	end
-	if type(buildOrder.steps) ~= "table" then
+	if type(buildOrder.steps) ~= "table" or #buildOrder.steps == 0 then
 		return false
+	end
+	for _, step in ipairs(buildOrder.steps) do
+		if not BuildOrderDatastore_IsValidStep(step) then
+			return false
+		end
 	end
 	return true
 end
