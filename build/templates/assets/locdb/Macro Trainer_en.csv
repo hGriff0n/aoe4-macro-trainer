@@ -27,3 +27,5 @@
 26,,,Startup no-systems message.,,,The mod is not intended to be played with both off.
 27,,,Startup invalid-build title.,,,Build Order Disabled
 28,,,Startup missing-build value.,,,Selected build order is unavailable.
+29,,,Startup build-order chooser title.,,,Choose a Build Order
+30,,,Startup no-selection message.,,,No lobby build order was selected.
