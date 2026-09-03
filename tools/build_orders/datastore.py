@@ -339,6 +339,105 @@ def _payload(value: object, path: str) -> object:
     return result
 
 
+def _validate_check_payload(kind: str, payload: dict[str, object], path: str) -> None:
+    resources = {"food", "gold", "wood", "stone"}
+
+    def exact(required: set[str], optional: set[str] | None = None) -> None:
+        optional = optional or set()
+        missing = required - set(payload)
+        unknown = set(payload) - required - optional
+        if missing:
+            raise DatastoreError(f"{path} missing {sorted(missing)[0]!r}")
+        if unknown:
+            raise DatastoreError(f"{path} has unknown key {sorted(unknown)[0]!r}")
+
+    def positive(field: str) -> None:
+        value = payload[field]
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            raise DatastoreError(f"{path}.{field} must be a positive integer")
+
+    def string(field: str) -> None:
+        if not isinstance(payload[field], str) or not payload[field]:
+            raise DatastoreError(f"{path}.{field} must be a non-empty string")
+
+    def boolean(field: str) -> None:
+        if not isinstance(payload[field], bool):
+            raise DatastoreError(f"{path}.{field} must be boolean")
+
+    def identity_choice(optional: set[str]) -> None:
+        keys = {"id", "oneof"} & set(payload)
+        if len(keys) != 1:
+            raise DatastoreError(f"{path} requires exactly one of 'id' or 'oneof'")
+        exact(keys, optional)
+        if "id" in keys:
+            string("id")
+        else:
+            values = payload["oneof"]
+            if not isinstance(values, list) or not values or not all(
+                isinstance(item, str) and item for item in values
+            ):
+                raise DatastoreError(f"{path}.oneof must be a non-empty string array")
+
+    if kind == "vils":
+        if payload.get("no_collect") is True:
+            exact({"resource", "no_collect"})
+            string("resource")
+            if payload["resource"] not in resources:
+                raise DatastoreError(f"{path}.resource is unsupported")
+        else:
+            if not payload or not set(payload) <= resources:
+                raise DatastoreError(f"{path} must contain villager resource counts")
+            for field in payload:
+                positive(field)
+    elif kind in {"resources", "rallypoint"}:
+        exact({"resource", "count"} if kind == "resources" else {"resource"})
+        string("resource")
+        if payload["resource"] not in resources:
+            raise DatastoreError(f"{path}.resource is unsupported")
+        if kind == "resources":
+            positive("count")
+    elif kind in {"built", "age_up"}:
+        optional = {"vils", "location"}
+        if kind == "built":
+            optional.add("count")
+        identity_choice(optional)
+        if kind == "built":
+            if "count" not in payload:
+                raise DatastoreError(f"{path} missing 'count'")
+            positive("count")
+        if "vils" in payload:
+            positive("vils")
+        if "location" in payload:
+            string("location")
+    elif kind == "upgrades":
+        exact({"id", "queued"})
+        string("id")
+        boolean("queued")
+    elif kind in {"produce", "units"}:
+        exact(
+            {"ids", "count"},
+            {"constant", "queued"} if kind == "produce" else None,
+        )
+        ids = payload["ids"]
+        if not isinstance(ids, list) or not ids or not all(
+            isinstance(item, str) and item for item in ids
+        ):
+            raise DatastoreError(f"{path}.ids must be a non-empty string array")
+        positive("count")
+        for field in ("constant", "queued"):
+            if field in payload:
+                boolean(field)
+    elif kind == "buildings":
+        exact({"id", "count"})
+        string("id")
+        positive("count")
+    elif kind == "hints":
+        exact({"text"})
+        string("text")
+    else:
+        raise DatastoreError(f"{path}: unsupported check kind {kind!r}")
+
+
 def parse_datastore(text: str) -> Catalog:
     root = _require_mapping(_Parser(text).parse(), "LuaDataStore")
     _require_exact_keys(root, {"schema_version", "build_orders"}, set(), "LuaDataStore")
@@ -393,12 +492,15 @@ def parse_datastore(text: str) -> Catalog:
                 optional = check["optional"]
                 if not isinstance(optional, bool):
                     raise DatastoreError(f"{check_path}.optional must be boolean")
-                payload = _payload(check["payload"], f"{check_path}.payload")
+                payload_path = f"{check_path}.payload"
+                payload = _payload(check["payload"], payload_path)
                 if not isinstance(payload, dict):
-                    raise DatastoreError(f"{check_path}.payload must be a keyed table")
+                    raise DatastoreError(f"{payload_path} must be a keyed table")
+                kind = _require_string(check["kind"], f"{check_path}.kind")
+                _validate_check_payload(kind, payload, payload_path)
                 checks.append(
                     CheckDescriptor(
-                        _require_string(check["kind"], f"{check_path}.kind"),
+                        kind,
                         _require_string(check["title"], f"{check_path}.title"),
                         optional,
                         payload,
@@ -420,6 +522,7 @@ def load_datastore(path: Path) -> Catalog:
 
 def write_datastore(path: Path, catalog: Catalog) -> None:
     content = render_datastore(catalog)
+    parse_datastore(content)
     temporary = path.with_name(path.name + ".tmp")
     try:
         path.parent.mkdir(parents=True, exist_ok=True)

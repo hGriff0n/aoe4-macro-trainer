@@ -24,13 +24,13 @@ ORDER = BuildOrder(
                     "vils",
                     "Assign 7 food",
                     False,
-                    {"food": 7, "ids": ["unit_a", "unit_b"]},
+                    {"food": 7},
                 ),
                 CheckDescriptor(
                     "hints",
                     'Say "hello"',
                     True,
-                    {"text": "line one\nline two", "enabled": True},
+                    {"text": "line one\nline two"},
                 ),
             ),
         ),
@@ -87,6 +87,14 @@ class BuildOrderDatastoreCodecTests(unittest.TestCase):
             parse_datastore(valid.replace('id = "english-opening"', 'id = "other"', 1))
         with self.assertRaisesRegex(DatastoreError, "optional"):
             parse_datastore(valid.replace("optional = false", 'optional = "false"', 1))
+
+    def test_parser_rejects_invalid_kind_specific_payload(self) -> None:
+        text = render_datastore(Catalog((ORDER,))).replace(
+            "food = 7", 'food = "seven"'
+        )
+
+        with self.assertRaisesRegex(DatastoreError, "positive integer"):
+            parse_datastore(text)
 
     def test_invalid_catalog_never_replaces_existing_file(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
