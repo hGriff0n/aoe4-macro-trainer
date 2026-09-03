@@ -233,16 +233,23 @@ class BuildOrderStartupContractTests(unittest.TestCase):
         )
 
         start = function_body(self.main, "Mod_Start")
-        self.assertEqual(start.count("BuildOrderStartup_Start()"), 1)
+        self.assertEqual(
+            start.count("BuildOrderDatastore_Load(BuildOrderStartup_Start)"), 1
+        )
+        self.assertNotIn("BuildOrderStartup_Start()", start)
         self.assertNotIn("Mod_StartSimspeedCycle()", start)
 
         game_over = function_body(self.main, "Mod_OnGameOver")
         for call in (
+            "BuildOrderDatastore_Stop()",
             "BuildOrderStartup_Stop()",
             "BuildOrder_Stop()",
             "Mod_StopSimspeedCycle()",
         ):
             self.assertEqual(game_over.count(call), 1)
+        self.assert_order(
+            game_over, "BuildOrderDatastore_Stop()", "BuildOrderStartup_Stop()"
+        )
         self.assert_order(game_over, "BuildOrderStartup_Stop()", "BuildOrder_Stop()")
         self.assert_order(game_over, "BuildOrder_Stop()", "Mod_StopSimspeedCycle()")
 

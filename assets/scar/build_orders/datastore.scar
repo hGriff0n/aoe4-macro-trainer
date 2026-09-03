@@ -1,0 +1,88 @@
+BUILD_ORDER_DATASTORE_ID = "macroTrainerBuildOrders"
+BUILD_ORDER_DATASTORE_SCHEMA_VERSION = 1
+BUILD_ORDER_DATASTORE_ON_COMPLETE = nil
+BUILD_ORDER_DATASTORE_LOADING = false
+
+function BuildOrderDatastore_IsValidOrder(id, buildOrder)
+	if type(id) ~= "string" or id == "" then
+		return false
+	end
+	if type(buildOrder) ~= "table" then
+		return false
+	end
+	if buildOrder.id ~= id then
+		return false
+	end
+	if type(buildOrder.civ) ~= "string" or buildOrder.civ == "" then
+		return false
+	end
+	if type(buildOrder.title) ~= "string" or buildOrder.title == "" then
+		return false
+	end
+	if type(buildOrder.steps) ~= "table" then
+		return false
+	end
+	return true
+end
+
+function BuildOrderDatastore_Merge(loaded)
+	if type(loaded) ~= "table" then
+		print("BuildOrderDatastore: no datastore catalog was loaded; using bundled build orders")
+		return
+	end
+	if loaded.schema_version ~= BUILD_ORDER_DATASTORE_SCHEMA_VERSION then
+		print("BuildOrderDatastore: unsupported datastore schema; using bundled build orders")
+		return
+	end
+	if type(loaded.build_orders) ~= "table" then
+		print("BuildOrderDatastore: invalid datastore catalog; using bundled build orders")
+		return
+	end
+
+	for id, buildOrder in pairs(loaded.build_orders) do
+		if BuildOrderDatastore_IsValidOrder(id, buildOrder) then
+			BUILD_ORDER_CATALOG[id] = buildOrder
+		else
+			print("BuildOrderDatastore: skipped invalid build order " .. tostring(id))
+		end
+	end
+end
+
+function BuildOrderDatastore_Complete()
+	local onComplete = BUILD_ORDER_DATASTORE_ON_COMPLETE
+	BUILD_ORDER_DATASTORE_ON_COMPLETE = nil
+	BUILD_ORDER_DATASTORE_LOADING = false
+	if type(onComplete) == "function" then
+		onComplete()
+	end
+end
+
+function BuildOrderDatastore_FinishLoad()
+	Rule_RemoveMe()
+	if not BUILD_ORDER_DATASTORE_LOADING then
+		return
+	end
+
+	Game_RetrieveTableData(BUILD_ORDER_DATASTORE_ID, false)
+	local loaded = _G[BUILD_ORDER_DATASTORE_ID]
+	BuildOrderDatastore_Merge(loaded)
+	BuildOrderDatastore_Complete()
+end
+
+function BuildOrderDatastore_Load(onComplete)
+	if BUILD_ORDER_DATASTORE_LOADING then
+		return
+	end
+
+	BUILD_ORDER_DATASTORE_ON_COMPLETE = onComplete
+	BUILD_ORDER_DATASTORE_LOADING = true
+	Game_LoadTextDataStore(BUILD_ORDER_DATASTORE_ID, "")
+	Rule_Remove(BuildOrderDatastore_FinishLoad)
+	Rule_Add(BuildOrderDatastore_FinishLoad)
+end
+
+function BuildOrderDatastore_Stop()
+	Rule_Remove(BuildOrderDatastore_FinishLoad)
+	BUILD_ORDER_DATASTORE_ON_COMPLETE = nil
+	BUILD_ORDER_DATASTORE_LOADING = false
+end
