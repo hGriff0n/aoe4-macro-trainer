@@ -6,6 +6,7 @@
 import("cardinal.scar")							-- Contains sfx references, UI templates, and Civ/Age helper functions
 import("ScarUtil.scar")							-- Contains game helper functions
 import("generated/build_orders.scar")
+import("build_orders/datastore.scar")
 import("build_orders/objective_engine.scar")
 import("build_orders/checks/rallypoint.scar")
 import("build_orders/checks/resources.scar")
@@ -147,7 +148,7 @@ end
 
 -- Called after initialization is done when game is fading up from black
 function Mod_Start()
-	BuildOrderStartup_Start()
+	BuildOrderDatastore_Load(BuildOrderStartup_Start)
 end
 
 function Mod_StartSimspeedCycle()
@@ -223,6 +224,7 @@ end
 
 -- When a victory condition is met, a module must call Core_OnGameOver() in order to invoke this delegate and notify all modules that the match is about to end. Generally used for clean up (removal of rules, objectives, and UI elements specific to the module).
 function Mod_OnGameOver()
+	BuildOrderDatastore_Stop()
 	BuildOrderStartup_Stop()
 	BuildOrder_Stop()
 	Mod_StopSimspeedCycle()
