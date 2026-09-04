@@ -3,84 +3,6 @@ AGE_UP_CONSTRUCTION_EVENTS = false
 AGE_UP_UPGRADE_EVENTS = false
 AGE_UP_SCAN_STATE = nil
 
-AGE_UP_UPGRADE_CIVS = {
-	abbasid = true,
-	ayyubids = true,
-	templar = true,
-	golden_horde = true,
-}
-
-AGE_UP_SUPPORTED_CIVS = {
-	abbasid = true,
-	ayyubids = true,
-	byzantines = true,
-	chinese = true,
-	delhi = true,
-	english = true,
-	french = true,
-	golden_horde = true,
-	house_of_lancaster = true,
-	hre = true,
-	japanese = true,
-	jeanne_darc = true,
-	jin_dynasty = true,
-	macedonian_dynasty = true,
-	malians = true,
-	mongols = true,
-	order_of_the_dragon = true,
-	ottomans = true,
-	rus = true,
-	sengoku_daimyo = true,
-	templar = true,
-	tughlaq_dynasty = true,
-	zhu_xi = true,
-}
-
-function AgeUp_PBGsEqual(left, right)
-	return left ~= nil and right ~= nil
-		and left.PropertyBagGroupID == right.PropertyBagGroupID
-		and left.PropertyBagGroupModPackID == right.PropertyBagGroupModPackID
-		and left.PropertyBagGroupType == right.PropertyBagGroupType
-end
-
-function AgeUp_UsesUpgradeEvent(civ)
-	if civ == nil or AGE_UP_SUPPORTED_CIVS[civ] ~= true then
-		return nil
-	end
-	return AGE_UP_UPGRADE_CIVS[civ] == true
-end
-
-local function AgeUp_ResolvePBGs(payload, civ)
-	local usesUpgradeEvent = AgeUp_UsesUpgradeEvent(civ)
-	if usesUpgradeEvent == nil then
-		return nil
-	end
-
-	local resolver = BP_GetEntityBlueprint
-	if usesUpgradeEvent then
-		resolver = BP_GetUpgradeBlueprint
-	end
-
-	local pbgs = {}
-	if payload.id ~= nil then
-		table.insert(pbgs, resolver(payload.id))
-	else
-		for _, identifier in ipairs(payload.oneof) do
-			table.insert(pbgs, resolver(identifier))
-		end
-	end
-	return pbgs
-end
-
-function AgeUp_MatchesPBG(pbgs, pbg)
-	for _, candidate in ipairs(pbgs) do
-		if AgeUp_PBGsEqual(candidate, pbg) then
-			return true
-		end
-	end
-	return false
-end
-
 function AgeUp_CheckLandmarkEntity(group, index, entity)
 	local state = AGE_UP_SCAN_STATE
 	if state == nil then
@@ -92,7 +14,7 @@ function AgeUp_CheckLandmarkEntity(group, index, entity)
 	end
 	if Entity_IsBuilding(entity)
 		and Entity_GetBuildingProgress(entity) >= 1.0
-		and AgeUp_MatchesPBG(state.pbgs, Entity_GetBlueprint(entity)) then
+		and BuildOrder_MatchesAnyBlueprint(state.pbgs, Entity_GetBlueprint(entity)) then
 		state.baselineComplete = true
 		return true
 	end
@@ -117,12 +39,12 @@ local function AgeUp_HasCompletedLandmark(state)
 end
 
 local function AgeUp_TryComplete(state)
-	if state == nil or state.completed or state.unsupported then
+	if state == nil or state.completed then
 		return
 	end
 
 	local complete = false
-	if AgeUp_UsesUpgradeEvent(state.civ) then
+	if state.trigger == "upgrade" then
 		complete = AgeUp_HasCompletedUpgrade(state)
 	else
 		complete = AgeUp_HasCompletedLandmark(state)
@@ -145,11 +67,10 @@ function AgeUp_OnConstructionStart(context)
 	BuildOrder_BeginCheckUpdates()
 	local completedCheckIDs = {}
 	for checkID, state in pairs(AGE_UP_STATE) do
-		if state.completed == false and state.unsupported == false
-			and AgeUp_UsesUpgradeEvent(state.civ) == false then
+		if state.completed == false and state.trigger ~= "upgrade" then
 			if context.player ~= state.player then
 				-- Never allow opponent construction to satisfy a local-player objective.
-			elseif AgeUp_MatchesPBG(state.pbgs, context.pbg)
+			elseif BuildOrder_MatchesAnyBlueprint(state.pbgs, context.pbg)
 				and state.seenFoundations[entityID] ~= true then
 				state.seenFoundations[entityID] = true
 				state.completed = true
@@ -164,33 +85,19 @@ function AgeUp_OnConstructionStart(context)
 	BuildOrder_EndCheckUpdates()
 end
 
-local function AgeUp_GetExecuterOwner(context)
-	if context == nil or context.executer == nil then
-		return nil
-	end
-	if context.executer.PlayerID ~= nil then
-		return context.executer
-	end
-	if context.executer.EntityID ~= nil then
-		return Entity_GetPlayerOwner(context.executer)
-	end
-	return nil
-end
-
 function AgeUp_OnUpgradeStart(context)
 	if context == nil or context.executer == nil or context.upgrade == nil then
 		return
 	end
 
-	local owner = AgeUp_GetExecuterOwner(context)
+	local owner = BuildOrder_GetExecuterOwner(context)
 	BuildOrder_BeginCheckUpdates()
 	local completedCheckIDs = {}
 	for checkID, state in pairs(AGE_UP_STATE) do
-		if state.completed == false and state.unsupported == false
-			and AgeUp_UsesUpgradeEvent(state.civ) then
+		if state.completed == false and state.trigger == "upgrade" then
 			if owner ~= state.player then
 				-- Never allow opponent research to satisfy a local-player objective.
-			elseif AgeUp_MatchesPBG(state.pbgs, context.upgrade) then
+			elseif BuildOrder_MatchesAnyBlueprint(state.pbgs, context.upgrade) then
 				state.completed = true
 				table.insert(completedCheckIDs, checkID)
 			end
@@ -207,8 +114,8 @@ function AgeUp_UpdateObservers()
 	local needsConstructionEvents = false
 	local needsUpgradeEvents = false
 	for _, state in pairs(AGE_UP_STATE) do
-		if state.completed == false and state.unsupported == false then
-			if AgeUp_UsesUpgradeEvent(state.civ) then
+		if state.completed == false then
+			if state.trigger == "upgrade" then
 				needsUpgradeEvents = true
 			else
 				needsConstructionEvents = true
@@ -241,22 +148,19 @@ local function AgeUp_Activate(check, objectiveID, context)
 		return
 	end
 
-	local civ = context.civ
-	local usesUpgradeEvent = AgeUp_UsesUpgradeEvent(civ)
-	local pbgs = AgeUp_ResolvePBGs(check.payload, civ)
-	local unsupported = usesUpgradeEvent == nil or pbgs == nil
-	if unsupported then
-		print("AgeUp: unsupported civilization " .. tostring(civ))
+	local trigger = check.payload.trigger
+	local resolver = BP_GetEntityBlueprint
+	if trigger == "upgrade" then
+		resolver = BP_GetUpgradeBlueprint
 	end
+	local pbgs = BuildOrder_ResolvePayloadBlueprints(check.payload, resolver)
 
 	AGE_UP_STATE[check.id] = {
 		checkID = check.id,
 		objectiveID = objectiveID,
-		civ = civ,
 		player = context.localPlayer,
 		pbgs = pbgs,
-		usesUpgradeEvent = usesUpgradeEvent,
-		unsupported = unsupported,
+		trigger = trigger,
 		completed = false,
 		seenFoundations = {},
 	}

@@ -63,20 +63,20 @@ class AgeUpCompilerTests(unittest.TestCase):
             with self.subTest(civ=civ):
                 check = self.compile_check(f"{{id: {human_id}}}", civ=civ)
                 self.assertFalse(check.optional)
-                self.assertEqual(check.payload, {"id": canonical})
+                self.assertEqual(check.payload, {"id": canonical, "trigger": "upgrade"})
 
     def test_ayyubid_age_up_uses_upgrade_catalog_category(self) -> None:
         check = self.compile_check("{id: feudal_economic_wing_growth}", civ="ayyubids")
         self.assertEqual(
             check.payload,
-            {"id": "upgrade_add_economy_wing_dark_a_abb_ha_01"},
+            {"id": "upgrade_add_economy_wing_dark_a_abb_ha_01", "trigger": "upgrade"},
         )
 
     def test_conventional_age_up_uses_entity_catalog_category(self) -> None:
         check = self.compile_check("{id: council_hall}", civ="english")
         self.assertEqual(
             check.payload,
-            {"id": "building_landmark_age1_westminster_hall_eng"},
+            {"id": "building_landmark_age1_westminster_hall_eng", "trigger": "construction"},
         )
 
     def test_rejects_removed_capability_field(self) -> None:
@@ -89,9 +89,14 @@ class AgeUpHandlerContractTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.source = AGE_UP_HANDLER.read_text(encoding="utf-8")
 
-    def test_runtime_dispatches_on_context_civ_without_capability(self) -> None:
-        self.assertIn("civ = context.civ", self.source)
-        self.assertIn("AgeUp_UsesUpgradeEvent(state.civ)", self.source)
+    def test_runtime_dispatches_on_compiled_payload_trigger_without_civilization_allowlists(self) -> None:
+        self.assertIn("local trigger = check.payload.trigger", self.source)
+        self.assertIn('trigger == "upgrade"', self.source)
+        self.assertIn('state.trigger == "upgrade"', self.source)
+        self.assertNotIn("context.civ", self.source)
+        self.assertNotIn("AGE_UP_SUPPORTED_CIVS", self.source)
+        self.assertNotIn("AGE_UP_UPGRADE_CIVS", self.source)
+        self.assertNotIn("unsupported", self.source)
         self.assertNotIn("capability", self.source)
 
     def test_packaged_wincondition_reaches_age_up_handler_once_after_engine(self) -> None:
@@ -130,12 +135,10 @@ class AgeUpHandlerContractTests(unittest.TestCase):
 
         self.assertEqual(graph.count(age_handler), 2)
 
-    def test_upgrade_civilizations_are_explicit(self) -> None:
-        for civ in ("abbasid", "ayyubids", "templar", "golden_horde"):
-            self.assertIn(f"{civ} = true", self.source)
-
-    def test_activation_caches_pbg_tuples_using_civilization_selected_resolver(self) -> None:
-        self.assertIn("AgeUp_ResolvePBGs(check.payload, civ)", self.source)
+    def test_activation_caches_pbg_tuples_using_payload_selected_resolver(self) -> None:
+        self.assertIn("BuildOrder_ResolvePayloadBlueprints(check.payload, resolver)", self.source)
+        self.assertIn("local trigger = check.payload.trigger", self.source)
+        self.assertIn('if trigger == "upgrade" then', self.source)
         self.assertIn("pbgs =", self.source)
         self.assertIn("BP_GetUpgradeBlueprint", self.source)
         self.assertIn("BP_GetEntityBlueprint", self.source)
@@ -150,7 +153,7 @@ class AgeUpHandlerContractTests(unittest.TestCase):
             self.source.index("function AgeUp_OnUpgradeStart")
         ]
         owner = "context.player ~= state.player"
-        identity = "AgeUp_MatchesPBG(state.pbgs, context.pbg)"
+        identity = "BuildOrder_MatchesAnyBlueprint(state.pbgs, context.pbg)"
         self.assertIn("context.player", handler)
         self.assertIn("context.pbg", handler)
         self.assertIn("context.entity", handler)
@@ -173,39 +176,21 @@ class AgeUpHandlerContractTests(unittest.TestCase):
         self.assertIn("function AgeUp_OnUpgradeStart", self.source)
         handler = self.source[self.source.index("function AgeUp_OnUpgradeStart"):]
         owner = "owner ~= state.player"
-        identity = "AgeUp_MatchesPBG(state.pbgs, context.upgrade)"
+        identity = "BuildOrder_MatchesAnyBlueprint(state.pbgs, context.upgrade)"
         self.assertIn("context.upgrade", handler)
         self.assertNotIn("context.pbg", handler)
         self.assertIn(owner, handler)
         self.assertIn(identity, handler)
         self.assertLess(handler.index(owner), handler.index(identity))
 
-    def test_upgrade_executor_resolver_accepts_direct_player_shape(self) -> None:
-        self.assertIn("function AgeUp_OnUpgradeStart", self.source)
-        resolver = self.source[
-            self.source.index("function AgeUp_GetExecuterOwner"):
-            self.source.index("function AgeUp_OnUpgradeStart")
-        ]
-        self.assertIn("context.executer.PlayerID ~= nil", resolver)
-        self.assertIn("return context.executer", resolver)
-
-    def test_upgrade_executor_resolver_accepts_entity_shape(self) -> None:
-        self.assertIn("function AgeUp_OnUpgradeStart", self.source)
-        resolver = self.source[
-            self.source.index("function AgeUp_GetExecuterOwner"):
-            self.source.index("function AgeUp_OnUpgradeStart")
-        ]
-        self.assertIn("context.executer.EntityID ~= nil", resolver)
-        self.assertIn("return Entity_GetPlayerOwner(context.executer)", resolver)
-
     def test_upgrade_callback_rejects_opponent_executor_before_identity_match(self) -> None:
         self.assertIn("function AgeUp_OnUpgradeStart", self.source)
         handler = self.source[self.source.index("function AgeUp_OnUpgradeStart"):]
-        self.assertIn("local owner = AgeUp_GetExecuterOwner(context)", handler)
+        self.assertIn("local owner = BuildOrder_GetExecuterOwner(context)", handler)
         self.assertIn("if owner ~= state.player then", handler)
         self.assertLess(
             handler.index("if owner ~= state.player then"),
-            handler.index("AgeUp_MatchesPBG(state.pbgs, context.upgrade)"),
+            handler.index("BuildOrder_MatchesAnyBlueprint(state.pbgs, context.upgrade)"),
         )
 
     def test_baselines_are_player_scoped(self) -> None:
@@ -230,11 +215,6 @@ class AgeUpHandlerContractTests(unittest.TestCase):
                 self.assertIn("BuildOrder_EndCheckUpdates()", callback)
                 self.assertLess(callback.index("BuildOrder_BeginCheckUpdates()"), callback.index("BuildOrder_SetCheckComplete"))
                 self.assertLess(callback.index("BuildOrder_SetCheckComplete"), callback.index("BuildOrder_EndCheckUpdates()"))
-
-    def test_unsupported_civilization_logs_and_remains_incomplete(self) -> None:
-        self.assertIn("AgeUp: unsupported civilization", self.source)
-        self.assertIn("return nil", self.source)
-
 
 if __name__ == "__main__":
     unittest.main()
