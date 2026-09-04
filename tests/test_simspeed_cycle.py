@@ -102,12 +102,15 @@ class SimspeedCycleContractTests(unittest.TestCase):
 
     def test_build_order_sources_load_before_startup_coordinator(self) -> None:
         generated = 'import("generated/build_orders.scar")'
+        datastore = 'import("build_orders/datastore.scar")'
         engine = 'import("build_orders/objective_engine.scar")'
         startup = 'import("build_orders/startup.scar")'
         self.assertIn(generated, self.source)
+        self.assertIn(datastore, self.source)
         self.assertIn(engine, self.source)
         self.assertIn(startup, self.source)
-        self.assertLess(self.source.index(generated), self.source.index(engine))
+        self.assertLess(self.source.index(generated), self.source.index(datastore))
+        self.assertLess(self.source.index(datastore), self.source.index(engine))
         self.assertLess(
             self.source.index("Rule_AddOneShot(nextRule, phaseDuration)"),
             self.source.index(startup),
@@ -207,7 +210,10 @@ class SimspeedCycleContractTests(unittest.TestCase):
         self.assertIn("simspeedStarted = false", self.source)
 
         mod_start = function_body(self.source, "Mod_Start")
-        self.assertIn("BuildOrderStartup_Start()", mod_start)
+        self.assertIn(
+            "BuildOrderDatastore_Load(BuildOrderStartup_Start)", mod_start
+        )
+        self.assertNotIn("BuildOrderStartup_Start()", mod_start)
         self.assertNotIn("Mod_StartSimspeedCycle()", mod_start)
         self.assertNotIn("Mod_StartPhase(", mod_start)
 
@@ -261,6 +267,7 @@ class SimspeedCycleContractTests(unittest.TestCase):
 
     def test_game_over_stops_transitions_and_active_objective(self) -> None:
         game_over = function_body(self.source, "Mod_OnGameOver")
+        self.assertEqual(game_over.count("BuildOrderDatastore_Stop()"), 1)
         self.assertEqual(game_over.count("BuildOrderStartup_Stop()"), 1)
         self.assertEqual(game_over.count("BuildOrder_Stop()"), 1)
         self.assertEqual(game_over.count("Mod_StopSimspeedCycle()"), 1)
