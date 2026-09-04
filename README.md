@@ -13,6 +13,38 @@ validate and generate assets without launching the editor (useful for tests).
 Ordinary builds validate author-facing IDs against the committed game identity
 catalog and do not access an external game database.
 
+### Importing RTS Overlay and aoe4guides build orders
+
+The build-order compiler can translate an RTS Overlay `.bo` JSON file or an
+aoe4guides build URL into authoritative Macro Trainer YAML. File and URL input
+are mutually exclusive and require an explicit output path:
+
+```powershell
+python -m tools.build_orders.compiler `
+  --import-file 'E:/path/to/2 TC.bo' `
+  --output 'build_orders/templar_2tc.yaml'
+
+python -m tools.build_orders.compiler `
+  --import-url 'https://aoe4guides.com/builds/nlxHE4i1PhNNXqD2XTAP' `
+  --output 'build_orders/templar_2tc.yaml'
+```
+
+URL import accepts HTTPS build-page and build-API URLs on `aoe4guides.com`.
+It extracts the build ID and requests the fixed overlay endpoint; it never
+fetches an arbitrary host supplied by the URL. The resulting YAML retains the
+canonical source link for attribution. Ordinary builds remain offline because
+only the explicit import command accesses aoe4guides.
+
+The baseline translation preserves source-step ordering. A step's timestamp is
+used as its title, positive food/gold/wood/stone allocations become a `vils`
+check, and non-empty notes become ordered hints after HTML entity decoding.
+RTS Overlay image tokens are rendered as readable labels, such as `Town Center`
+or `Gold`; unknown tokens fall back to a humanized filename. Zero allocations do
+not create checks. Age, population, total-villager, and builder fields are
+validated but are not converted into inferred actions. Arbitrary-language prose
+remains unchanged, and later reviewable translation passes may derive additional
+checks from it.
+
 Catalog regeneration is a developer-only operation:
 
 ```powershell
