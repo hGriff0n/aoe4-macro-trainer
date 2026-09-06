@@ -112,12 +112,13 @@ class BuildOrderObjectiveContractTests(unittest.TestCase):
     def assert_order(self, body: str, first: str, second: str) -> None:
         self.assertLess(body.index(first), body.index(second))
 
-    def test_main_loads_generated_catalog_before_objective_engine(self) -> None:
-        generated = 'import("generated/build_orders.scar")'
+    def test_main_loads_datastore_catalog_before_objective_engine(self) -> None:
+        datastore = 'import("build_orders/datastore.scar")'
         engine = 'import("build_orders/objective_engine.scar")'
-        self.assertIn(generated, self.main)
+        self.assertNotIn('import("generated/build_orders.scar")', self.main)
+        self.assertIn(datastore, self.main)
         self.assertIn(engine, self.main)
-        self.assertLess(self.main.index(generated), self.main.index(engine))
+        self.assertLess(self.main.index(datastore), self.main.index(engine))
 
     def test_packaged_import_graph_loads_units_handler_once_after_engine(self) -> None:
         root = "winconditions/Macro Trainer.scar"

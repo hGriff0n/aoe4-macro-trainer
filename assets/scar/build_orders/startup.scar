@@ -9,27 +9,7 @@ function BuildOrderStartup_Start()
 	if _mod.buildOrderStarted then
 		return
 	end
-
-	local selectedID = _mod.selectedBuildOrderID
-	if selectedID == nil then
-		BuildOrderStartup_ShowNoSelectionError()
-		return
-	end
-
-	local buildOrder = BUILD_ORDER_CATALOG[selectedID]
-	if buildOrder == nil then
-		BuildOrderStartup_ShowMissingBuildError()
-		return
-	end
-
-	local localPlayer = Game_GetLocalPlayer()
-	local actualCiv = string.lower(Player_GetRaceName(localPlayer))
-	if actualCiv ~= string.lower(buildOrder.civ) then
-		BuildOrderStartup_ShowInvalidBuildError(buildOrder, actualCiv)
-		return
-	end
-
-	BuildOrderStartup_StartSelected(buildOrder)
+	BuildOrderStartup_ShowNoSelectionError()
 end
 
 function BuildOrderStartup_StartSelected(buildOrder)

@@ -1,20 +1,13 @@
 import csv
 import re
-import shutil
-import tempfile
 import unittest
 from pathlib import Path
-
-from tools.build_mod import BuildPaths
-from tools.build_orders.compiler import compile_directory
-from tools.build_orders.emitters import emit_outputs, reset_outputs
-
 
 ROOT = Path(__file__).resolve().parents[1]
 STARTUP_PATH = ROOT / "assets" / "scar" / "build_orders" / "startup.scar"
 MAIN_PATH = ROOT / "assets" / "scar" / "winconditions" / "Macro Trainer.scar"
 LOCDB_PATH = (
-    ROOT / "build" / "templates" / "assets" / "locdb" / "Macro Trainer_en.csv"
+    ROOT / "assets" / "locdb" / "Macro Trainer_en.csv"
 )
 
 
@@ -53,25 +46,13 @@ class BuildOrderStartupContractTests(unittest.TestCase):
 
     def test_no_selection_opens_error_with_dynamic_choice(self) -> None:
         start = function_body(self.startup, "BuildOrderStartup_Start")
-        self.assertRegex(start, r"if selectedID == nil then\s*BuildOrderStartup_ShowNoSelectionError\(\)\s*return\s*end")
-        none_branch = start[: start.index("local buildOrder")]
-        self.assertNotIn("BuildOrder_Start(", none_branch)
-        self.assertNotIn("Mod_StartSimspeedCycle()", none_branch)
+        self.assertIn("BuildOrderStartup_ShowNoSelectionError()", start)
+        self.assertNotIn("selectedBuildOrderID", start)
+        self.assertNotIn("BUILD_ORDER_CATALOG", start)
+        self.assertNotIn("BuildOrder_Start(", start)
+        self.assertNotIn("Mod_StartSimspeedCycle()", start)
 
     def test_matching_build_starts_objectives_and_conditionally_starts_cycle(self) -> None:
-        start = function_body(self.startup, "BuildOrderStartup_Start")
-        self.assertIn("local buildOrder = BUILD_ORDER_CATALOG[selectedID]", start)
-        self.assertIn("local localPlayer = Game_GetLocalPlayer()", start)
-        self.assertIn(
-            "local actualCiv = string.lower(Player_GetRaceName(localPlayer))", start
-        )
-        self.assertIn("BuildOrderStartup_StartSelected(buildOrder)", start)
-        self.assert_order(
-            start,
-            "BuildOrderStartup_ShowInvalidBuildError(buildOrder, actualCiv)",
-            "BuildOrderStartup_StartSelected(buildOrder)",
-        )
-
         selected = function_body(self.startup, "BuildOrderStartup_StartSelected")
         self.assertIn("if _mod.buildOrderStarted then", selected)
         self.assertIn("_mod.buildOrderStarted = true", selected)
@@ -84,18 +65,14 @@ class BuildOrderStartupContractTests(unittest.TestCase):
         )
 
     def test_missing_catalog_and_civilization_mismatch_use_distinct_alerts(self) -> None:
-        start = function_body(self.startup, "BuildOrderStartup_Start")
+        selected = function_body(self.startup, "BuildOrderStartup_StartSelected")
         self.assertIn(
-            "if buildOrder == nil then",
-            start,
+            "actualCiv ~= string.lower(buildOrder.civ)", selected
         )
         self.assertIn(
-            "BuildOrderStartup_ShowMissingBuildError()", start
+            "BuildOrderStartup_ShowInvalidBuildError(buildOrder or { civ = \"unknown\" }, actualCiv)",
+            selected,
         )
-        self.assertIn(
-            "if actualCiv ~= string.lower(buildOrder.civ) then", start
-        )
-        self.assertIn("BuildOrderStartup_ShowInvalidBuildError(buildOrder, actualCiv)", start)
 
         invalid = function_body(
             self.startup, "BuildOrderStartup_ShowInvalidBuildError"
@@ -112,41 +89,6 @@ class BuildOrderStartupContractTests(unittest.TestCase):
             self.startup, "BuildOrderStartup_ShowMissingBuildError"
         )
         self.assertIn("BUILD_ORDER_STARTUP_MISSING_BUILD_TITLE", missing)
-
-    def test_templar_pbgname_survives_generation_and_matches_case_insensitively(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            templates = root / "templates"
-            templates.mkdir()
-            rdo_template = templates / "Macro Trainer.rdo"
-            locdb_template = templates / "Macro Trainer_en.csv"
-            rdo_template.write_text(
-                "<!-- GENERATED_BUILD_ORDER_ENUM_ITEMS -->\n", encoding="utf-8"
-            )
-            shutil.copyfile(LOCDB_PATH, locdb_template)
-            orders = root / "orders"
-            orders.mkdir()
-            (orders / "upper.yaml").write_text(
-                "civ: templar\ntitle: Case Test\nsteps:\n  - hints:\n      - Scout\n",
-                encoding="utf-8",
-            )
-            paths = BuildPaths(
-                root,
-                rdo_template,
-                locdb_template,
-                root / "assets" / "Macro Trainer.rdo",
-                root / "assets" / "Macro Trainer_en.csv",
-                root / "assets" / "generated" / "build_orders.scar",
-            )
-            reset_outputs(paths)
-            emit_outputs(compile_directory(orders), paths)
-
-            generated = paths.scar_output.read_text(encoding="utf-8")
-            self.assertIn('civ = "templar"', generated)
-            start = function_body(self.startup, "BuildOrderStartup_Start")
-            self.assertIn(
-                "actualCiv ~= string.lower(buildOrder.civ)", start
-            )
 
     def test_error_modal_resets_buttons_and_offers_dynamic_choice(self) -> None:
         show = function_body(self.startup, "BuildOrderStartup_ShowError")
@@ -345,7 +287,10 @@ class BuildOrderStartupContractTests(unittest.TestCase):
         self.assertEqual(rows[27][-1], "Build Order Disabled")
         self.assertEqual(rows[28][-1], "Selected build order is unavailable.")
         self.assertEqual(rows[29][-1], "Choose a Build Order")
-        self.assertEqual(rows[30][-1], "No lobby build order was selected.")
+        self.assertEqual(
+            rows[30][-1],
+            "Choose a build order loaded from the player datastore.",
+        )
         for identifier in range(25, 31):
             self.assertIn(
                 f'$dfb5645698a84afb91cf7a2dfb0f4a4e:{identifier}', self.startup

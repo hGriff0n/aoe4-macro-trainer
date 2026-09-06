@@ -3,15 +3,9 @@ App for training macro habits via overlays, gameplay mods, and puzzles/scenarios
 
 ## Build orders
 
-Build-order YAML files in `build_orders/` are authoritative. Build outputs under
-`assets/` are generated local files and are intentionally ignored by Git. Every
-build first resets those files to the checked-in baseline templates, then parses
-and validates all YAML before emitting a new catalog.
-
-Use `python tools/build_mod.py --build-orders build_orders --generate-only` to
-validate and generate assets without launching the editor (useful for tests).
-Ordinary builds validate author-facing IDs against the committed game identity
-catalog and do not access an external game database.
+Build-order YAML is compiled into the active Age of Empires IV player's datastore.
+The `.aoe4mod` package contains the objective runtime but no bundled build-order
+catalog.
 
 Catalog regeneration is a developer-only operation:
 
@@ -21,14 +15,6 @@ python tools/generate_game_identities.py --database E:/path/to/index.sanitized.s
 
 The generated JSON is committed so authors and ordinary builds do not need the
 source database.
-
-Normal builds require the Age of Empires IV Content Editor launcher at
-`F:\Program Files (x86)\Steam\steamapps\common\Age of Empires IV Content Editor\EssenceLauncher.exe`
-and must name the authoritative YAML directory so those orders are bundled:
-
-```powershell
-python tools/build_mod.py --build-orders '<absolute-path-to-build-orders>'
-```
 
 ### Player datastore
 
@@ -66,5 +52,19 @@ python -m tools.build_orders.compiler extract english-opening --output-dir expor
 normalized, recompilable YAML; because the datastore contains compiled data, it
 does not preserve original aliases, comments, formatting, or field grouping.
 
-The datastore compiler does not package the mod or invoke Essence. Continue to
-use `tools/build_mod.py` for developer asset generation and `.aoe4mod` builds.
+The datastore compiler does not package the mod or invoke Essence.
+
+## Build the mod
+
+Build the checked-in assets directly with the Age of Empires IV Content Editor.
+From PowerShell:
+
+```powershell
+& 'F:\Program Files (x86)\Steam\steamapps\common\Age of Empires IV Content Editor\EssenceLauncher.exe' --build_mod '<absolute-path-to-Macro Trainer.aoe4mod>' --auto_close_burn_window
+```
+
+From Git Bash or another MSYS shell on Windows:
+
+```bash
+MSYS2_ARG_CONV_EXCL='*' '/f/Program Files (x86)/Steam/steamapps/common/Age of Empires IV Content Editor/EssenceLauncher.exe' --build_mod '<absolute-Windows-path-to-Macro Trainer.aoe4mod>' --auto_close_burn_window
+```

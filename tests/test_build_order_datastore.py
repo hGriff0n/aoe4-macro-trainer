@@ -44,13 +44,12 @@ class BuildOrderDatastoreContractTests(unittest.TestCase):
         )
         self.assertIn("local loaded = _G[BUILD_ORDER_DATASTORE_ID]", finish)
 
-    def test_main_imports_datastore_after_bundled_catalog_before_startup(self) -> None:
-        bundled = 'import("generated/build_orders.scar")'
+    def test_main_imports_datastore_as_the_only_catalog_before_startup(self) -> None:
         datastore = 'import("build_orders/datastore.scar")'
         startup = 'import("build_orders/startup.scar")'
 
+        self.assertNotIn('import("generated/build_orders.scar")', self.main)
         self.assertEqual(self.main.count(datastore), 1)
-        self.assertLess(self.main.index(bundled), self.main.index(datastore))
         self.assertLess(self.main.index(datastore), self.main.index(startup))
 
     def test_mod_start_waits_for_datastore_and_game_over_cancels_load(self) -> None:
@@ -67,18 +66,19 @@ class BuildOrderDatastoreContractTests(unittest.TestCase):
             game_over.index("BuildOrderStartup_Stop()"),
         )
 
-    def test_only_supported_catalog_records_overlay_bundled_ids(self) -> None:
-        merge = function_body(self.datastore, "BuildOrderDatastore_Merge")
+    def test_only_supported_datastore_records_populate_the_runtime_catalog(self) -> None:
+        replace = function_body(self.datastore, "BuildOrderDatastore_Replace")
 
         self.assertIn(
-            "loaded.schema_version ~= BUILD_ORDER_DATASTORE_SCHEMA_VERSION", merge
+            "loaded.schema_version ~= BUILD_ORDER_DATASTORE_SCHEMA_VERSION", replace
         )
-        self.assertIn('type(loaded.build_orders) ~= "table"', merge)
-        self.assertIn("for id, buildOrder in pairs(loaded.build_orders) do", merge)
+        self.assertIn('type(loaded.build_orders) ~= "table"', replace)
+        self.assertIn("BUILD_ORDER_CATALOG = {}", replace)
+        self.assertIn("for id, buildOrder in pairs(loaded.build_orders) do", replace)
         self.assertIn(
-            "if BuildOrderDatastore_IsValidOrder(id, buildOrder) then", merge
+            "if BuildOrderDatastore_IsValidOrder(id, buildOrder) then", replace
         )
-        self.assertIn("BUILD_ORDER_CATALOG[id] = buildOrder", merge)
+        self.assertIn("BUILD_ORDER_CATALOG[id] = buildOrder", replace)
 
     def test_order_validation_rejects_key_id_and_required_shape_mutations(self) -> None:
         validate = function_body(
@@ -113,11 +113,11 @@ class BuildOrderDatastoreContractTests(unittest.TestCase):
         self.assertIn('type(check.optional) ~= "boolean"', check)
         self.assertIn('type(check.payload) ~= "table"', check)
 
-    def test_invalid_store_reaches_callback_without_clearing_bundled_catalog(self) -> None:
+    def test_invalid_store_reaches_callback_with_an_empty_runtime_catalog(self) -> None:
         finish = function_body(self.datastore, "BuildOrderDatastore_FinishLoad")
 
-        self.assertNotIn("BUILD_ORDER_CATALOG = {}", self.datastore)
-        self.assertIn("BuildOrderDatastore_Merge(loaded)", finish)
+        self.assertIn("BUILD_ORDER_CATALOG = {}", self.datastore)
+        self.assertIn("BuildOrderDatastore_Replace(loaded)", finish)
         self.assertIn("BuildOrderDatastore_Complete()", finish)
 
     def test_stop_and_complete_guards_prevent_late_or_duplicate_startup(self) -> None:

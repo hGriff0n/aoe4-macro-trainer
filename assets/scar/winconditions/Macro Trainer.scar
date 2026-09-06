@@ -5,7 +5,6 @@
 -- Import Utility Scripts
 import("cardinal.scar")							-- Contains sfx references, UI templates, and Civ/Age helper functions
 import("ScarUtil.scar")							-- Contains game helper functions
-import("generated/build_orders.scar")
 import("build_orders/datastore.scar")
 import("build_orders/objective_engine.scar")
 import("build_orders/checks/rallypoint.scar")
@@ -98,22 +97,6 @@ function Mod_GetOptionEnumKey(option)
 	return nil
 end
 
-function Mod_ReadSelectedBuildOrder(settings)
-	if type(settings) ~= "table" then
-		return nil
-	end
-
-	local enumKey = Mod_GetOptionEnumKey(settings.option_build_order)
-	if enumKey == nil or enumKey == "build_order_none" then
-		return nil
-	end
-	if type(enumKey) ~= "string" then
-		return nil
-	end
-
-	return string.gsub(enumKey, "^build_order_", "")
-end
-
 function Mod_SetupSettings(options)
 	if type(options) ~= "table" or type(options.section_macro_trainer_settings) ~= "table" then
 		return
@@ -133,7 +116,6 @@ function Mod_SetupSettings(options)
 	if settings.option_enable_simspeed_cycle ~= nil then
 		_mod.simspeedEnabled = settings.option_enable_simspeed_cycle
 	end
-	_mod.selectedBuildOrderID = Mod_ReadSelectedBuildOrder(settings)
 end
 
 -- Called before initialization, preceding other module OnInit functions

@@ -2,6 +2,7 @@ BUILD_ORDER_DATASTORE_ID = "macroTrainerBuildOrders"
 BUILD_ORDER_DATASTORE_SCHEMA_VERSION = 1
 BUILD_ORDER_DATASTORE_ON_COMPLETE = nil
 BUILD_ORDER_DATASTORE_LOADING = false
+BUILD_ORDER_CATALOG = {}
 
 function BuildOrderDatastore_IsValidCheck(check)
 	if type(check) ~= "table" then
@@ -70,17 +71,18 @@ function BuildOrderDatastore_IsValidOrder(id, buildOrder)
 	return true
 end
 
-function BuildOrderDatastore_Merge(loaded)
+function BuildOrderDatastore_Replace(loaded)
+	BUILD_ORDER_CATALOG = {}
 	if type(loaded) ~= "table" then
-		print("BuildOrderDatastore: no datastore catalog was loaded; using bundled build orders")
+		print("BuildOrderDatastore: no datastore catalog was loaded")
 		return
 	end
 	if loaded.schema_version ~= BUILD_ORDER_DATASTORE_SCHEMA_VERSION then
-		print("BuildOrderDatastore: unsupported datastore schema; using bundled build orders")
+		print("BuildOrderDatastore: unsupported datastore schema")
 		return
 	end
 	if type(loaded.build_orders) ~= "table" then
-		print("BuildOrderDatastore: invalid datastore catalog; using bundled build orders")
+		print("BuildOrderDatastore: invalid datastore catalog")
 		return
 	end
 
@@ -110,7 +112,7 @@ function BuildOrderDatastore_FinishLoad()
 
 	Game_RetrieveTableData(BUILD_ORDER_DATASTORE_ID, false)
 	local loaded = _G[BUILD_ORDER_DATASTORE_ID]
-	BuildOrderDatastore_Merge(loaded)
+	BuildOrderDatastore_Replace(loaded)
 	BuildOrderDatastore_Complete()
 end
 

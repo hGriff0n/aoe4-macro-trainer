@@ -13,16 +13,12 @@ SCAR_PATH = (
 )
 LOCDB_PATH = (
     Path(__file__).resolve().parents[1]
-    / "build"
-    / "templates"
     / "assets"
     / "locdb"
     / "Macro Trainer_en.csv"
 )
 RDO_PATH = (
     Path(__file__).resolve().parents[1]
-    / "build"
-    / "templates"
     / "assets"
     / "scar"
     / "winconditions"
@@ -101,15 +97,13 @@ class SimspeedCycleContractTests(unittest.TestCase):
         )
 
     def test_build_order_sources_load_before_startup_coordinator(self) -> None:
-        generated = 'import("generated/build_orders.scar")'
         datastore = 'import("build_orders/datastore.scar")'
         engine = 'import("build_orders/objective_engine.scar")'
         startup = 'import("build_orders/startup.scar")'
-        self.assertIn(generated, self.source)
+        self.assertNotIn('import("generated/build_orders.scar")', self.source)
         self.assertIn(datastore, self.source)
         self.assertIn(engine, self.source)
         self.assertIn(startup, self.source)
-        self.assertLess(self.source.index(generated), self.source.index(datastore))
         self.assertLess(self.source.index(datastore), self.source.index(engine))
         self.assertLess(
             self.source.index("Rule_AddOneShot(nextRule, phaseDuration)"),
