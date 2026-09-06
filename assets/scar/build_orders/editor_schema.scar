@@ -1,0 +1,189 @@
+function BuildOrderEditorSchema_Primitive(key, label, valueType, required, adapter)
+	return {
+		key = key,
+		label = label,
+		node_type = "primitive",
+		value_type = valueType,
+		required = required == true,
+		adapter = adapter,
+	}
+end
+
+function BuildOrderEditorSchema_Enum(key, label, values, required, adapter)
+	return {
+		key = key,
+		label = label,
+		node_type = "enum",
+		values = values,
+		required = required == true,
+		adapter = adapter,
+	}
+end
+
+function BuildOrderEditorSchema_Object(key, label, fields, adapter)
+	return {
+		key = key,
+		label = label,
+		node_type = "object",
+		fields = fields,
+		adapter = adapter,
+	}
+end
+
+function BuildOrderEditorSchema_Optional(key, label, field)
+	return {
+		key = key,
+		label = label,
+		node_type = "optional",
+		field = field,
+	}
+end
+
+function BuildOrderEditorSchema_List(key, label, item, minItems, adapter)
+	return {
+		key = key,
+		label = label,
+		node_type = "list",
+		item = item,
+		min_items = minItems or 0,
+		adapter = adapter,
+	}
+end
+
+BUILD_ORDER_EDITOR_ADAPTERS = {
+	alternatives = { min_items = 1 },
+	resources = { keys = { "food", "wood", "gold", "stone" } },
+	no_collect = { values = { "food", "wood", "gold", "stone" } },
+	live_entity = { discovery_kind = "entity" },
+	live_upgrade = { discovery_kind = "upgrade" },
+	live_family = { discovery_kind = "family" },
+	live_age_up = { discovery_kinds = { "entity", "upgrade" } },
+}
+
+BUILD_ORDER_EDITOR_CHECK_ORDER = {
+	"vils",
+	"rallypoint",
+	"built",
+	"age_up",
+	"upgrades",
+	"produce",
+	"resources",
+	"buildings",
+	"units",
+	"hints",
+}
+
+BUILD_ORDER_EDITOR_CHECK_SCHEMAS = {
+	vils = {
+		label = "Villagers",
+		fields = {
+			BuildOrderEditorSchema_Object("payload", "Assignments", {
+				BuildOrderEditorSchema_Optional("food", "Food", BuildOrderEditorSchema_Primitive(nil, "Food", "positive_integer", false, nil)),
+				BuildOrderEditorSchema_Optional("wood", "Wood", BuildOrderEditorSchema_Primitive(nil, "Wood", "positive_integer", false, nil)),
+				BuildOrderEditorSchema_Optional("gold", "Gold", BuildOrderEditorSchema_Primitive(nil, "Gold", "positive_integer", false, nil)),
+				BuildOrderEditorSchema_Optional("stone", "Stone", BuildOrderEditorSchema_Primitive(nil, "Stone", "positive_integer", false, nil)),
+				BuildOrderEditorSchema_List("no_collect", "Do not collect", BuildOrderEditorSchema_Enum(nil, "Resource", BUILD_ORDER_EDITOR_ADAPTERS.no_collect.values, true, nil), 0, "no_collect"),
+			}, "resources"),
+		},
+	},
+	rallypoint = {
+		label = "Rally point",
+		fields = {
+			BuildOrderEditorSchema_Object("payload", "Rally point", {
+				BuildOrderEditorSchema_Enum("resource", "Resource", BUILD_ORDER_EDITOR_ADAPTERS.no_collect.values, true, nil),
+			}, nil),
+		},
+	},
+	built = {
+		label = "Build",
+		fields = {
+			BuildOrderEditorSchema_Object("payload", "Building", {
+				BuildOrderEditorSchema_List("alternatives", "Buildings", BuildOrderEditorSchema_Primitive(nil, "Building", "live_id", true, "live_entity"), 1, "alternatives"),
+				BuildOrderEditorSchema_Primitive("count", "Count", "positive_integer", true, nil),
+				BuildOrderEditorSchema_Optional("vils", "Builders", BuildOrderEditorSchema_Primitive(nil, "Builders", "positive_integer", false, nil)),
+				BuildOrderEditorSchema_Optional("location", "Location", BuildOrderEditorSchema_Primitive(nil, "Location", "string", false, nil)),
+			}, nil),
+		},
+	},
+	age_up = {
+		label = "Age up",
+		fields = {
+			BuildOrderEditorSchema_Object("payload", "Age-up choice", {
+				BuildOrderEditorSchema_List("alternatives", "Choices", BuildOrderEditorSchema_Primitive(nil, "Choice", "live_id", true, "live_age_up"), 1, "alternatives"),
+				BuildOrderEditorSchema_Optional("vils", "Builders", BuildOrderEditorSchema_Primitive(nil, "Builders", "positive_integer", false, nil)),
+				BuildOrderEditorSchema_Optional("location", "Location", BuildOrderEditorSchema_Primitive(nil, "Location", "string", false, nil)),
+			}, nil),
+		},
+	},
+	upgrades = {
+		label = "Technology",
+		fields = {
+			BuildOrderEditorSchema_Object("payload", "Technology", {
+				BuildOrderEditorSchema_Primitive("id", "Technology", "live_id", true, "live_upgrade"),
+				BuildOrderEditorSchema_Primitive("queued", "Complete when queued", "boolean", true, nil),
+			}, nil),
+			BuildOrderEditorSchema_Primitive("optional", "Optional", "boolean", true, nil),
+		},
+	},
+	produce = {
+		label = "Produce",
+		fields = {
+			BuildOrderEditorSchema_Object("payload", "Unit family", {
+				BuildOrderEditorSchema_Primitive("family", "Unit family", "live_family", true, "live_family"),
+				BuildOrderEditorSchema_Primitive("count", "Count", "positive_integer", true, nil),
+				BuildOrderEditorSchema_Primitive("constant", "Constant production", "boolean", true, nil),
+				BuildOrderEditorSchema_Primitive("queued", "Complete when queued", "boolean", true, nil),
+			}, nil),
+		},
+	},
+	resources = {
+		label = "Resources",
+		fields = {
+			BuildOrderEditorSchema_Object("payload", "Stockpile", {
+				BuildOrderEditorSchema_Optional("food", "Food", BuildOrderEditorSchema_Primitive(nil, "Food", "positive_integer", false, nil)),
+				BuildOrderEditorSchema_Optional("wood", "Wood", BuildOrderEditorSchema_Primitive(nil, "Wood", "positive_integer", false, nil)),
+				BuildOrderEditorSchema_Optional("gold", "Gold", BuildOrderEditorSchema_Primitive(nil, "Gold", "positive_integer", false, nil)),
+				BuildOrderEditorSchema_Optional("stone", "Stone", BuildOrderEditorSchema_Primitive(nil, "Stone", "positive_integer", false, nil)),
+			}, "resources"),
+		},
+	},
+	buildings = {
+		label = "Existing buildings",
+		fields = {
+			BuildOrderEditorSchema_Object("payload", "Building", {
+				BuildOrderEditorSchema_Primitive("id", "Building", "live_id", true, "live_entity"),
+				BuildOrderEditorSchema_Primitive("count", "Count", "positive_integer", true, nil),
+			}, nil),
+		},
+	},
+	units = {
+		label = "Existing units",
+		fields = {
+			BuildOrderEditorSchema_Object("payload", "Unit family", {
+				BuildOrderEditorSchema_Primitive("family", "Unit family", "live_family", true, "live_family"),
+				BuildOrderEditorSchema_Primitive("count", "Count", "positive_integer", true, nil),
+			}, nil),
+		},
+	},
+	hints = {
+		label = "Hint",
+		fields = {
+			BuildOrderEditorSchema_Object("payload", "Hint", {
+				BuildOrderEditorSchema_Primitive("text", "Text", "string", true, nil),
+			}, nil),
+		},
+	},
+}
+
+BUILD_ORDER_EDITOR_SCHEMA = BuildOrderEditorSchema_Object(nil, "Build order", {
+	BuildOrderEditorSchema_Primitive("civ", "Civilization", "string", true, nil),
+	BuildOrderEditorSchema_Primitive("title", "Title", "string", true, nil),
+	BuildOrderEditorSchema_List("steps", "Steps", BuildOrderEditorSchema_Object(nil, "Step", {
+		BuildOrderEditorSchema_Primitive("title", "Title", "string", true, nil),
+		BuildOrderEditorSchema_List("checks", "Checks", {
+			node_type = "variant",
+			discriminator = "kind",
+			variants = BUILD_ORDER_EDITOR_CHECK_SCHEMAS,
+		}, 1, nil),
+	}, nil), 1, nil),
+}, nil)
