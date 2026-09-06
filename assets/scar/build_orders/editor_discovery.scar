@@ -1,0 +1,227 @@
+BUILD_ORDER_DISCOVERY_DEFAULT_ICONS = {
+	entity = "/WPFGUI;component/icons/objectives/objectives_generic_small.png",
+	squad = "/WPFGUI;component/icons/garrisoned_unit.png",
+	upgrade = "/WPFGUI;component/images/fe/achievement.png",
+	family = "/WPFGUI;component/icons/garrisoned_unit.png",
+}
+
+BUILD_ORDER_DISCOVERY_LISTS = {
+	entity = "entities",
+	squad = "squads",
+	upgrade = "upgrades",
+	family = "families",
+}
+
+BUILD_ORDER_DISCOVERY_CURRENT = nil
+
+function BuildOrderDiscovery_GetAge(kind, pathName, pbg)
+	for age = 2, 4 do
+		local ageType = "scar_age" .. age
+		if kind == "entity" and Entity_IsEBPOfType(pbg, ageType) then
+			return age
+		elseif kind == "squad" and Squad_IsSBPOfType(pbg, ageType) then
+			return age
+		elseif kind == "upgrade" and BP_IsUpgradeOfType(pbg, ageType) then
+			return age
+		end
+	end
+	return nil
+end
+
+function BuildOrderDiscovery_GetPresentation(kind, pathName, pbg, race)
+	local uiInfo = nil
+	if kind == "entity" then
+		uiInfo = BP_GetEntityUIInfo(pbg)
+	elseif kind == "squad" then
+		uiInfo = BP_GetSquadUIInfo(pbg, race)
+	elseif kind == "upgrade" then
+		uiInfo = BP_GetUpgradeUIInfo(pbg)
+	end
+
+	if uiInfo == nil then
+		return nil, nil
+	end
+
+	local label = nil
+	if uiInfo.screenName ~= nil then
+		label = Loc_ToAnsi(uiInfo.screenName)
+		if label == "" then
+			label = nil
+		end
+	end
+
+	local icon = uiInfo.iconName
+	if icon == "" then
+		icon = nil
+	end
+	return label, icon
+end
+
+function BuildOrderDiscovery_BelongsToRace(kind, pathName, race)
+	if kind == "entity" then
+		local count = BP_GetEntityTypeExtRaceCount(pathName)
+		for index = 0, count - 1 do
+			if BP_GetEntityTypeExtRaceBlueprintAtIndex(pathName, index) == race then
+				return true
+			end
+		end
+	elseif kind == "squad" then
+		local count = BP_GetSquadTypeExtRaceCount(pathName)
+		for index = 0, count - 1 do
+			if BP_GetSquadTypeExtRaceBlueprintAtIndex(pathName, index) == race then
+				return true
+			end
+		end
+	end
+	return false
+end
+
+function BuildOrderDiscovery_CreateOption(kind, pathName, pbg, race)
+	local discoveredAge = BuildOrderDiscovery_GetAge(kind, pathName, pbg)
+	local discoveredLabel, discoveredIcon = BuildOrderDiscovery_GetPresentation(kind, pathName, pbg, race)
+	local age = discoveredAge or 1
+	local label = discoveredLabel or pathName
+	local icon = discoveredIcon or BUILD_ORDER_DISCOVERY_DEFAULT_ICONS[kind]
+	return {
+		id = pathName,
+		ids = nil,
+		kind = kind,
+		age = age,
+		label = label,
+		icon = icon,
+	}
+end
+
+function BuildOrderDiscovery_CollectFamilies(snapshot, player, race)
+	local families = {}
+	local archetypeNames = AI_CombatFitnessGetSquadArchetypeNames()
+	for _, archetypeName in pairs(archetypeNames) do
+		local members = {}
+		local seen = {}
+		local archetypePBGs = AI_CombatFitnessGetSquadArchetypePBGs(archetypeName)
+		for _, pbg in pairs(archetypePBGs) do
+			local pathName = BP_GetName(pbg)
+			if seen[pathName] == nil and BuildOrderDiscovery_BelongsToRace("squad", pathName, race) then
+				seen[pathName] = true
+				local age = BuildOrderDiscovery_GetAge("squad", pathName, pbg) or 1
+				local label, icon = BuildOrderDiscovery_GetPresentation("squad", pathName, pbg, race)
+				table.insert(members, {
+					id = pathName,
+					age = age,
+					label = label,
+					icon = icon,
+				})
+			end
+		end
+
+		table.sort(members, function(left, right)
+			if left.age ~= right.age then
+				return left.age < right.age
+			end
+			return left.id < right.id
+		end)
+
+		if #members > 0 then
+			local ids = {}
+			for _, member in ipairs(members) do
+				table.insert(ids, member.id)
+			end
+			local discoveredLabel = members[1].label
+			local discoveredIcon = members[1].icon
+			local pathName = ids[1]
+			local label = discoveredLabel or pathName
+			local icon = discoveredIcon or BUILD_ORDER_DISCOVERY_DEFAULT_ICONS.family
+			table.insert(families, {
+				id = nil,
+				ids = ids,
+				kind = "family",
+				age = members[1].age,
+				label = label,
+				icon = icon,
+			})
+		end
+	end
+	return families
+end
+
+function BuildOrderDiscovery_GetSortID(option)
+	if option.id ~= nil then
+		return option.id
+	end
+	if option.ids ~= nil and option.ids[1] ~= nil then
+		return option.ids[1]
+	end
+	return ""
+end
+
+function BuildOrderDiscovery_Sort(options)
+	table.sort(options, function(left, right)
+		local leftLabel = string.lower(left.label)
+		local rightLabel = string.lower(right.label)
+		if leftLabel ~= rightLabel then
+			return leftLabel < rightLabel
+		end
+		return BuildOrderDiscovery_GetSortID(left) < BuildOrderDiscovery_GetSortID(right)
+	end)
+end
+
+function BuildOrderDiscovery_Collect(player)
+	local race = Player_GetRace(player)
+	local snapshot = {
+		civ = race,
+		civ_name = Player_GetRaceName(player),
+		entities = {},
+		squads = {},
+		upgrades = {},
+		families = {},
+	}
+
+	for index = 0, BP_GetPropertyBagGroupCount(PBG_EntityProperties) - 1 do
+		local pathName = BP_GetPropertyBagGroupPathName(PBG_EntityProperties, index)
+		if BuildOrderDiscovery_BelongsToRace("entity", pathName, race) then
+			local pbg = BP_GetEntityBlueprint(pathName)
+			table.insert(snapshot.entities, BuildOrderDiscovery_CreateOption("entity", pathName, pbg, race))
+		end
+	end
+
+	for index = 0, BP_GetPropertyBagGroupCount(PBG_SquadProperties) - 1 do
+		local pathName = BP_GetPropertyBagGroupPathName(PBG_SquadProperties, index)
+		if BuildOrderDiscovery_BelongsToRace("squad", pathName, race) then
+			local pbg = BP_GetSquadBlueprint(pathName)
+			table.insert(snapshot.squads, BuildOrderDiscovery_CreateOption("squad", pathName, pbg, race))
+		end
+	end
+
+	for index = 0, BP_GetPropertyBagGroupCount(PBG_UpgradeProperties) - 1 do
+		local pathName = BP_GetPropertyBagGroupPathName(PBG_UpgradeProperties, index)
+		local pbg = BP_GetUpgradeBlueprint(pathName)
+		table.insert(snapshot.upgrades, BuildOrderDiscovery_CreateOption("upgrade", pathName, pbg, race))
+	end
+
+	snapshot.families = BuildOrderDiscovery_CollectFamilies(snapshot, player, race)
+	BuildOrderDiscovery_Sort(snapshot.entities)
+	BuildOrderDiscovery_Sort(snapshot.squads)
+	BuildOrderDiscovery_Sort(snapshot.upgrades)
+	BuildOrderDiscovery_Sort(snapshot.families)
+	BUILD_ORDER_DISCOVERY_CURRENT = snapshot
+	return snapshot
+end
+
+function BuildOrderDiscovery_Filter(snapshot, kind, maximumAge)
+	local filtered = {}
+	local listName = BUILD_ORDER_DISCOVERY_LISTS[kind]
+	if snapshot == nil or listName == nil then
+		return filtered
+	end
+	local options = snapshot[listName] or {}
+	for _, option in ipairs(options) do
+		if option.age <= maximumAge then
+			table.insert(filtered, option)
+		end
+	end
+	return filtered
+end
+
+function BuildOrderDiscovery_Clear()
+	BUILD_ORDER_DISCOVERY_CURRENT = nil
+end
