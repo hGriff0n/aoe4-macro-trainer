@@ -35,15 +35,38 @@ fetches an arbitrary host supplied by the URL. The resulting YAML retains the
 canonical source link for attribution. Ordinary builds remain offline because
 only the explicit import command accesses aoe4guides.
 
-The baseline translation preserves source-step ordering. A step's timestamp is
-used as its title, positive food/gold/wood/stone allocations become a `vils`
-check, and non-empty notes become ordered hints after HTML entity decoding.
-RTS Overlay image tokens are rendered as readable labels, such as `Town Center`
-or `Gold`; unknown tokens fall back to a humanized filename. Zero allocations do
+The translation preserves source-step ordering. A step's timestamp is used as
+its title, positive food/gold/wood/stone allocations become a `vils` check, and
+every non-empty note remains an ordered hint after HTML entity decoding. RTS
+Overlay image tokens are rendered as readable labels, such as `Town Center` or
+`Gold`; unknown tokens fall back to a humanized filename. Zero allocations do
 not create checks. Age, population, total-villager, and builder fields are
-validated but are not converted into inferred actions. Arbitrary-language prose
-remains unchanged, and later reviewable translation passes may derive additional
-checks from it.
+validated but are not converted into inferred actions.
+
+The importer also applies a small, versioned set of deterministic English clause
+rules when every referenced icon resolves exactly in the selected civilization's
+catalog. It recognizes unconditional build, train/produce, have, research,
+queued-research, rally, and resource-threshold forms. A note such as “Build a
+second Town Center” requests one new completion, while an explicit cardinal such
+as “Build 2 Barracks” retains the count. Resource thresholds followed by an
+fully deterministic action are split into consecutive steps so spending the
+resource cannot make a combined objective incomplete again. At most one such
+split is applied per source step; later thresholds remain reviewable hints.
+Villager-allocation prose only corroborates the structured allocation and never
+adds a duplicate `vils` check.
+
+Conditionals, alternatives, negation, opponent-dependent wording, unknown
+languages, malformed tokens, unresolved identities, and unused tokens never
+become blocking checks. They remain hints and are recorded under
+`import_metadata.diagnostics` for review. Each automatic extraction records its
+rule-set version, source step and note, character span, and generated YAML target
+under `import_metadata`. The compiler accepts only known rule versions, rule and
+diagnostic IDs, and targets that resolve to compatible generated fields; source
+coordinates receive structural validation because the original note is not
+embedded in the compiled document. Import metadata is excluded from the runtime
+model. This exact grammar-and-catalog boundary is the primary false-positive
+safeguard. The currently supported prose language is English; icon rendering and
+hint preservation remain language-neutral.
 
 Catalog regeneration is a developer-only operation:
 

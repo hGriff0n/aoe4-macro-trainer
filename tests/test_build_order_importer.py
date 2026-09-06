@@ -89,17 +89,46 @@ class BuildOrderImporterTests(unittest.TestCase):
                         {
                             "title": "0:00",
                             "vils": {"food": 6},
+                            "rallypoint": ["gold"],
                             "hints": [
                                 "6 Villager on Sheep",
                                 "Rally -> Gold",
                             ],
                         },
                         {
+                            "built": [{"id": "town_center"}],
                             "hints": [
                                 "Build Town Center",
                             ],
                         },
                     ],
+                    "import_metadata": {
+                        "rule_set": 1,
+                        "extractions": [
+                            {
+                                "source_step": 0,
+                                "source_note": 0,
+                                "span": [0, 54],
+                                "rule": "vils.corroboration.v1",
+                                "target": "steps[0].vils.food",
+                            },
+                            {
+                                "source_step": 0,
+                                "source_note": 1,
+                                "span": [0, 54],
+                                "rule": "rallypoint.resource.v1",
+                                "target": "steps[0].rallypoint[0]",
+                            },
+                            {
+                                "source_step": 1,
+                                "source_note": 0,
+                                "span": [0, 41],
+                                "rule": "built.imperative.v1",
+                                "target": "steps[1].built[0]",
+                            },
+                        ],
+                        "diagnostics": [],
+                    },
                 },
             )
 

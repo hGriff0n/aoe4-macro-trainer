@@ -19,6 +19,7 @@ from .identities import (
     normalize_identity_id,
 )
 from .model import BuildOrder, Catalog, CheckDescriptor, Step, normalize_id
+from .note_extractor import extract_note
 
 RESOURCE_ORDER = ("food", "gold", "wood", "stone")
 RESOURCES = set(RESOURCE_ORDER)
@@ -84,6 +85,31 @@ OVERLAY_NOTE_LABELS = {
     "technology_templar/safepassage": "Safe Passage",
 }
 MAX_OVERLAY_RESPONSE_BYTES = 2 * 1024 * 1024
+IMPORT_RULE_TARGET_FIELDS = {
+    "built.imperative.v1": "built",
+    "produce.imperative.v1": "produce",
+    "units.have.v1": "units",
+    "buildings.have.v1": "buildings",
+    "upgrades.research.v1": "upgrades",
+    "rallypoint.resource.v1": "rallypoint",
+    "resources.threshold.v1": "resources",
+    "vils.corroboration.v1": "vils",
+}
+IMPORT_DIAGNOSTIC_CODES = {
+    "conflicting_threshold",
+    "conflicting_vils",
+    "guarded_clause",
+    "invalid_count",
+    "malformed_token",
+    "unresolved_identity",
+    "unresolved_resource",
+    "unsafe_threshold",
+    "unused_token",
+}
+IMPORT_TARGET = re.compile(
+    r"^steps\[(?P<step>\d+)\]\.(?P<field>[a-z_]+)"
+    r"(?:\[(?P<index>\d+)\]|\.(?P<key>[a-z_]+))$"
+)
 
 
 class BuildOrderValidationError(ValueError):
@@ -122,7 +148,32 @@ def render_overlay_note(note: str) -> str:
     return OVERLAY_NOTE_TOKEN.sub(readable_token, decoded)
 
 
-def translate_overlay_document(document: Any, source: Path | str) -> dict[str, object]:
+def _append_extracted_check(
+    destination: dict[str, object], field: str, value: dict[str, object]
+) -> str:
+    if field == "resources":
+        resources = destination.setdefault(field, {})
+        resources.update(value)
+        resource = next(iter(value))
+        return f"resources.{resource}"
+    if field == "rallypoint":
+        rallypoints = destination.setdefault(field, [])
+        index = len(rallypoints)
+        rallypoints.append(value["resource"])
+        return f"rallypoint[{index}]"
+    entries = destination.setdefault(field, [])
+    index = len(entries)
+    entries.append(value)
+    return f"{field}[{index}]"
+
+
+def translate_overlay_document(
+    document: Any,
+    source: Path | str,
+    identities: IdentityCatalog | None = None,
+) -> dict[str, object]:
+    if identities is None:
+        identities = IdentityCatalog.load(DEFAULT_IDENTITY_CATALOG)
     file = source
     overlay = _mapping(document, file, "")
     _reject_unknown_fields(overlay, OVERLAY_ROOT_FIELDS, source, "")
@@ -139,6 +190,8 @@ def translate_overlay_document(document: Any, source: Path | str) -> dict[str, o
         _error(source, "civilization", f"unsupported civilization '{civilization}'")
 
     steps = []
+    extraction_metadata = []
+    extraction_diagnostics = []
     raw_steps = _list(overlay.get("build_order"), file, "build_order")
     if not raw_steps:
         _error(source, "build_order", "must not be empty")
@@ -173,23 +226,91 @@ def translate_overlay_document(document: Any, source: Path | str) -> dict[str, o
         if allocations:
             translated["vils"] = allocations
         notes = []
+        synthetic: dict[str, object] = {}
+        pending_metadata = []
         for note_index, note in enumerate(_list(step.get("notes"), file, f"{step_path}.notes")):
             if not isinstance(note, str):
                 _error(source, f"{step_path}.notes[{note_index}]", "must be a string")
             if note:
                 notes.append(render_overlay_note(note))
+                extraction = extract_note(
+                    note,
+                    OVERLAY_CIVILIZATIONS[civilization],
+                    identities,
+                    allocations,
+                )
+                threshold_checks = [
+                    check for check in extraction.checks if check.synthetic_step
+                ]
+                if threshold_checks and (synthetic or len(threshold_checks) > 1):
+                    extraction_diagnostics.append(
+                        {
+                            "source_step": index,
+                            "source_note": note_index,
+                            "span": [
+                                threshold_checks[0].start,
+                                threshold_checks[-1].end,
+                            ],
+                            "code": "conflicting_threshold",
+                            "message": "only one resource threshold can be safely split from a source step",
+                        }
+                    )
+                    continue
+                for check in extraction.checks:
+                    if check.corroborates:
+                        target_suffix = f"vils.{next(iter(check.value))}"
+                    else:
+                        destination = synthetic if check.synthetic_step else translated
+                        target_suffix = _append_extracted_check(
+                            destination, check.field, check.value
+                        )
+                    pending_metadata.append((note_index, check, target_suffix))
+                for diagnostic in extraction.diagnostics:
+                    extraction_diagnostics.append(
+                        {
+                            "source_step": index,
+                            "source_note": note_index,
+                            "span": [diagnostic.start, diagnostic.end],
+                            "code": diagnostic.code,
+                            "message": diagnostic.message,
+                        }
+                    )
         if notes:
             translated["hints"] = notes
         if not allocations and not notes:
             _error(source, step_path, "has no translatable checks or hints")
+        synthetic_step_index = len(steps)
+        if synthetic:
+            steps.append(synthetic)
+        translated_step_index = len(steps)
+        for note_index, check, target_suffix in pending_metadata:
+            target_step = (
+                synthetic_step_index if check.synthetic_step else translated_step_index
+            )
+            extraction_metadata.append(
+                {
+                    "source_step": index,
+                    "source_note": note_index,
+                    "span": [check.start, check.end],
+                    "rule": check.rule,
+                    "target": f"steps[{target_step}].{target_suffix}",
+                }
+            )
         steps.append(translated)
 
-    return {
+    result = {
         "civ": OVERLAY_CIVILIZATIONS[civilization],
         "title": _string(overlay.get("name"), file, "name"),
         "link": _source_link(overlay.get("source"), file, "source"),
         "steps": steps,
     }
+    if extraction_metadata or extraction_diagnostics:
+        result["import_metadata"] = {
+            "rule_set": 1,
+            "extractions": extraction_metadata,
+            "diagnostics": extraction_diagnostics,
+        }
+    return result
 
 
 def fetch_overlay_document(url: str) -> Any:
@@ -326,6 +447,99 @@ def _positive(value: Any, file: Path, path: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
         _error(file, path, "must be a positive integer")
     return value
+
+
+def _nonnegative(value: Any, file: Path, path: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        _error(file, path, "must be a non-negative integer")
+    return value
+
+
+def _validate_import_span(value: Any, file: Path, path: str) -> None:
+    span = _list(value, file, path)
+    if len(span) != 2:
+        _error(file, path, "must contain exactly start and end offsets")
+    start = _nonnegative(span[0], file, f"{path}[0]")
+    end = _nonnegative(span[1], file, f"{path}[1]")
+    if end < start:
+        _error(file, path, "end offset must not precede start offset")
+
+
+def _validate_import_target(
+    target: str,
+    expected_field: str,
+    steps: list[Any],
+    file: Path,
+    path: str,
+) -> None:
+    match = IMPORT_TARGET.fullmatch(target)
+    if match is None or match.group("field") != expected_field:
+        _error(file, path, "does not resolve")
+    step_index = int(match.group("step"))
+    if step_index >= len(steps) or not isinstance(steps[step_index], dict):
+        _error(file, path, "does not resolve")
+    step = steps[step_index]
+    if expected_field not in step:
+        _error(file, path, "does not resolve")
+    index = match.group("index")
+    key = match.group("key")
+    value = step[expected_field]
+    if index is not None:
+        if not isinstance(value, list) or int(index) >= len(value):
+            _error(file, path, "does not resolve")
+    elif key is not None:
+        if not isinstance(value, dict) or key not in value:
+            _error(file, path, "does not resolve")
+    else:
+        _error(file, path, "does not resolve")
+
+
+def _validate_import_metadata(
+    value: Any, steps: list[Any], file: Path, path: str
+) -> None:
+    metadata = _mapping(value, file, path)
+    _reject_unknown_fields(metadata, {"rule_set", "extractions", "diagnostics"}, file, path)
+    rule_set = metadata.get("rule_set")
+    if isinstance(rule_set, bool) or not isinstance(rule_set, int) or rule_set != 1:
+        _error(file, f"{path}.rule_set", f"unsupported rule-set version {rule_set}")
+    for collection, required in (
+        (
+            "extractions",
+            {"source_step", "source_note", "span", "rule", "target"},
+        ),
+        (
+            "diagnostics",
+            {"source_step", "source_note", "span", "code", "message"},
+        ),
+    ):
+        entries = _list(metadata.get(collection), file, f"{path}.{collection}")
+        for index, item in enumerate(entries):
+            item_path = f"{path}.{collection}[{index}]"
+            entry = _mapping(item, file, item_path)
+            _reject_unknown_fields(entry, required, file, item_path)
+            missing = required - set(entry)
+            if missing:
+                _error(file, f"{item_path}.{sorted(missing)[0]}", "required field")
+            _nonnegative(entry["source_step"], file, f"{item_path}.source_step")
+            _nonnegative(entry["source_note"], file, f"{item_path}.source_note")
+            _validate_import_span(entry["span"], file, f"{item_path}.span")
+            if collection == "extractions":
+                rule = _string(entry["rule"], file, f"{item_path}.rule")
+                if rule not in IMPORT_RULE_TARGET_FIELDS:
+                    _error(file, f"{item_path}.rule", "unsupported extraction rule")
+                target = _string(entry["target"], file, f"{item_path}.target")
+                _validate_import_target(
+                    target,
+                    IMPORT_RULE_TARGET_FIELDS[rule],
+                    steps,
+                    file,
+                    f"{item_path}.target",
+                )
+            else:
+                code = _string(entry["code"], file, f"{item_path}.code")
+                if code not in IMPORT_DIAGNOSTIC_CODES:
+                    _error(file, f"{item_path}.code", "unsupported diagnostic code")
+                _string(entry["message"], file, f"{item_path}.message")
 
 
 def _id_or_oneof(value: Any, file: Path, path: str, allowed: set[str]) -> dict[str, object]:
@@ -793,13 +1007,17 @@ def _check_descriptors(
 def _compile_order(document: Any, file: Path, index: int | None, identities: IdentityCatalog) -> BuildOrder:
     base = "" if index is None else f"[{index}]."
     order = _mapping(document, file, base.rstrip("."))
-    unknown = set(order) - {"civ", "title", "link", "steps"}
+    unknown = set(order) - {"civ", "title", "link", "steps", "import_metadata"}
     if unknown:
         _error(file, f"{base}{next(iter(unknown))}", "unknown field")
     civ = _string(order.get("civ"), file, f"{base}civ")
     title = _string(order.get("title"), file, f"{base}title")
     link = _source_link(order["link"], file, f"{base}link") if "link" in order else None
     steps = _list(order.get("steps"), file, f"{base}steps")
+    if "import_metadata" in order:
+        _validate_import_metadata(
+            order["import_metadata"], steps, file, f"{base}import_metadata"
+        )
     compiled_steps = []
     for step_index, raw_step in enumerate(steps):
         step_path = f"{base}steps[{step_index}]"
@@ -881,7 +1099,9 @@ def main(argv: list[str] | None = None) -> int:
         else:
             document = fetch_overlay_document(args.import_url)
             source = args.import_url
-        translated = translate_overlay_document(document, source)
+        identities = IdentityCatalog.load(DEFAULT_IDENTITY_CATALOG)
+        translated = translate_overlay_document(document, source, identities)
+        _compile_order(translated, args.output.name, None, identities)
         args.output.write_text(
             yaml.safe_dump(translated, sort_keys=False, allow_unicode=True),
             encoding="utf-8",
