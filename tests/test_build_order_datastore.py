@@ -133,6 +133,53 @@ class BuildOrderDatastoreContractTests(unittest.TestCase):
         self.assertIn("BUILD_ORDER_DATASTORE_ON_COMPLETE = nil", stop)
         self.assertIn("BUILD_ORDER_DATASTORE_LOADING = false", stop)
 
+    def test_apply_rejects_invalid_orders_and_other_record_collisions(self) -> None:
+        apply = function_body(self.datastore, "BuildOrderDatastore_Apply")
+
+        self.assertIn(
+            "if not BuildOrderDatastore_IsValidOrder(newID, buildOrder) then",
+            apply,
+        )
+        self.assertIn('return false, "invalid_build_order"', apply)
+        self.assertIn(
+            "if BUILD_ORDER_CATALOG[newID] ~= nil and newID ~= originalID then",
+            apply,
+        )
+        self.assertIn('return false, "id_collision"', apply)
+
+    def test_apply_allows_an_existing_record_to_keep_its_id(self) -> None:
+        apply = function_body(self.datastore, "BuildOrderDatastore_Apply")
+
+        self.assertIn("newID ~= originalID", apply)
+        self.assertNotIn(
+            "if BUILD_ORDER_CATALOG[newID] ~= nil then", apply
+        )
+
+    def test_apply_replaces_or_renames_the_catalog_entry_then_saves_once(self) -> None:
+        apply = function_body(self.datastore, "BuildOrderDatastore_Apply")
+
+        self.assertIn(
+            "if originalID ~= nil and originalID ~= newID then", apply
+        )
+        self.assertIn("BUILD_ORDER_CATALOG[originalID] = nil", apply)
+        self.assertIn("BUILD_ORDER_CATALOG[newID] = buildOrder", apply)
+        self.assertEqual(apply.count("BuildOrderDatastore_SaveCatalog()"), 1)
+        self.assertIn('return true, ""', apply)
+
+    def test_save_catalog_stores_the_live_catalog_then_saves_the_datastore(self) -> None:
+        save = function_body(self.datastore, "BuildOrderDatastore_SaveCatalog")
+
+        self.assertIn("local stored = {", save)
+        self.assertIn(
+            "schema_version = BUILD_ORDER_DATASTORE_SCHEMA_VERSION,", save
+        )
+        self.assertIn("build_orders = BUILD_ORDER_CATALOG,", save)
+        store = 'Game_StoreTableData(BUILD_ORDER_DATASTORE_ID, stored)'
+        persist = 'Game_SaveTextDataStore(BUILD_ORDER_DATASTORE_ID, "")'
+        self.assertIn(store, save)
+        self.assertIn(persist, save)
+        self.assertLess(save.index(store), save.index(persist))
+
 
 if __name__ == "__main__":
     unittest.main()

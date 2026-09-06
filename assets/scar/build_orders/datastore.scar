@@ -71,6 +71,30 @@ function BuildOrderDatastore_IsValidOrder(id, buildOrder)
 	return true
 end
 
+function BuildOrderDatastore_SaveCatalog()
+	local stored = {
+		schema_version = BUILD_ORDER_DATASTORE_SCHEMA_VERSION,
+		build_orders = BUILD_ORDER_CATALOG,
+	}
+	Game_StoreTableData(BUILD_ORDER_DATASTORE_ID, stored)
+	Game_SaveTextDataStore(BUILD_ORDER_DATASTORE_ID, "")
+end
+
+function BuildOrderDatastore_Apply(originalID, newID, buildOrder)
+	if not BuildOrderDatastore_IsValidOrder(newID, buildOrder) then
+		return false, "invalid_build_order"
+	end
+	if BUILD_ORDER_CATALOG[newID] ~= nil and newID ~= originalID then
+		return false, "id_collision"
+	end
+	if originalID ~= nil and originalID ~= newID then
+		BUILD_ORDER_CATALOG[originalID] = nil
+	end
+	BUILD_ORDER_CATALOG[newID] = buildOrder
+	BuildOrderDatastore_SaveCatalog()
+	return true, ""
+end
+
 function BuildOrderDatastore_Replace(loaded)
 	BUILD_ORDER_CATALOG = {}
 	if type(loaded) ~= "table" then
