@@ -85,6 +85,31 @@ OVERLAY_NOTE_LABELS = {
     "technology_templar/safepassage": "Safe Passage",
 }
 MAX_OVERLAY_RESPONSE_BYTES = 2 * 1024 * 1024
+IMPORT_RULE_TARGET_FIELDS = {
+    "built.imperative.v1": "built",
+    "produce.imperative.v1": "produce",
+    "units.have.v1": "units",
+    "buildings.have.v1": "buildings",
+    "upgrades.research.v1": "upgrades",
+    "rallypoint.resource.v1": "rallypoint",
+    "resources.threshold.v1": "resources",
+    "vils.corroboration.v1": "vils",
+}
+IMPORT_DIAGNOSTIC_CODES = {
+    "conflicting_threshold",
+    "conflicting_vils",
+    "guarded_clause",
+    "invalid_count",
+    "malformed_token",
+    "unresolved_identity",
+    "unresolved_resource",
+    "unsafe_threshold",
+    "unused_token",
+}
+IMPORT_TARGET = re.compile(
+    r"^steps\[(?P<step>\d+)\]\.(?P<field>[a-z_]+)"
+    r"(?:\[(?P<index>\d+)\]|\.(?P<key>[a-z_]+))$"
+)
 
 
 class BuildOrderValidationError(ValueError):
@@ -214,6 +239,23 @@ def translate_overlay_document(
                     identities,
                     allocations,
                 )
+                threshold_checks = [
+                    check for check in extraction.checks if check.synthetic_step
+                ]
+                if threshold_checks and (synthetic or len(threshold_checks) > 1):
+                    extraction_diagnostics.append(
+                        {
+                            "source_step": index,
+                            "source_note": note_index,
+                            "span": [
+                                threshold_checks[0].start,
+                                threshold_checks[-1].end,
+                            ],
+                            "code": "conflicting_threshold",
+                            "message": "only one resource threshold can be safely split from a source step",
+                        }
+                    )
+                    continue
                 for check in extraction.checks:
                     if check.corroborates:
                         target_suffix = f"vils.{next(iter(check.value))}"
@@ -423,10 +465,43 @@ def _validate_import_span(value: Any, file: Path, path: str) -> None:
         _error(file, path, "end offset must not precede start offset")
 
 
-def _validate_import_metadata(value: Any, file: Path, path: str) -> None:
+def _validate_import_target(
+    target: str,
+    expected_field: str,
+    steps: list[Any],
+    file: Path,
+    path: str,
+) -> None:
+    match = IMPORT_TARGET.fullmatch(target)
+    if match is None or match.group("field") != expected_field:
+        _error(file, path, "does not resolve")
+    step_index = int(match.group("step"))
+    if step_index >= len(steps) or not isinstance(steps[step_index], dict):
+        _error(file, path, "does not resolve")
+    step = steps[step_index]
+    if expected_field not in step:
+        _error(file, path, "does not resolve")
+    index = match.group("index")
+    key = match.group("key")
+    value = step[expected_field]
+    if index is not None:
+        if not isinstance(value, list) or int(index) >= len(value):
+            _error(file, path, "does not resolve")
+    elif key is not None:
+        if not isinstance(value, dict) or key not in value:
+            _error(file, path, "does not resolve")
+    else:
+        _error(file, path, "does not resolve")
+
+
+def _validate_import_metadata(
+    value: Any, steps: list[Any], file: Path, path: str
+) -> None:
     metadata = _mapping(value, file, path)
     _reject_unknown_fields(metadata, {"rule_set", "extractions", "diagnostics"}, file, path)
-    _positive(metadata.get("rule_set"), file, f"{path}.rule_set")
+    rule_set = metadata.get("rule_set")
+    if isinstance(rule_set, bool) or not isinstance(rule_set, int) or rule_set != 1:
+        _error(file, f"{path}.rule_set", f"unsupported rule-set version {rule_set}")
     for collection, required in (
         (
             "extractions",
@@ -449,10 +524,21 @@ def _validate_import_metadata(value: Any, file: Path, path: str) -> None:
             _nonnegative(entry["source_note"], file, f"{item_path}.source_note")
             _validate_import_span(entry["span"], file, f"{item_path}.span")
             if collection == "extractions":
-                _string(entry["rule"], file, f"{item_path}.rule")
-                _string(entry["target"], file, f"{item_path}.target")
+                rule = _string(entry["rule"], file, f"{item_path}.rule")
+                if rule not in IMPORT_RULE_TARGET_FIELDS:
+                    _error(file, f"{item_path}.rule", "unsupported extraction rule")
+                target = _string(entry["target"], file, f"{item_path}.target")
+                _validate_import_target(
+                    target,
+                    IMPORT_RULE_TARGET_FIELDS[rule],
+                    steps,
+                    file,
+                    f"{item_path}.target",
+                )
             else:
-                _string(entry["code"], file, f"{item_path}.code")
+                code = _string(entry["code"], file, f"{item_path}.code")
+                if code not in IMPORT_DIAGNOSTIC_CODES:
+                    _error(file, f"{item_path}.code", "unsupported diagnostic code")
                 _string(entry["message"], file, f"{item_path}.message")
 
 
@@ -924,14 +1010,14 @@ def _compile_order(document: Any, file: Path, index: int | None, identities: Ide
     unknown = set(order) - {"civ", "title", "link", "steps", "import_metadata"}
     if unknown:
         _error(file, f"{base}{next(iter(unknown))}", "unknown field")
-    if "import_metadata" in order:
-        _validate_import_metadata(
-            order["import_metadata"], file, f"{base}import_metadata"
-        )
     civ = _string(order.get("civ"), file, f"{base}civ")
     title = _string(order.get("title"), file, f"{base}title")
     link = _source_link(order["link"], file, f"{base}link") if "link" in order else None
     steps = _list(order.get("steps"), file, f"{base}steps")
+    if "import_metadata" in order:
+        _validate_import_metadata(
+            order["import_metadata"], steps, file, f"{base}import_metadata"
+        )
     compiled_steps = []
     for step_index, raw_step in enumerate(steps):
         step_path = f"{base}steps[{step_index}]"

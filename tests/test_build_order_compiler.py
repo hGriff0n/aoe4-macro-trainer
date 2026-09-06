@@ -338,6 +338,16 @@ import_metadata:
             "import_metadata: {rule_set: 1, extractions: [{source_step: -1, source_note: 0, span: [0, 1], rule: x, target: x}], diagnostics: []}\n",
             "file.yaml: import_metadata.extractions[0].source_step: must be a non-negative integer",
         )
+        self.assert_invalid(
+            "civ: english\ntitle: x\nsteps: [{hints: [x]}]\n"
+            "import_metadata: {rule_set: 999, extractions: [], diagnostics: []}\n",
+            "file.yaml: import_metadata.rule_set: unsupported rule-set version 999",
+        )
+        self.assert_invalid(
+            "civ: english\ntitle: x\nsteps: [{hints: [x]}]\n"
+            "import_metadata: {rule_set: 1, extractions: [{source_step: 0, source_note: 0, span: [0, 1], rule: built.imperative.v1, target: 'steps[9].built[0]'}], diagnostics: []}\n",
+            "file.yaml: import_metadata.extractions[0].target: does not resolve",
+        )
 
     def test_vils_mapping_compiles_one_aggregate_descriptor_in_resource_order(self) -> None:
         catalog = self.compile({"opening.yaml": """civ: English

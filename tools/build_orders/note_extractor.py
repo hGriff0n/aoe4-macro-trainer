@@ -8,7 +8,7 @@ from .identities import IdentityCatalog, IdentityCatalogError, normalize_identit
 NOTE_TOKEN = re.compile(
     r"@(?P<namespace>[^@\s/]+)/(?P<name>[^@\s/]+)\.webp@"
 )
-TOKEN_LIKE_SPAN = re.compile(r"@[^@\s/]+/[^@\s/]+@")
+POSSIBLE_NOTE_TOKEN = re.compile(r"@[^@\s]+@?")
 BUILDING_IMPERATIVE = re.compile(
     r"^\s*(?:build|add|make)\s+(?:(?:a|an)\s+)?"
     r"(?:(?P<count>\d+)|(?P<ordinal>second))?\s*"
@@ -46,7 +46,8 @@ VILLAGER_ALLOCATION = re.compile(
     re.IGNORECASE,
 )
 GUARDED_CLAUSE = re.compile(
-    r"\b(?:if|unless|against|otherwise|optionally|either|or|and/or|not|never)\b",
+    r"(?:\b(?:if|unless|against|otherwise|optionally|either|or|and/or|not|never|"
+    r"versus|vs|don't|doesn't|can't|cannot|after|before|until)\b|[&/])",
     re.IGNORECASE,
 )
 RESOURCE_IDS = {
@@ -172,7 +173,9 @@ def extract_note(
     structured_vils: dict[str, int] | None = None,
 ) -> NoteExtraction:
     decoded = html.unescape(note)
-    guard_text = NOTE_TOKEN.sub(lambda item: " " * len(item.group(0)), decoded)
+    guard_text = POSSIBLE_NOTE_TOKEN.sub(
+        lambda item: " " * len(item.group(0)), decoded
+    )
     guard = GUARDED_CLAUSE.search(guard_text)
     if guard is not None:
         return NoteExtraction(
@@ -235,6 +238,18 @@ def extract_note(
         action = extract_note(threshold.group("action"), civ, identities, structured_vils)
         action_offset = threshold.start("action")
         action = _with_offset(action, action_offset)
+        if not action.checks or action.diagnostics:
+            return NoteExtraction(
+                diagnostics=(
+                    ExtractionDiagnostic(
+                        "unsafe_threshold",
+                        threshold.start(),
+                        threshold.end(),
+                        "resource threshold action was not fully deterministic",
+                    ),
+                    *action.diagnostics,
+                )
+            )
         threshold_end = threshold.end("token")
         return NoteExtraction(
             checks=(
@@ -368,8 +383,9 @@ def extract_note(
             token.end(),
             "token must use @namespace/name.webp@ syntax",
         )
-        for token in TOKEN_LIKE_SPAN.finditer(decoded)
+        for token in POSSIBLE_NOTE_TOKEN.finditer(decoded)
         if NOTE_TOKEN.fullmatch(token.group(0)) is None
+        and ("/" in token.group(0) or ".webp" in token.group(0).casefold())
     )
     unused = tuple(
         ExtractionDiagnostic(

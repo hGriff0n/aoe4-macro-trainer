@@ -239,6 +239,53 @@ class BuildOrderNoteExtractorTests(unittest.TestCase):
             "invalid_count",
         )
 
+    def test_second_threshold_in_source_step_is_left_for_review(self) -> None:
+        translated = self.translate_notes(
+            "At 400 @resource/resource_wood.webp@, build "
+            "@building_military/barracks.webp@",
+            "At 200 @resource/resource_wood.webp@, build "
+            "@building_military/stable.webp@",
+        )
+
+        self.assertEqual(translated["steps"][1], {"resources": {"wood": 400}})
+        self.assertEqual(
+            translated["steps"][2]["built"],
+            [{"id": "barracks"}],
+        )
+        self.assertEqual(
+            translated["import_metadata"]["diagnostics"][0]["code"],
+            "conflicting_threshold",
+        )
+
+    def test_unsafe_threshold_actions_never_emit_blocking_checks(self) -> None:
+        notes = (
+            "At 400 @resource/resource_wood.webp@, build "
+            "@building_military/barracks.webp@ / @building_military/stable.webp@",
+            "At 400 @resource/resource_wood.webp@, don't build "
+            "@building_military/barracks.webp@",
+            "At 400 @resource/resource_wood.webp@, build "
+            "@building_military/barracks.webp@ vs. cavalry",
+            "At 400 @resource/resource_wood.webp@, consider "
+            "@building_military/barracks.webp@",
+        )
+        for note in notes:
+            with self.subTest(note=note):
+                translated = self.translate_notes(note)
+                self.assertNotIn("resources", translated["steps"][1])
+                self.assertNotIn("built", translated["steps"][1])
+
+    def test_incomplete_token_shapes_are_diagnosed(self) -> None:
+        for note in (
+            "Build @building_military/barracks.webp",
+            "Build @barracks.webp@",
+        ):
+            with self.subTest(note=note):
+                translated = self.translate_notes(note)
+                self.assertEqual(
+                    translated["import_metadata"]["diagnostics"][0]["code"],
+                    "malformed_token",
+                )
+
 
 if __name__ == "__main__":
     unittest.main()

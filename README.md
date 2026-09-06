@@ -49,19 +49,24 @@ catalog. It recognizes unconditional build, train/produce, have, research,
 queued-research, rally, and resource-threshold forms. A note such as “Build a
 second Town Center” requests one new completion, while an explicit cardinal such
 as “Build 2 Barracks” retains the count. Resource thresholds followed by an
-action are split into consecutive steps so spending the resource cannot make a
-combined objective incomplete again. Villager-allocation prose only corroborates
-the structured allocation and never adds a duplicate `vils` check.
+fully deterministic action are split into consecutive steps so spending the
+resource cannot make a combined objective incomplete again. At most one such
+split is applied per source step; later thresholds remain reviewable hints.
+Villager-allocation prose only corroborates the structured allocation and never
+adds a duplicate `vils` check.
 
 Conditionals, alternatives, negation, opponent-dependent wording, unknown
 languages, malformed tokens, unresolved identities, and unused tokens never
 become blocking checks. They remain hints and are recorded under
 `import_metadata.diagnostics` for review. Each automatic extraction records its
 rule-set version, source step and note, character span, and generated YAML target
-under `import_metadata`; the compiler validates this metadata but excludes it
-from the runtime model. This exact grammar-and-catalog boundary is the primary
-false-positive safeguard. The currently supported prose language is English;
-icon rendering and hint preservation remain language-neutral.
+under `import_metadata`. The compiler accepts only known rule versions, rule and
+diagnostic IDs, and targets that resolve to compatible generated fields; source
+coordinates receive structural validation because the original note is not
+embedded in the compiled document. Import metadata is excluded from the runtime
+model. This exact grammar-and-catalog boundary is the primary false-positive
+safeguard. The currently supported prose language is English; icon rendering and
+hint preservation remain language-neutral.
 
 Catalog regeneration is a developer-only operation:
 

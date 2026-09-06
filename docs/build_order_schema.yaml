@@ -8,7 +8,7 @@
 civ: string # game id of the civilization that must be selected for this build order
 title: string # in game display string to identify this build order. technically, the full display string is "icon(<civ>) - <title>" *unless the settings groups build order by civ)
 link: string # optional absolute HTTP(S) URL for the source of the build order. Stored as metadata by the compiler but not used by checks or emitted into game assets
-import_metadata: # optional review metadata emitted by deterministic import passes; validated by the compiler but omitted from the runtime model
+import_metadata: # optional review metadata emitted by deterministic import passes; known versions/rules/codes and generated targets are validated, source coordinates are structurally validated, and all metadata is omitted from the runtime model
   rule_set: integer # positive extraction rule-set version
   extractions:
     - source_step: integer # zero-based RTS Overlay source-step index
