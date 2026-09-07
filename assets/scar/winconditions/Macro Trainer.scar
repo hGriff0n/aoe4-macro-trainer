@@ -48,12 +48,14 @@ _mod = {
 	selectedBuildOrderID = nil,
 	simspeedEnabled = true,
 	simspeedStarted = false,
-	buildOrderDisabled = false,
-	startupAlertOpen = false,
-	startupErrorTitle = nil,
-	startupErrorMessage = nil,
+	startupStarted = false,
+	startupActive = false,
+	startupAwaitingChoice = false,
+	startupFallbackOpen = false,
+	startupScreen = "hidden",
+	startupPriorSelectionID = nil,
+	startupMessage = nil,
 	compatibleBuildOrderIDs = {},
-	buildOrderChoiceIndex = 1,
 	buildOrderStarted = false,
 }
 
@@ -200,6 +202,11 @@ function Mod_StartPhase(title, phaseDuration, simRate, nextRule)
 	Rule_AddOneShot(nextRule, phaseDuration)
 end
 
+import("build_orders/editor_discovery.scar")
+import("build_orders/editor_model.scar")
+import("build_orders/editor_schema.scar")
+import("build_orders/editor_ui.scar")
+import("build_orders/editor.scar")
 import("build_orders/startup.scar")
 
 -- Called when Core_SetPlayerDefeated() is invoked. Signals that a player has been eliminated from play due to defeat.
@@ -213,6 +220,8 @@ end
 function Mod_OnGameOver()
 	BuildOrderDatastore_Stop()
 	BuildOrderStartup_Stop()
+	BuildOrderEditor_Stop()
+	BuildOrderEditorUI_Stop()
 	BuildOrder_Stop()
 	Mod_StopSimspeedCycle()
 end

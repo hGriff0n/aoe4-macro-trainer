@@ -35,6 +35,25 @@ def walk_import_edges(root: str, sources: dict[str, str]) -> list[tuple[str, str
 
 
 class BuildOrderImportGraphTests(unittest.TestCase):
+    def test_packaged_root_imports_editor_stack_in_dependency_order_before_startup(self) -> None:
+        edges = walk_import_edges(MAIN_SCRIPT, packaged_scar_sources())
+        root_edges = [target for source, target in edges if source == MAIN_SCRIPT]
+        expected = [
+            "build_orders/editor_discovery.scar",
+            "build_orders/editor_model.scar",
+            "build_orders/editor_schema.scar",
+            "build_orders/editor_ui.scar",
+            "build_orders/editor.scar",
+            "build_orders/startup.scar",
+        ]
+
+        for target in expected:
+            with self.subTest(target=target):
+                self.assertEqual(root_edges.count(target), 1)
+        self.assertEqual(
+            [target for target in root_edges if target in expected], expected
+        )
+
     def test_packaged_root_imports_resources_handler_after_engine_before_startup(self) -> None:
         edges = walk_import_edges(MAIN_SCRIPT, packaged_scar_sources())
         root_edges = [target for source, target in edges if source == MAIN_SCRIPT]

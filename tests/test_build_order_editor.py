@@ -177,6 +177,7 @@ class BuildOrderEditorContractTests(unittest.TestCase):
             "BuildOrderEditor_Save",
             "BuildOrderEditor_Cancel",
             "BuildOrderEditor_HandleCommand",
+            "BuildOrderEditor_AddCheck",
             "BuildOrderEditor_Stop",
         ):
             with self.subTest(name=name):
@@ -344,6 +345,7 @@ class BuildOrderEditorBehaviorTests(unittest.TestCase):
             "cancel",
             "field_change",
             "add",
+            "add_check",
             "delete",
             "expand",
             "collapse",
@@ -642,6 +644,41 @@ class BuildOrderEditorBehaviorTests(unittest.TestCase):
             )
         )
         self.assertEqual(no_collect.array(), [])
+
+    def test_add_check_defaults_omitted_kind_and_constructs_explicit_selected_kind(self) -> None:
+        self.assertIn("BuildOrderEditor_AddCheck", self.runtime.globals)
+        order = valid_order()
+        self.set_catalog([order])
+        self.runtime.call("BuildOrderEditor_OpenEdit", order["id"], None)
+        checks = self.runtime.globals["BUILD_ORDER_EDITOR_STATE"]["draft"][
+            "steps"
+        ][1]["checks"]
+
+        self.assertTrue(
+            self.runtime.call(
+                "BuildOrderEditor_AddCheck",
+                {"path": "steps.1.checks"},
+            )
+        )
+        omitted = checks[2]
+        self.assertEqual(omitted["kind"], "vils")
+        self.assertFalse(omitted["optional"])
+        self.assertEqual(omitted["payload"]["no_collect"].array(), [])
+
+        self.assertTrue(
+            self.runtime.call(
+                "BuildOrderEditor_AddCheck",
+                {
+                    "path": "steps.1.checks",
+                    "selected_option": {"id": "built", "value": "built"},
+                },
+            )
+        )
+        explicit = checks[3]
+        self.assertEqual(explicit["kind"], "built")
+        self.assertFalse(explicit["optional"])
+        self.assertEqual(explicit["payload"]["alternatives"].array(), [])
+        self.assertEqual(explicit["payload"]["count"], 1)
 
     def test_cancel_and_stop_clear_state_discovery_errors_and_callbacks(self) -> None:
         cancel_completions = []

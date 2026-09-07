@@ -1,3 +1,4 @@
+import csv
 import re
 import unittest
 import xml.etree.ElementTree as ET
@@ -10,6 +11,8 @@ ROOT = Path(__file__).resolve().parents[1]
 UI_SCAR = ROOT / "assets" / "scar" / "build_orders" / "editor_ui.scar"
 MODEL_SCAR = ROOT / "assets" / "scar" / "build_orders" / "editor_model.scar"
 SCHEMA_SCAR = ROOT / "assets" / "scar" / "build_orders" / "editor_schema.scar"
+LOCDB_PATH = ROOT / "assets" / "locdb" / "Macro Trainer_en.csv"
+MOD_NAMESPACE = "dfb5645698a84afb91cf7a2dfb0f4a4e"
 
 PRESENTATION_NS = "http://schemas.microsoft.com/winfx/2006/xaml/presentation"
 XAML_NS = "http://schemas.microsoft.com/winfx/2006/xaml"
@@ -53,6 +56,15 @@ def strip_xaml(source: str) -> str:
         source,
         flags=re.DOTALL,
     )
+
+
+def csv_rows(path: Path) -> dict[int, list[str]]:
+    with path.open(encoding="utf-8-sig", newline="") as source:
+        return {
+            int(row[0]): row
+            for row in csv.reader(source)
+            if row and row[0].isdigit()
+        }
 
 
 def child_nodes(node):
@@ -138,6 +150,7 @@ class BuildOrderEditorUIContractTests(unittest.TestCase):
             "confirm_unpause",
             "field_change",
             "add",
+            "add_check",
             "delete",
             "expand",
             "collapse",
@@ -162,8 +175,8 @@ class BuildOrderEditorUIContractTests(unittest.TestCase):
         self.assertIsNotNone(named(header, "BuildOrderTitleEditor"))
         header_xml = ET.tostring(header, encoding="unicode")
         self.assertIn("RaceIconSecondary", header_xml)
-        for label in ("Save", "Cancel", "Create copy"):
-            self.assertIn(f'Content="{label}"', header_xml)
+        for loc_id in (38, 39, 40):
+            self.assertIn(f'Content="${MOD_NAMESPACE}:{loc_id}"', header_xml)
         scroll = named(editor, "BuildOrderEditorScroll")
         self.assertEqual(scroll.tag, f"{{{PRESENTATION_NS}}}ScrollViewer")
         columns = editor.findall("./p:Grid.ColumnDefinitions", NS)
@@ -185,18 +198,19 @@ class BuildOrderEditorUIContractTests(unittest.TestCase):
             nested_checks.get("ItemTemplate"),
             "{StaticResource BuildOrderCheckCardTemplate}",
         )
-        for token in (
-            "Drag step",
-            "Drag check",
-            "Move up",
-            "Move down",
-            "Add check",
-            "Delete step",
-            "Delete check",
-            "[errors]",
+        for loc_id in (
+            71,
+            67,
+            70,
+            69,
+            42,
+            72,
+            68,
         ):
-            with self.subTest(token=token):
+            token = f"${MOD_NAMESPACE}:{loc_id}"
+            with self.subTest(loc_id=loc_id):
                 self.assertIn(token, self.xaml)
+        self.assertIn("[errors]", self.xaml)
         self.assertIn(
             'ItemsSource="{Binding [flat_fields]}"',
             ET.tostring(step_template, encoding="unicode"),
@@ -264,13 +278,20 @@ class BuildOrderEditorUIContractTests(unittest.TestCase):
     def test_resource_cards_show_four_optional_positive_inputs_and_separate_no_collect(self) -> None:
         resource_template = named(self.xaml_root, "BuildOrderResourceFieldsTemplate")
         resource_xml = ET.tostring(resource_template, encoding="unicode")
-        for resource in ("food", "wood", "gold", "stone"):
+        for resource, loc_id in (
+            ("food", 62),
+            ("wood", 63),
+            ("gold", 64),
+            ("stone", 65),
+        ):
             with self.subTest(resource=resource):
                 self.assertIn(f"[{resource}][display_value]", resource_xml)
-                self.assertIn(f'Content="{resource.title()}"', resource_xml)
-        self.assertIn("positive integer (optional)", resource_xml)
+                self.assertIn(
+                    f'Content="${MOD_NAMESPACE}:{loc_id}"', resource_xml
+                )
+        self.assertIn(f"${MOD_NAMESPACE}:61", resource_xml)
         self.assertIn("[no_collect]", resource_xml)
-        self.assertIn("Do not collect", resource_xml)
+        self.assertIn(f"${MOD_NAMESPACE}:66", resource_xml)
 
     def test_live_options_render_label_icon_and_internal_id_fallback(self) -> None:
         option_template = named(self.xaml_root, "BuildOrderLiveOptionTemplate")
@@ -278,7 +299,38 @@ class BuildOrderEditorUIContractTests(unittest.TestCase):
         self.assertIn("[label]", option_xml)
         self.assertIn("[icon]", option_xml)
         self.assertIn("[id_fallback]", option_xml)
-        self.assertIn("No compatible options discovered", self.xaml)
+        self.assertIn(f"${MOD_NAMESPACE}:58", self.xaml)
+
+    def test_each_step_has_a_schema_populated_check_kind_chooser(self) -> None:
+        step = named(self.xaml_root, "BuildOrderStepCardTemplate")
+        chooser = named(step, "BuildOrderCheckKindChooser")
+        combo = named(chooser, "BuildOrderCheckKindOptions")
+        self.assertEqual(combo.get("ItemsSource"), "{Binding [options]}")
+        self.assertEqual(
+            combo.get("SelectedItem"),
+            "{Binding [selected_option], Mode=TwoWay}",
+        )
+        add = named(chooser, "BuildOrderAddCheck")
+        self.assertEqual(add.get("Command"), "{Binding [add_check_command]}")
+        self.assertEqual(add.get("CommandParameter"), "{Binding}")
+        self.assertIn(f"${MOD_NAMESPACE}:43", ET.tostring(chooser, encoding="unicode"))
+
+    def test_static_xaml_labels_use_stable_fully_qualified_localization(self) -> None:
+        rows = csv_rows(LOCDB_PATH)
+        seen = set()
+        for element in self.xaml_root.iter():
+            for attribute in ("Text", "Content"):
+                value = element.get(attribute)
+                if value is None or value.startswith("{"):
+                    continue
+                match = re.fullmatch(rf"\${MOD_NAMESPACE}:(\d+)", value)
+                self.assertIsNotNone(
+                    match,
+                    f"unlocalized static {attribute}={value!r}",
+                )
+                seen.add(int(match.group(1)))
+        self.assertTrue(seen)
+        self.assertTrue(seen.issubset(rows))
 
     def test_invalid_draft_disables_save(self) -> None:
         header = named(self.xaml_root, "BuildOrderEditorActionHeader")
@@ -286,7 +338,7 @@ class BuildOrderEditorUIContractTests(unittest.TestCase):
             element
             for element in header.iter()
             if element.tag == f"{{{PRESENTATION_NS}}}Button"
-            and element.get("Content") == "Save"
+            and element.get("Content") == f"${MOD_NAMESPACE}:38"
         )
         self.assertEqual(save.get("IsEnabled"), "{Binding [save_enabled]}")
 
@@ -746,6 +798,51 @@ class BuildOrderEditorUIProjectionTests(unittest.TestCase):
             "BuildOrderEditorUI_BuildViewModel", "editor", model
         )
         self.assertTrue(view["save_enabled"])
+
+    def test_projected_step_offers_every_supported_check_kind(self) -> None:
+        state = self.runtime.globals["BUILD_ORDER_EDITOR_UI_STATE"]
+        state["commands"] = self.runtime.table(
+            {"add_check": "add-check-command"}
+        )
+        model = {
+            "draft": {
+                "civ": "english",
+                "title": "Kinds",
+                "steps": [
+                    {
+                        "title": "Opening",
+                        "inferred_age": 1,
+                        "checks": [
+                            {
+                                "kind": "hints",
+                                "optional": True,
+                                "payload": {"text": "Start"},
+                            }
+                        ],
+                    }
+                ],
+            },
+            "errors": [],
+            "discovery": {
+                "entities": [],
+                "squads": [],
+                "upgrades": [],
+                "families": [],
+            },
+        }
+
+        view = self.runtime.call(
+            "BuildOrderEditorUI_BuildViewModel", "editor", model
+        )
+        add_check = view["steps"][1]["check_add"]
+        self.assertIsNotNone(add_check)
+        self.assertEqual(add_check["path"], "steps.1.checks")
+        self.assertEqual(add_check["add_check_command"], "add-check-command")
+        self.assertEqual(
+            [option["id"] for option in add_check["options"].array()],
+            self.runtime.globals["BUILD_ORDER_EDITOR_CHECK_ORDER"].array(),
+        )
+        self.assertEqual(add_check["selected_option"]["id"], "vils")
 
 
 if __name__ == "__main__":

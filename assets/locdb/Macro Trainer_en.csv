@@ -26,3 +26,45 @@
 28,,,Startup missing-build value.,,,Selected build order is unavailable.
 29,,,Startup build-order chooser title.,,,Choose a Build Order
 30,,,Startup no-selection message.,,,Choose a build order loaded from the player datastore.
+31,,,Startup no-order option.,,,No build order
+32,,,Build-order selector action.,,,Select
+33,,,Build-order selected marker.,,,Selected
+34,,,Build-order selector action.,,,Edit
+35,,,Build-order selector action.,,,Create
+36,,,Build-order selector action.,,,Unpause
+37,,,Build-order editor label.,,,Current civilization
+38,,,Build-order editor action.,,,Save
+39,,,Build-order editor action.,,,Cancel
+40,,,Build-order editor action.,,,Create copy
+41,,,Build-order editor action.,,,Add step
+42,,,Build-order editor action.,,,Add check
+43,,,Build-order editor label.,,,Check type
+44,,,No-order confirmation title.,,,Continue without a build order?
+45,,,No-order confirmation message.,,,No build-order objectives will be started.
+46,,,No-order confirmation action.,,,Continue without one
+47,,,Build-order UI fallback title.,,,Build Order UI Unavailable
+48,,,Build-order UI fallback message.,,,The build-order screen could not be opened. Continue without build-order objectives?
+49,,,Build-order UI fallback action.,,,Continue Without Build Order
+50,,,Build-order UI fallback action.,,,Stay Paused
+51,,,Missing startup selection message.,,,The selected build order is no longer available. Choose another option.
+52,,,Invalid startup selection message.,,,The selected build order is not compatible with the current civilization.
+53,,,Build-order editor action.,,,Collapse
+54,,,Build-order editor action.,,,Expand
+55,,,Build-order editor action.,,,Delete item
+56,,,Build-order editor action.,,,Add
+57,,,Build-order editor boolean label.,,,Enabled
+58,,,Build-order editor empty-state message.,,,No compatible options discovered.
+59,,,Build-order editor action.,,,Add item
+60,,,Build-order editor optional-field label.,,,Optional
+61,,,Build-order editor resource help.,,,Each amount is a positive integer (optional).
+62,,,Build-order editor resource label.,,,Food
+63,,,Build-order editor resource label.,,,Wood
+64,,,Build-order editor resource label.,,,Gold
+65,,,Build-order editor resource label.,,,Stone
+66,,,Build-order editor resource label.,,,Do not collect
+67,,,Build-order editor drag label.,,,Drag check
+68,,,Build-order editor action.,,,Delete check
+69,,,Build-order editor action.,,,Move down
+70,,,Build-order editor action.,,,Move up
+71,,,Build-order editor drag label.,,,Drag step
+72,,,Build-order editor action.,,,Delete step

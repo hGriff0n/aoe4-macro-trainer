@@ -24,6 +24,7 @@ function BuildOrderEditor_Callbacks()
 		cancel = "BuildOrderEditor_Cancel",
 		field_change = "BuildOrderEditor_FieldChange",
 		add = "BuildOrderEditor_Add",
+		add_check = "BuildOrderEditor_AddCheck",
 		delete = "BuildOrderEditor_Delete",
 		expand = "BuildOrderEditor_Expand",
 		collapse = "BuildOrderEditor_Collapse",
@@ -385,6 +386,22 @@ function BuildOrderEditor_Add(parameter)
 		end
 	end
 	return BuildOrderEditor_HandleCommand("add", path, value)
+end
+
+function BuildOrderEditor_AddCheck(parameter)
+	local path = BuildOrderEditor_ParameterPath(parameter)
+	if path == nil then
+		return false
+	end
+	local kind = nil
+	if type(parameter) == "table" then
+		if type(parameter.selected_option) == "table" then
+			kind = parameter.selected_option.value or parameter.selected_option.id
+		elseif type(parameter.value) == "string" then
+			kind = parameter.value
+		end
+	end
+	return BuildOrderEditor_HandleCommand("add", path, kind)
 end
 
 function BuildOrderEditor_Delete(parameter)

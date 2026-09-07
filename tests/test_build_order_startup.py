@@ -3,19 +3,21 @@ import re
 import unittest
 from pathlib import Path
 
+from tests.scar_runtime import LuaResults, ScarRuntime
+
+
 ROOT = Path(__file__).resolve().parents[1]
 STARTUP_PATH = ROOT / "assets" / "scar" / "build_orders" / "startup.scar"
 MAIN_PATH = ROOT / "assets" / "scar" / "winconditions" / "Macro Trainer.scar"
-LOCDB_PATH = (
-    ROOT / "assets" / "locdb" / "Macro Trainer_en.csv"
-)
+LOCDB_PATH = ROOT / "assets" / "locdb" / "Macro Trainer_en.csv"
+MOD_NAMESPACE = "dfb5645698a84afb91cf7a2dfb0f4a4e"
 
 
 def function_body(source: str, name: str) -> str:
     match = re.search(
-        rf"function {re.escape(name)}\([^)]*\)(.*?)(?=^function |\Z)",
+        rf"^function {re.escape(name)}\([^\n]*\)\n(.*?)(?=^function |\Z)",
         source,
-        re.MULTILINE | re.DOTALL,
+        flags=re.MULTILINE | re.DOTALL,
     )
     if match is None:
         raise AssertionError(f"missing function {name}")
@@ -31,270 +33,390 @@ def csv_rows(path: Path) -> dict[int, list[str]]:
         }
 
 
+def build_order(order_id: str, title: str, civ: str = "english") -> dict:
+    return {
+        "id": order_id,
+        "civ": civ,
+        "title": title,
+        "steps": [],
+    }
+
+
+class BuildOrderStartupBehaviorTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.source = STARTUP_PATH.read_text(encoding="utf-8")
+        self.runtime = ScarRuntime(self.source)
+        self.runtime.globals["NORMAL_SIM_RATE"] = 8
+        self.runtime.globals["DB_Button1"] = "button-1"
+        self.runtime.globals["DB_Button2"] = "button-2"
+        self.runtime.globals["DB_Button3"] = "button-3"
+        self.runtime.globals["DB_Button4"] = "button-4"
+        self.runtime.globals["DC_Default"] = "default-dialog"
+        self.runtime.globals["_mod"] = self.runtime.table(
+            {
+                "selectedBuildOrderID": None,
+                "simspeedEnabled": True,
+                "simspeedStarted": False,
+                "buildOrderStarted": False,
+                "startupStarted": False,
+                "startupActive": False,
+                "startupAwaitingChoice": False,
+                "startupFallbackOpen": False,
+                "startupScreen": "hidden",
+                "startupPriorSelectionID": None,
+                "startupMessage": None,
+                "compatibleBuildOrderIDs": [],
+            }
+        )
+        self.catalog = {
+            "english-zulu": build_order("english-zulu", "Zulu"),
+            "french-alpha": build_order("french-alpha", "Alpha", "french"),
+            "english-alpha-b": build_order("english-alpha-b", "Alpha"),
+            "english-alpha-a": build_order("english-alpha-a", "Alpha"),
+        }
+        self.runtime.globals["BUILD_ORDER_CATALOG"] = self.runtime.table(
+            self.catalog
+        )
+
+        self.rule_adds = []
+        self.rule_removes = []
+        self.rule_remove_me = 0
+        self.sim_rates = []
+        self.objective_starts = []
+        self.cycle_starts = 0
+        self.callback_tables = []
+        self.selector_models = []
+        self.confirmation_models = []
+        self.ui_hides = 0
+        self.selector_result = True
+        self.confirmation_result = True
+        self.create_callbacks = []
+        self.edit_calls = []
+        self.message_box_text = []
+        self.message_box_buttons = []
+        self.message_box_callbacks = []
+
+        self.runtime.globals["Game_GetLocalPlayer"] = lambda: "local-player"
+        self.runtime.globals["Player_GetRaceName"] = (
+            lambda player: "english" if player == "local-player" else "french"
+        )
+        self.runtime.globals["Rule_Add"] = self.rule_adds.append
+        self.runtime.globals["Rule_Remove"] = self.rule_removes.append
+        self.runtime.globals["Rule_RemoveMe"] = self.remove_me
+        self.runtime.globals["Misc_SetSimRate"] = self.sim_rates.append
+        self.runtime.globals["BuildOrder_Start"] = (
+            lambda order, player: self.objective_starts.append((order, player))
+        )
+        self.runtime.globals["Mod_StartSimspeedCycle"] = self.start_cycle
+        self.runtime.globals["BuildOrderEditorUI_SetCallbacks"] = (
+            self.callback_tables.append
+        )
+        self.runtime.globals["BuildOrderEditorUI_ShowSelector"] = (
+            self.show_selector
+        )
+        self.runtime.globals["BuildOrderEditorUI_ShowNoSelectionConfirmation"] = (
+            self.show_confirmation
+        )
+        self.runtime.globals["BuildOrderEditorUI_Hide"] = self.hide_ui
+        self.runtime.globals["BuildOrderEditor_OpenCreate"] = self.open_create
+        self.runtime.globals["BuildOrderEditor_OpenEdit"] = self.open_edit
+        self.runtime.globals["UI_MessageBoxSetText"] = (
+            lambda title, message: self.message_box_text.append((title, message))
+        )
+        self.runtime.globals["UI_MessageBoxSetButton"] = (
+            lambda *arguments: self.message_box_buttons.append(arguments)
+        )
+        self.runtime.globals["UI_MessageBoxShow"] = (
+            lambda dialog, callback: self.message_box_callbacks.append(
+                (dialog, callback)
+            )
+        )
+
+    def call(self, name: str, *arguments):
+        self.assertIn(name, self.runtime.globals, f"missing function {name}")
+        return self.runtime.call(name, *arguments)
+
+    def remove_me(self) -> None:
+        self.rule_remove_me += 1
+
+    def start_cycle(self) -> None:
+        self.cycle_starts += 1
+
+    def show_selector(self, model):
+        self.selector_models.append(model)
+        return self.selector_result
+
+    def show_confirmation(self, model):
+        self.confirmation_models.append(model)
+        return self.confirmation_result
+
+    def hide_ui(self):
+        self.ui_hides += 1
+        return True
+
+    def open_create(self, callback):
+        self.create_callbacks.append(callback)
+        return True
+
+    def open_edit(self, order_id, callback):
+        self.edit_calls.append((order_id, callback))
+        return True
+
+    @staticmethod
+    def invoke(callback, value=None):
+        result = callback(value)
+        if isinstance(result, LuaResults):
+            return result.values[0] if result.values else None
+        return result
+
+    def start(self):
+        return self.call("BuildOrderStartup_Start")
+
+    def selector_orders(self):
+        return self.selector_models[-1]["orders"].array()
+
+    def test_start_collects_local_orders_schedules_pause_and_is_idempotent(self) -> None:
+        self.runtime.globals["_mod"]["selectedBuildOrderID"] = "english-zulu"
+
+        self.assertTrue(self.start())
+        pause = self.runtime.globals.get("BuildOrderStartup_PauseNextTick")
+        self.assertIsNotNone(pause)
+        self.assertEqual(self.rule_adds, [pause])
+        self.assertEqual(self.sim_rates, [])
+        self.assertEqual(len(self.selector_models), 1)
+        self.assertEqual(
+            [option["id"] for option in self.selector_orders()],
+            [
+                self.runtime.globals["BUILD_ORDER_STARTUP_NO_ORDER_ID"],
+                "english-alpha-a",
+                "english-alpha-b",
+                "english-zulu",
+            ],
+        )
+        self.assertFalse(self.selector_orders()[0]["editable"])
+        self.assertTrue(self.selector_orders()[-1]["selected"])
+        self.assertEqual(
+            self.runtime.globals["_mod"]["selectedBuildOrderID"],
+            "english-zulu",
+        )
+
+        self.assertFalse(self.start())
+        self.assertEqual(self.rule_adds, [pause])
+        self.assertEqual(len(self.selector_models), 1)
+
+        pause()
+        self.assertEqual(self.rule_remove_me, 1)
+        self.assertEqual(self.sim_rates, [0])
+
+    def test_select_changes_state_without_resuming_and_edit_cancel_restores_it(self) -> None:
+        self.start()
+        self.assertTrue(
+            self.call("BuildOrderStartup_Select", {"id": "english-alpha-a"})
+        )
+        state = self.runtime.globals["_mod"]
+        self.assertEqual(state["selectedBuildOrderID"], "english-alpha-a")
+        self.assertEqual(self.sim_rates, [])
+        self.assertEqual(self.objective_starts, [])
+        self.assertTrue(self.selector_orders()[1]["selected"])
+
+        self.assertTrue(
+            self.call("BuildOrderStartup_Edit", {"id": "english-alpha-a"})
+        )
+        self.assertEqual(self.edit_calls[0][0], "english-alpha-a")
+        self.assertEqual(state["selectedBuildOrderID"], "english-alpha-a")
+        self.invoke(self.edit_calls[0][1], None)
+        self.assertEqual(state["selectedBuildOrderID"], "english-alpha-a")
+        self.assertTrue(self.selector_orders()[1]["selected"])
+
+    def test_create_cancel_restores_prior_selection_and_save_selects_saved_id(self) -> None:
+        state = self.runtime.globals["_mod"]
+        state["selectedBuildOrderID"] = "english-zulu"
+        self.start()
+
+        self.assertTrue(self.call("BuildOrderStartup_Create"))
+        self.assertEqual(state["selectedBuildOrderID"], "english-zulu")
+        self.invoke(self.create_callbacks[-1], None)
+        self.assertEqual(state["selectedBuildOrderID"], "english-zulu")
+        self.assertTrue(self.selector_orders()[-1]["selected"])
+
+        self.assertTrue(self.call("BuildOrderStartup_Create"))
+        saved_id = "english-saved"
+        self.catalog[saved_id] = build_order(saved_id, "Saved")
+        self.runtime.globals["BUILD_ORDER_CATALOG"][saved_id] = self.runtime.table(
+            self.catalog[saved_id]
+        )
+        self.invoke(self.create_callbacks[-1], saved_id)
+        self.assertEqual(state["selectedBuildOrderID"], saved_id)
+        saved_option = next(
+            option for option in self.selector_orders() if option["id"] == saved_id
+        )
+        self.assertTrue(saved_option["selected"])
+
+    def test_selected_order_unpauses_once_and_is_the_only_objective_start(self) -> None:
+        self.start()
+        self.call("BuildOrderStartup_Select", {"id": "english-alpha-a"})
+
+        self.assertTrue(self.call("BuildOrderStartup_Unpause"))
+        self.assertEqual(len(self.objective_starts), 1)
+        selected, player = self.objective_starts[0]
+        self.assertEqual(selected["id"], "english-alpha-a")
+        self.assertEqual(player, "local-player")
+        self.assertEqual(self.sim_rates, [8])
+        self.assertEqual(self.cycle_starts, 1)
+        self.assertEqual(self.ui_hides, 1)
+
+        self.assertFalse(self.call("BuildOrderStartup_Unpause"))
+        self.assertEqual(len(self.objective_starts), 1)
+        self.assertEqual(self.sim_rates, [8])
+        self.assertEqual(self.cycle_starts, 1)
+
+        start_selected = function_body(
+            self.source, "BuildOrderStartup_StartSelected"
+        )
+        self.assertIn("BuildOrder_Start(buildOrder, localPlayer)", start_selected)
+        self.assertEqual(self.source.count("BuildOrder_Start("), 1)
+
+    def test_no_order_requires_confirmation_and_starts_only_enabled_cycle(self) -> None:
+        self.start()
+
+        self.assertTrue(self.call("BuildOrderStartup_Unpause"))
+        self.assertEqual(len(self.confirmation_models), 1)
+        self.assertEqual(self.sim_rates, [])
+        self.assertEqual(self.objective_starts, [])
+
+        self.assertTrue(self.call("BuildOrderStartup_Cancel"))
+        self.assertEqual(len(self.selector_models), 2)
+        self.assertEqual(self.sim_rates, [])
+
+        self.call("BuildOrderStartup_Unpause")
+        self.assertTrue(self.call("BuildOrderStartup_ConfirmNoOrder"))
+        self.assertEqual(self.sim_rates, [8])
+        self.assertEqual(self.cycle_starts, 1)
+        self.assertEqual(self.objective_starts, [])
+        self.assertFalse(self.call("BuildOrderStartup_ConfirmNoOrder"))
+        self.assertEqual(self.sim_rates, [8])
+        self.assertEqual(self.cycle_starts, 1)
+
+    def test_missing_or_invalid_selection_returns_to_selector_without_resuming(self) -> None:
+        state = self.runtime.globals["_mod"]
+        state["selectedBuildOrderID"] = "english-missing"
+        self.assertTrue(self.start())
+        self.assertEqual(
+            self.selector_models[-1]["message"],
+            f"${MOD_NAMESPACE}:51",
+        )
+        self.assertEqual(state["selectedBuildOrderID"], "english-missing")
+
+        self.assertFalse(self.call("BuildOrderStartup_Unpause"))
+        self.assertEqual(self.sim_rates, [])
+        self.assertEqual(self.objective_starts, [])
+        self.assertEqual(self.selector_models[-1]["message"], f"${MOD_NAMESPACE}:51")
+
+        self.assertFalse(
+            self.call("BuildOrderStartup_Select", {"id": "not-in-selector"})
+        )
+        self.assertEqual(state["selectedBuildOrderID"], "english-missing")
+
+    def test_ui_creation_failure_uses_two_choice_escape_and_never_auto_resumes(self) -> None:
+        self.selector_result = False
+        self.start()
+        self.assertEqual(len(self.message_box_text), 1)
+        enabled = [
+            arguments
+            for arguments in self.message_box_buttons
+            if len(arguments) == 5 and arguments[4] is True
+        ]
+        self.assertEqual(
+            [arguments[0] for arguments in enabled], ["button-1", "button-2"]
+        )
+        self.assertEqual(self.sim_rates, [])
+        self.rule_adds[0]()
+        self.assertEqual(self.sim_rates, [0])
+
+        _, fallback_callback = self.message_box_callbacks[-1]
+        self.invoke(fallback_callback, "button-2")
+        self.assertEqual(self.sim_rates, [0])
+        self.assertEqual(self.objective_starts, [])
+        self.assertGreaterEqual(len(self.message_box_callbacks), 2)
+
+        _, fallback_callback = self.message_box_callbacks[-1]
+        self.invoke(fallback_callback, "button-1")
+        self.assertEqual(self.sim_rates, [0, 8])
+        self.assertEqual(self.cycle_starts, 1)
+        self.assertEqual(self.objective_starts, [])
+
+    def test_stop_is_idempotent_and_cancels_pending_pause_without_resuming(self) -> None:
+        self.start()
+        pause = self.runtime.globals["BuildOrderStartup_PauseNextTick"]
+
+        self.assertTrue(self.call("BuildOrderStartup_Stop"))
+        self.assertFalse(self.call("BuildOrderStartup_Stop"))
+        self.assertEqual(self.rule_removes.count(pause), 2)
+        self.assertEqual(self.ui_hides, 1)
+        self.assertEqual(self.sim_rates, [])
+        state = self.runtime.globals["_mod"]
+        self.assertFalse(state["startupStarted"])
+        self.assertFalse(state["startupAwaitingChoice"])
+        self.assertEqual(state["compatibleBuildOrderIDs"].array(), [])
+
+
 class BuildOrderStartupContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.startup = (
-            STARTUP_PATH.read_text(encoding="utf-8")
-            if STARTUP_PATH.exists()
-            else ""
-        )
+        cls.startup = STARTUP_PATH.read_text(encoding="utf-8")
         cls.main = MAIN_PATH.read_text(encoding="utf-8")
 
-    def assert_order(self, body: str, first: str, second: str) -> None:
-        self.assertLess(body.index(first), body.index(second))
-
-    def test_no_selection_opens_error_with_dynamic_choice(self) -> None:
-        start = function_body(self.startup, "BuildOrderStartup_Start")
-        self.assertIn("BuildOrderStartup_ShowNoSelectionError()", start)
-        self.assertNotIn("selectedBuildOrderID", start)
-        self.assertNotIn("BUILD_ORDER_CATALOG", start)
-        self.assertNotIn("BuildOrder_Start(", start)
-        self.assertNotIn("Mod_StartSimspeedCycle()", start)
-
-    def test_matching_build_starts_objectives_and_conditionally_starts_cycle(self) -> None:
-        selected = function_body(self.startup, "BuildOrderStartup_StartSelected")
-        self.assertIn("if _mod.buildOrderStarted then", selected)
-        self.assertIn("_mod.buildOrderStarted = true", selected)
-        self.assertIn("BuildOrder_Start(buildOrder, localPlayer)", selected)
-        self.assertRegex(
-            selected,
-            r"BuildOrder_Start\(buildOrder, localPlayer\)\s*"
-            r"if _mod\.simspeedEnabled then\s*"
-            r"Mod_StartSimspeedCycle\(\)\s*end",
-        )
-
-    def test_missing_catalog_and_civilization_mismatch_use_distinct_alerts(self) -> None:
-        selected = function_body(self.startup, "BuildOrderStartup_StartSelected")
-        self.assertIn(
-            "actualCiv ~= string.lower(buildOrder.civ)", selected
-        )
-        self.assertIn(
-            "BuildOrderStartup_ShowInvalidBuildError(buildOrder or { civ = \"unknown\" }, actualCiv)",
-            selected,
-        )
-
-        invalid = function_body(
-            self.startup, "BuildOrderStartup_ShowInvalidBuildError"
-        )
-        self.assertIn("buildOrder.civ", invalid)
-        self.assertIn("actualCiv", invalid)
-        self.assertIn(
-            '"Selected build order for " .. buildOrder.civ .. " but playing as " .. actualCiv',
-            invalid,
-        )
-        self.assertIn("BuildOrderStartup_ShowError(", invalid)
-
-        missing = function_body(
-            self.startup, "BuildOrderStartup_ShowMissingBuildError"
-        )
-        self.assertIn("BUILD_ORDER_STARTUP_MISSING_BUILD_TITLE", missing)
-
-    def test_error_modal_resets_buttons_and_offers_dynamic_choice(self) -> None:
-        show = function_body(self.startup, "BuildOrderStartup_ShowError")
-        self.assertIn("_mod.buildOrderDisabled = true", show)
-        self.assertIn("_mod.startupAlertOpen = true", show)
-        self.assertNotIn("Misc_SetSimRate(0)", show)
-        self.assertIn("UI_MessageBoxSetText(title, message)", show)
-        self.assertIn("BuildOrderStartup_ResetButtons()", show)
-        self.assertIn("BuildOrderStartup_CollectCompatible()", show)
-        self.assertRegex(
-            show,
-            r"UI_MessageBoxSetButton\(\s*DB_Button1,\s*"
-            r'"Continue Without Build Order",\s*'
-            r'"Resume the match without build-order objectives\.",\s*'
-            r'"",\s*true\s*\)',
-        )
-        self.assertRegex(
-            show,
-            r"UI_MessageBoxSetButton\(\s*DB_Button2,\s*"
-            r'"Choose Build Order",\s*'
-            r'"Select from build orders loaded for this civilization\.",\s*'
-            r'"",\s*#_mod\.compatibleBuildOrderIDs > 0\s*\)',
-        )
-        self.assertIn(
-            "UI_MessageBoxShow(DC_Default, BuildOrderStartup_HandleErrorChoice)",
-            show,
-        )
-
-        reset = function_body(self.startup, "BuildOrderStartup_ResetButtons")
-        for button in ("DB_Button1", "DB_Button2", "DB_Button3", "DB_Button4"):
-            self.assertRegex(
-                reset,
-                rf"UI_MessageBoxSetButton\(\s*{button},\s*\"\",\s*\"\",\s*\"\",\s*false\s*\)",
-            )
-        self.assertIn("Rule_Remove(BuildOrderStartup_PauseNextTick)", show)
-        self.assertIn("Rule_Add(BuildOrderStartup_PauseNextTick)", show)
-        self.assert_order(
-            show,
-            "Rule_Remove(BuildOrderStartup_PauseNextTick)",
-            "Rule_Add(BuildOrderStartup_PauseNextTick)",
-        )
-        self.assert_order(
-            show,
-            "UI_MessageBoxShow(",
-            "Rule_Add(BuildOrderStartup_PauseNextTick)",
-        )
-
-        pause = function_body(self.startup, "BuildOrderStartup_PauseNextTick")
-        self.assertIn("Rule_RemoveMe()", pause)
-        self.assertRegex(
-            pause,
-            r"Rule_RemoveMe\(\)\s*"
-            r"if _mod\.startupAlertOpen then\s*"
-            r"Misc_SetSimRate\(0\)\s*end",
-        )
-
-    def test_continue_without_order_is_idempotent_and_only_starts_enabled_cycle(self) -> None:
-        resume = function_body(
-            self.startup, "BuildOrderStartup_ContinueWithoutBuildOrder"
-        )
-        self.assertIn(
-            "if not _mod.startupAlertOpen then", resume
-        )
-        self.assertIn("_mod.startupAlertOpen = false", resume)
-        self.assertIn("Rule_Remove(BuildOrderStartup_PauseNextTick)", resume)
-        self.assertIn("Misc_SetSimRate(NORMAL_SIM_RATE)", resume)
-        self.assertRegex(
-            resume,
-            r"if _mod\.simspeedEnabled then\s*"
-            r"Mod_StartSimspeedCycle\(\)\s*end",
-        )
-        self.assertNotIn("BuildOrder_Start(", resume)
-        self.assert_order(
-            resume, "_mod.startupAlertOpen = false", "Misc_SetSimRate(NORMAL_SIM_RATE)"
-        )
-        self.assert_order(
-            resume,
-            "_mod.startupAlertOpen = false",
-            "Rule_Remove(BuildOrderStartup_PauseNextTick)",
-        )
-        self.assert_order(
-            resume,
-            "Rule_Remove(BuildOrderStartup_PauseNextTick)",
-            "Misc_SetSimRate(NORMAL_SIM_RATE)",
-        )
-
-        handler = function_body(self.startup, "BuildOrderStartup_HandleErrorChoice")
-        self.assertIn("if not _mod.startupAlertOpen then", handler)
-        self.assertIn("if button == DB_Button1 then", handler)
-        self.assertIn("BuildOrderStartup_ContinueWithoutBuildOrder()", handler)
-        self.assertIn("elseif button == DB_Button2", handler)
-        self.assertIn("BuildOrderStartup_ShowChooser()", handler)
-
-    def test_compatible_choices_filter_local_civ_and_sort_title_then_id(self) -> None:
-        collect = function_body(self.startup, "BuildOrderStartup_CollectCompatible")
-        compare = function_body(self.startup, "BuildOrderStartup_ChoiceComesBefore")
-
-        self.assertIn("Player_GetRaceName(Game_GetLocalPlayer())", collect)
-        self.assertIn("string.lower(buildOrder.civ) == actualCiv", collect)
-        self.assertIn("BuildOrderStartup_ChoiceComesBefore(id, existingID)", collect)
-        self.assertIn("string.lower(left.title)", compare)
-        self.assertIn("string.lower(right.title)", compare)
-        self.assertIn("return leftID < rightID", compare)
-
-    def test_chooser_configures_use_next_previous_and_cancel(self) -> None:
-        chooser = function_body(self.startup, "BuildOrderStartup_ShowChooser")
-
-        self.assertIn("BuildOrderStartup_ResetButtons()", chooser)
-        self.assertIn('local message = "[" .. _mod.buildOrderChoiceIndex .. "/" .. count .. "] " .. buildOrder.title', chooser)
-        self.assertIn('message = message .. "\\nCivilization: " .. buildOrder.civ', chooser)
-        self.assertIn('if type(buildOrder.source) == "string" and buildOrder.source ~= "" then', chooser)
-        self.assertIn('message = message .. "\\nSource: " .. buildOrder.source', chooser)
-        for button, label in (
-            ("DB_Button1", "Use This Build Order"),
-            ("DB_Button2", "Next"),
-            ("DB_Button3", "Previous"),
-            ("DB_Button4", "Cancel"),
+    def test_startup_registers_only_local_ui_callbacks_and_no_network_events(self) -> None:
+        callbacks = function_body(self.startup, "BuildOrderStartup_Callbacks")
+        for name in (
+            "BuildOrderStartup_Select",
+            "BuildOrderStartup_Edit",
+            "BuildOrderStartup_Create",
+            "BuildOrderStartup_Unpause",
+            "BuildOrderStartup_Cancel",
+            "BuildOrderStartup_ConfirmNoOrder",
         ):
-            self.assertRegex(
-                chooser,
-                rf'UI_MessageBoxSetButton\(\s*{button},\s*"{label}"',
-            )
+            self.assertIn(name, callbacks)
+        self.assertIn("Game_GetLocalPlayer()", self.startup)
+        self.assertNotRegex(self.startup, r"\b(?:Event|Network|Net)_")
 
-    def test_navigation_wraps_and_selection_starts_once(self) -> None:
-        handler = function_body(
-            self.startup, "BuildOrderStartup_HandleChooserChoice"
-        )
-
-        self.assertIn("if not _mod.startupAlertOpen then", handler)
-        self.assertIn("BuildOrderStartup_WrapChoiceIndex", handler)
-        self.assertIn("_mod.selectedBuildOrderID = selectedID", handler)
-        self.assertIn("BuildOrderStartup_StartSelected(buildOrder)", handler)
-        self.assertIn("BuildOrderStartup_ShowError(", handler)
-
-        wrap = function_body(self.startup, "BuildOrderStartup_WrapChoiceIndex")
-        self.assertIn("if index < 1 then", wrap)
-        self.assertIn("return count", wrap)
-        self.assertIn("if index > count then", wrap)
-        self.assertIn("return 1", wrap)
-
-    def test_startup_only_mutates_selection_when_chooser_is_confirmed(self) -> None:
-        assignments = re.findall(r"_mod\.selectedBuildOrderID\s*=", self.startup)
-        self.assertEqual(len(assignments), 1)
-        chooser = function_body(
-            self.startup, "BuildOrderStartup_HandleChooserChoice"
-        )
-        self.assertIn("_mod.selectedBuildOrderID = selectedID", chooser)
-        self.assertNotRegex(self.startup, r"_mod\.simspeedEnabled\s*=")
-        self.assertNotIn("Core_OnGameOver", self.startup)
-
-    def test_main_delegates_start_and_cleans_each_system_once(self) -> None:
-        startup_import = 'import("build_orders/startup.scar")'
-        self.assertIn(startup_import, self.main)
-        self.assertLess(
-            self.main.index("Rule_AddOneShot(nextRule, phaseDuration)"),
-            self.main.index(startup_import),
-        )
-
+    def test_main_delegates_load_and_cleans_every_system_once(self) -> None:
         start = function_body(self.main, "Mod_Start")
         self.assertEqual(
             start.count("BuildOrderDatastore_Load(BuildOrderStartup_Start)"), 1
         )
-        self.assertNotIn("BuildOrderStartup_Start()", start)
-        self.assertNotIn("Mod_StartSimspeedCycle()", start)
 
         game_over = function_body(self.main, "Mod_OnGameOver")
         for call in (
             "BuildOrderDatastore_Stop()",
             "BuildOrderStartup_Stop()",
+            "BuildOrderEditor_Stop()",
+            "BuildOrderEditorUI_Stop()",
             "BuildOrder_Stop()",
             "Mod_StopSimspeedCycle()",
         ):
-            self.assertEqual(game_over.count(call), 1)
-        self.assert_order(
-            game_over, "BuildOrderDatastore_Stop()", "BuildOrderStartup_Stop()"
-        )
-        self.assert_order(game_over, "BuildOrderStartup_Stop()", "BuildOrder_Stop()")
-        self.assert_order(game_over, "BuildOrder_Stop()", "Mod_StopSimspeedCycle()")
+            with self.subTest(call=call):
+                self.assertEqual(game_over.count(call), 1)
 
-        stop = function_body(self.startup, "BuildOrderStartup_Stop")
-        self.assertIn("_mod.startupAlertOpen = false", stop)
-        self.assertIn("_mod.compatibleBuildOrderIDs = {}", stop)
-        self.assertIn("Rule_Remove(BuildOrderStartup_PauseNextTick)", stop)
-        self.assertNotIn("Mod_StartSimspeedCycle", stop)
-        self.assertNotIn("BuildOrder_Start", stop)
-
-    def test_startup_alert_localization_rows_are_stable_and_referenced(self) -> None:
+    def test_startup_visible_strings_use_stable_fully_qualified_localization(self) -> None:
         rows = csv_rows(LOCDB_PATH)
-        for identifier in range(25, 31):
-            self.assertIn(identifier, rows)
-        self.assertEqual(rows[25][-1], "No Training Systems Enabled")
-        self.assertEqual(
-            rows[26][-1],
-            "The mod is not intended to be played with both off.",
-        )
-        self.assertEqual(rows[27][-1], "Build Order Disabled")
-        self.assertEqual(rows[28][-1], "Selected build order is unavailable.")
-        self.assertEqual(rows[29][-1], "Choose a Build Order")
-        self.assertEqual(
-            rows[30][-1],
-            "Choose a build order loaded from the player datastore.",
-        )
-        for identifier in range(25, 31):
-            self.assertIn(
-                f'$dfb5645698a84afb91cf7a2dfb0f4a4e:{identifier}', self.startup
-            )
+        expected = {
+            29: "Choose a Build Order",
+            31: "No build order",
+            44: "Continue without a build order?",
+            45: "No build-order objectives will be started.",
+            47: "Build Order UI Unavailable",
+            48: "The build-order screen could not be opened. Continue without build-order objectives?",
+            49: "Continue Without Build Order",
+            50: "Stay Paused",
+            51: "The selected build order is no longer available. Choose another option.",
+            52: "The selected build order is not compatible with the current civilization.",
+        }
+        for loc_id, text in expected.items():
+            with self.subTest(loc_id=loc_id):
+                self.assertIn(loc_id, rows)
+                self.assertEqual(rows[loc_id][6], text)
+                self.assertIn(f'"${MOD_NAMESPACE}:{loc_id}"', self.startup)
 
 
 if __name__ == "__main__":

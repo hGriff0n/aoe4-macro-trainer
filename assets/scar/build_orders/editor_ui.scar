@@ -69,12 +69,12 @@ BUILD_ORDER_EDITOR_UI_XAML = [[
 							        Margin="5,0,0,0"
 							        Command="{Binding [collapse_command]}"
 							        CommandParameter="{Binding}"
-							        Content="Collapse" />
+							        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:53" />
 							<Button DockPanel.Dock="Right"
 							        Margin="5,0,0,0"
 							        Command="{Binding [expand_command]}"
 							        CommandParameter="{Binding}"
-							        Content="Expand" />
+							        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:54" />
 							<TextBlock VerticalAlignment="Center"
 							           FontWeight="Bold"
 							           Text="{Binding [label]}" />
@@ -99,7 +99,7 @@ BUILD_ORDER_EDITOR_UI_XAML = [[
 					        HorizontalAlignment="Left"
 					        Command="{Binding [delete_command]}"
 					        CommandParameter="{Binding}"
-					        Content="Delete item" />
+					        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:55" />
 				</StackPanel>
 			</Border>
 		</DataTemplate>
@@ -118,7 +118,7 @@ BUILD_ORDER_EDITOR_UI_XAML = [[
 					        Visibility="{Binding [add_visibility]}"
 					        Command="{Binding [add_command]}"
 					        CommandParameter="{Binding}"
-					        Content="Add" />
+					        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:56" />
 					<TextBox Visibility="{Binding [text_visibility]}"
 					         Text="{Binding [display_value], Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
 						<TextBox.Triggers>
@@ -132,7 +132,7 @@ BUILD_ORDER_EDITOR_UI_XAML = [[
 					          IsChecked="{Binding [value], Mode=TwoWay}"
 					          Command="{Binding [field_change_command]}"
 					          CommandParameter="{Binding}"
-					          Content="Enabled" />
+					          Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:57" />
 					<ComboBox Visibility="{Binding [enum_visibility]}"
 					          ItemsSource="{Binding [options]}"
 					          ItemTemplate="{StaticResource BuildOrderLiveOptionTemplate}"
@@ -158,7 +158,7 @@ BUILD_ORDER_EDITOR_UI_XAML = [[
 					<TextBlock Margin="0,3,0,0"
 					           Foreground="#FFB8B8B8"
 					           Visibility="{Binding [empty_options_visibility]}"
-					           Text="No compatible options discovered." />
+					           Text="$dfb5645698a84afb91cf7a2dfb0f4a4e:58" />
 					<ContentControl Visibility="{Binding [object_visibility]}"
 					                Content="{Binding}"
 					                ContentTemplate="{StaticResource BuildOrderObjectCardTemplate}" />
@@ -169,7 +169,7 @@ BUILD_ORDER_EDITOR_UI_XAML = [[
 						        HorizontalAlignment="Left"
 						        Command="{Binding [add_command]}"
 						        CommandParameter="{Binding}"
-						        Content="Add item" />
+						        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:59" />
 					</StackPanel>
 					<ItemsControl ItemsSource="{Binding [errors]}"
 					              ItemTemplate="{StaticResource BuildOrderErrorTemplate}" />
@@ -188,10 +188,10 @@ BUILD_ORDER_EDITOR_UI_XAML = [[
 					           Text="{Binding [label]}" />
 					<TextBlock Margin="0,0,0,4"
 					           Foreground="#FFC8C8C8"
-					           Text="Each amount is a positive integer (optional)." />
+					           Text="$dfb5645698a84afb91cf7a2dfb0f4a4e:61" />
 					<UniformGrid Columns="4">
 						<StackPanel Margin="2">
-							<Label Content="Food" />
+							<Label Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:62" />
 							<TextBox Text="{Binding [food][display_value], Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
 								<TextBox.Triggers>
 									<EventTrigger RoutedEvent="UIElement.LostKeyboardFocus">
@@ -202,7 +202,7 @@ BUILD_ORDER_EDITOR_UI_XAML = [[
 							</TextBox>
 						</StackPanel>
 						<StackPanel Margin="2">
-							<Label Content="Wood" />
+							<Label Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:63" />
 							<TextBox Text="{Binding [wood][display_value], Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
 								<TextBox.Triggers>
 									<EventTrigger RoutedEvent="UIElement.LostKeyboardFocus">
@@ -213,7 +213,7 @@ BUILD_ORDER_EDITOR_UI_XAML = [[
 							</TextBox>
 						</StackPanel>
 						<StackPanel Margin="2">
-							<Label Content="Gold" />
+							<Label Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:64" />
 							<TextBox Text="{Binding [gold][display_value], Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
 								<TextBox.Triggers>
 									<EventTrigger RoutedEvent="UIElement.LostKeyboardFocus">
@@ -224,7 +224,7 @@ BUILD_ORDER_EDITOR_UI_XAML = [[
 							</TextBox>
 						</StackPanel>
 						<StackPanel Margin="2">
-							<Label Content="Stone" />
+							<Label Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:65" />
 							<TextBox Text="{Binding [stone][display_value], Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
 								<TextBox.Triggers>
 									<EventTrigger RoutedEvent="UIElement.LostKeyboardFocus">
@@ -237,7 +237,7 @@ BUILD_ORDER_EDITOR_UI_XAML = [[
 					</UniformGrid>
 					<StackPanel Margin="0,7,0,0"
 					            Visibility="{Binding [no_collect_visibility]}">
-						<TextBlock FontWeight="Bold" Text="Do not collect" />
+						<TextBlock FontWeight="Bold" Text="$dfb5645698a84afb91cf7a2dfb0f4a4e:66" />
 						<ItemsControl ItemsSource="{Binding [no_collect][options]}">
 							<ItemsControl.ItemTemplate>
 								<DataTemplate>
@@ -282,7 +282,7 @@ BUILD_ORDER_EDITOR_UI_XAML = [[
 								                             CommandParameter="{Binding}" />
 							</EventTrigger>
 						</Border.Triggers>
-						<TextBlock Text="Drag check" />
+						<TextBlock Text="$dfb5645698a84afb91cf7a2dfb0f4a4e:67" />
 					</Border>
 					<Expander IsExpanded="{Binding [expanded], Mode=OneWay}">
 					<Expander.Header>
@@ -291,29 +291,29 @@ BUILD_ORDER_EDITOR_UI_XAML = [[
 							        Margin="5,0,0,0"
 							        Command="{Binding [delete_command]}"
 							        CommandParameter="{Binding}"
-							        Content="Delete check" />
+							        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:68" />
 							<Button DockPanel.Dock="Right"
 							        Margin="5,0,0,0"
 							        Command="{Binding [move_down_command]}"
 							        CommandParameter="{Binding}"
-							        Content="Move down"
+							        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:69"
 							        IsEnabled="{Binding [can_move_down]}" />
 							<Button DockPanel.Dock="Right"
 							        Margin="5,0,0,0"
 							        Command="{Binding [move_up_command]}"
 							        CommandParameter="{Binding}"
-							        Content="Move up"
+							        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:70"
 							        IsEnabled="{Binding [can_move_up]}" />
 							<Button DockPanel.Dock="Right"
 							        Margin="5,0,0,0"
 							        Command="{Binding [collapse_command]}"
 							        CommandParameter="{Binding}"
-							        Content="Collapse" />
+							        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:53" />
 							<Button DockPanel.Dock="Right"
 							        Margin="5,0,0,0"
 							        Command="{Binding [expand_command]}"
 							        CommandParameter="{Binding}"
-							        Content="Expand" />
+							        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:54" />
 							<TextBlock VerticalAlignment="Center"
 							           FontSize="15"
 							           FontWeight="Bold"
@@ -362,7 +362,7 @@ BUILD_ORDER_EDITOR_UI_XAML = [[
 								                             CommandParameter="{Binding}" />
 							</EventTrigger>
 						</Border.Triggers>
-						<TextBlock Text="Drag step" />
+						<TextBlock Text="$dfb5645698a84afb91cf7a2dfb0f4a4e:71" />
 					</Border>
 					<Expander IsExpanded="{Binding [expanded], Mode=OneWay}">
 					<Expander.Header>
@@ -371,29 +371,29 @@ BUILD_ORDER_EDITOR_UI_XAML = [[
 							        Margin="5,0,0,0"
 							        Command="{Binding [delete_command]}"
 							        CommandParameter="{Binding}"
-							        Content="Delete step" />
+							        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:72" />
 							<Button DockPanel.Dock="Right"
 							        Margin="5,0,0,0"
 							        Command="{Binding [move_down_command]}"
 							        CommandParameter="{Binding}"
-							        Content="Move down"
+							        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:69"
 							        IsEnabled="{Binding [can_move_down]}" />
 							<Button DockPanel.Dock="Right"
 							        Margin="5,0,0,0"
 							        Command="{Binding [move_up_command]}"
 							        CommandParameter="{Binding}"
-							        Content="Move up"
+							        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:70"
 							        IsEnabled="{Binding [can_move_up]}" />
 							<Button DockPanel.Dock="Right"
 							        Margin="5,0,0,0"
 							        Command="{Binding [collapse_command]}"
 							        CommandParameter="{Binding}"
-							        Content="Collapse" />
+							        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:53" />
 							<Button DockPanel.Dock="Right"
 							        Margin="5,0,0,0"
 							        Command="{Binding [expand_command]}"
 							        CommandParameter="{Binding}"
-							        Content="Expand" />
+							        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:54" />
 							<StackPanel>
 								<TextBlock FontSize="17"
 								           FontWeight="Bold"
@@ -409,11 +409,23 @@ BUILD_ORDER_EDITOR_UI_XAML = [[
 						              ItemTemplate="{StaticResource BuildOrderFieldTemplate}" />
 						<ItemsControl ItemsSource="{Binding [checks]}"
 						              ItemTemplate="{StaticResource BuildOrderCheckCardTemplate}" />
-						<Button Margin="0,7,0,0"
-						        HorizontalAlignment="Left"
-						        Command="{Binding [add_command]}"
-						        CommandParameter="{Binding [checks_path]}"
-						        Content="Add check" />
+						<StackPanel x:Name="BuildOrderCheckKindChooser"
+						            Margin="0,7,0,0"
+						            DataContext="{Binding [check_add]}">
+							<TextBlock FontWeight="Bold"
+							           Text="$dfb5645698a84afb91cf7a2dfb0f4a4e:43" />
+							<ComboBox x:Name="BuildOrderCheckKindOptions"
+							          Margin="0,3,0,0"
+							          ItemsSource="{Binding [options]}"
+							          ItemTemplate="{StaticResource BuildOrderLiveOptionTemplate}"
+							          SelectedItem="{Binding [selected_option], Mode=TwoWay}" />
+							<Button x:Name="BuildOrderAddCheck"
+							        Margin="0,4,0,0"
+							        HorizontalAlignment="Left"
+							        Command="{Binding [add_check_command]}"
+							        CommandParameter="{Binding}"
+							        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:42" />
+						</StackPanel>
 						<ItemsControl ItemsSource="{Binding [errors]}"
 						              ItemTemplate="{StaticResource BuildOrderErrorTemplate}" />
 					</StackPanel>
@@ -432,14 +444,18 @@ BUILD_ORDER_EDITOR_UI_XAML = [[
 					        Margin="5,0,0,0"
 					        Command="{Binding [edit_command]}"
 					        CommandParameter="{Binding}"
-					        Content="Edit" />
+					        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:34"
+					        IsEnabled="{Binding [edit_enabled]}" />
 					<Button DockPanel.Dock="Right"
 					        Margin="5,0,0,0"
 					        Command="{Binding [select_command]}"
 					        CommandParameter="{Binding}"
-					        Content="Select" />
+					        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:32" />
 					<StackPanel>
 						<TextBlock FontWeight="Bold" Text="{Binding [label]}" />
+						<TextBlock Foreground="#FF91D18B"
+						           Visibility="{Binding [selected_visibility]}"
+						           Text="$dfb5645698a84afb91cf7a2dfb0f4a4e:33" />
 						<TextBlock FontSize="11"
 						           Foreground="#FFC8C8C8"
 						           Text="{Binding [id_fallback]}" />
@@ -458,17 +474,18 @@ BUILD_ORDER_EDITOR_UI_XAML = [[
 			      Visibility="{Binding [selector_visibility]}">
 				<Grid.RowDefinitions>
 					<RowDefinition Height="Auto" />
+					<RowDefinition Height="Auto" />
 					<RowDefinition Height="*" />
 				</Grid.RowDefinitions>
 				<DockPanel Grid.Row="0" Margin="0,0,0,8">
 					<Button DockPanel.Dock="Right"
 					        Margin="5,0,0,0"
 					        Command="{Binding [commands][unpause]}"
-					        Content="Continue" />
+					        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:36" />
 					<Button DockPanel.Dock="Right"
 					        Margin="5,0,0,0"
 					        Command="{Binding [commands][create]}"
-					        Content="Create" />
+					        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:35" />
 					<DockPanel>
 						<Image Width="34"
 						       Height="34"
@@ -478,12 +495,18 @@ BUILD_ORDER_EDITOR_UI_XAML = [[
 						<StackPanel>
 						<TextBlock FontSize="22"
 						           FontWeight="Bold"
-						           Text="Choose a build order" />
+						           Text="$dfb5645698a84afb91cf7a2dfb0f4a4e:29" />
 						<TextBlock Text="{Binding [current_civ]}" />
 						</StackPanel>
 					</DockPanel>
 				</DockPanel>
-				<ListView Grid.Row="1"
+				<TextBlock Grid.Row="1"
+				           Margin="0,0,0,8"
+				           Foreground="#FFFFB566"
+				           Visibility="{Binding [selector_message_visibility]}"
+				           Text="{Binding [selector_message]}"
+				           TextWrapping="Wrap" />
+				<ListView Grid.Row="2"
 				          ItemsSource="{Binding [selector_options]}"
 				          ItemTemplate="{StaticResource BuildOrderSelectorRowTemplate}"
 				          ScrollViewer.VerticalScrollBarVisibility="Auto" />
@@ -514,14 +537,14 @@ BUILD_ORDER_EDITOR_UI_XAML = [[
 						            Orientation="Horizontal">
 							<Button Margin="5,0,0,0"
 							        Command="{Binding [commands][save]}"
-							        Content="Save"
+							        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:38"
 							        IsEnabled="{Binding [save_enabled]}" />
 							<Button Margin="5,0,0,0"
 							        Command="{Binding [commands][cancel]}"
-							        Content="Cancel" />
+							        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:39" />
 							<Button Margin="5,0,0,0"
 							        Command="{Binding [commands][copy]}"
-							        Content="Create copy" />
+							        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:40" />
 						</StackPanel>
 						<DockPanel DockPanel.Dock="Left" Margin="0,0,10,0">
 							<Image Width="42"
@@ -530,7 +553,7 @@ BUILD_ORDER_EDITOR_UI_XAML = [[
 							       Source="{Binding DataContext.LocalPlayer.RaceIconSecondary, RelativeSource={RelativeSource AncestorType={x:Type pages:CardinalHUDPage}}}"
 							       Stretch="Uniform" />
 							<StackPanel>
-								<TextBlock Foreground="#FFC8C8C8" Text="Current civilization" />
+								<TextBlock Foreground="#FFC8C8C8" Text="$dfb5645698a84afb91cf7a2dfb0f4a4e:37" />
 								<TextBlock x:Name="BuildOrderCurrentCivilization"
 								           FontSize="17"
 								           FontWeight="Bold"
@@ -553,7 +576,7 @@ BUILD_ORDER_EDITOR_UI_XAML = [[
 						        HorizontalAlignment="Left"
 						        Command="{Binding [commands][add]}"
 						        CommandParameter="steps"
-						        Content="Add step" />
+						        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:41" />
 						<ItemsControl ItemsSource="{Binding [validation_messages]}"
 						              ItemTemplate="{StaticResource BuildOrderErrorTemplate}" />
 					</StackPanel>
@@ -565,16 +588,16 @@ BUILD_ORDER_EDITOR_UI_XAML = [[
 				<StackPanel>
 					<TextBlock FontSize="22"
 					           FontWeight="Bold"
-					           Text="Continue without a build order?" />
+					           Text="$dfb5645698a84afb91cf7a2dfb0f4a4e:44" />
 					<TextBlock Margin="0,8,0,12"
 					           Text="{Binding [confirmation_message]}"
 					           TextWrapping="Wrap" />
 					<StackPanel Orientation="Horizontal">
 						<Button Margin="0,0,7,0"
 						        Command="{Binding [commands][confirm_unpause]}"
-						        Content="Continue without one" />
+						        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:46" />
 						<Button Command="{Binding [commands][cancel]}"
-						        Content="Cancel" />
+						        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:39" />
 					</StackPanel>
 				</StackPanel>
 			</Grid>
@@ -1263,6 +1286,7 @@ function BuildOrderEditorUI_CreateCommands()
 		confirm_unpause = UI_CreateCommand(BuildOrderEditorUI_CommandName("confirm_unpause")),
 		field_change = UI_CreateCommand(BuildOrderEditorUI_CommandName("field_change")),
 		add = UI_CreateCommand(BuildOrderEditorUI_CommandName("add")),
+		add_check = UI_CreateCommand(BuildOrderEditorUI_CommandName("add_check")),
 		delete = UI_CreateCommand(BuildOrderEditorUI_CommandName("delete")),
 		expand = UI_CreateCommand(BuildOrderEditorUI_CommandName("expand")),
 		collapse = UI_CreateCommand(BuildOrderEditorUI_CommandName("collapse")),
@@ -1284,13 +1308,37 @@ function BuildOrderEditorUI_SelectorOptions(model, commands)
 		if type(order) == "table" then
 			local id = order.id or ""
 			local label = order.label or order.title or id
+			local idFallback = order.id_fallback
+			if type(idFallback) ~= "string" then
+				idFallback = id
+			end
 			table.insert(options, {
 				id = id,
 				value = id,
 				label = label,
-				id_fallback = id,
+				id_fallback = idFallback,
+				selected = order.selected == true,
+				selected_visibility = BuildOrderEditorUI_Visibility(order.selected == true),
+				edit_enabled = order.editable ~= false,
 				select_command = commands.select,
 				edit_command = commands.edit,
+			})
+		end
+	end
+	return options
+end
+
+function BuildOrderEditorUI_CheckKindOptions()
+	local options = {}
+	for _, kind in ipairs(BUILD_ORDER_EDITOR_CHECK_ORDER or {}) do
+		local schema = BUILD_ORDER_EDITOR_CHECK_SCHEMAS[kind]
+		if type(schema) == "table" then
+			table.insert(options, {
+				id = kind,
+				value = kind,
+				label = schema.label or kind,
+				id_fallback = kind,
+				icon = "",
 			})
 		end
 	end
@@ -1325,6 +1373,13 @@ function BuildOrderEditorUI_RegisterCards(steps, commands)
 		step.drag_commit_command = commands.drag_commit
 		step.move_up_command = commands.move_up
 		step.move_down_command = commands.move_down
+		local checkKindOptions = BuildOrderEditorUI_CheckKindOptions()
+		step.check_add = {
+			path = step.checks_path,
+			options = checkKindOptions,
+			selected_option = checkKindOptions[1],
+			add_check_command = commands.add_check,
+		}
 		paths[step.path] = {
 			parent_path = "steps",
 			index = stepIndex,
@@ -1366,6 +1421,10 @@ function BuildOrderEditorUI_BuildViewModel(screen, model)
 		commands = commands,
 		current_civ = model.current_civ or model.civ or "",
 		selector_options = {},
+		selector_message = model.message or "",
+		selector_message_visibility = BuildOrderEditorUI_Visibility(
+			type(model.message) == "string" and model.message ~= ""
+		),
 		steps = {},
 		validation_messages = {},
 		confirmation_message = model.message or "",
