@@ -2,6 +2,8 @@ import re
 import unittest
 from pathlib import Path
 
+from tests.scar_runtime import ScarRuntime
+
 
 ROOT = Path(__file__).resolve().parents[1]
 MODEL_PATH = ROOT / "assets" / "scar" / "build_orders" / "editor_model.scar"
@@ -176,7 +178,8 @@ class BuildOrderEditorModelContractTests(unittest.TestCase):
         self.assertIn("local thresholds = {}", vils)
         self.assertIn("if next(thresholds) ~= nil then", vils)
         self.assertIn("table.insert(checks,", vils)
-        self.assertIn("for _, resource in ipairs(payload.no_collect or {}) do", vils)
+        self.assertIn("if noCollect == nil then", vils)
+        self.assertIn("for _, resource in ipairs(noCollect) do", vils)
         self.assertIn("no_collect = true", vils)
 
         resources = function_body(self.model, "BuildOrderEditor_ResourcesToRuntime")
@@ -250,8 +253,9 @@ class BuildOrderEditorModelContractTests(unittest.TestCase):
             check,
         )
         self.assertIn('path .. ".payload.no_collect"', check)
-        self.assertIn('if type(payload.no_collect) == "table" then', check)
-        self.assertIn("noCollectCount = #payload.no_collect", check)
+        self.assertIn("if noCollect == nil then", check)
+        self.assertIn('if type(noCollect) == "table" then', check)
+        self.assertIn("noCollectCount = #noCollect", check)
         self.assertNotIn("#(payload.no_collect or {})", check)
 
     def test_validation_checks_required_lists_and_live_semantic_kinds(self) -> None:
@@ -301,6 +305,322 @@ class BuildOrderEditorModelContractTests(unittest.TestCase):
         self.assertIn('return "Age up: "', title)
         self.assertIn('return "Assign "', title)
         self.assertNotIn("author", title.lower())
+
+
+class BuildOrderEditorModelBehaviorTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.runtime = ScarRuntime(MODEL_PATH.read_text(encoding="utf-8"))
+
+    def valid_draft(
+        self, checks: list[dict[str, object]], title: str = "Plan"
+    ) -> dict[str, object]:
+        return {
+            "original_id": None,
+            "civ": "english",
+            "title": title,
+            "steps": [{"title": "Opening", "checks": checks}],
+        }
+
+    def test_draft_lifecycle_deep_copies_and_copy_suffixes_are_collision_free(self) -> None:
+        blank = self.runtime.call("BuildOrderEditor_NewDraft", "english")
+        self.assertEqual(blank["civ"], "english")
+        self.assertEqual(blank["title"], "")
+        self.assertEqual(blank["steps"].array(), [])
+        self.assertIsNone(blank["original_id"])
+
+        source = self.runtime.table(
+            {
+                "id": "english-plan",
+                "civ": "english",
+                "title": "Plan",
+                "steps": [
+                    {
+                        "title": "Opening",
+                        "checks": [
+                            {
+                                "id": "english-plan:1:hints:1",
+                                "kind": "hints",
+                                "title": "[HINT] Scout",
+                                "optional": True,
+                                "payload": {"text": "Scout"},
+                            }
+                        ],
+                    }
+                ],
+            }
+        )
+        edit = self.runtime.call("BuildOrderEditor_EditDraft", source)
+        self.assertEqual(edit["original_id"], "english-plan")
+        self.assertEqual(edit["original_civ"], "english")
+        self.assertEqual(edit["original_title"], "Plan")
+        edit["steps"][1]["title"] = "Changed"
+        edit["steps"][1]["checks"][1]["payload"]["text"] = "Changed hint"
+        self.assertEqual(source["steps"][1]["title"], "Opening")
+        self.assertEqual(source["steps"][1]["checks"][1]["payload"]["text"], "Scout")
+
+        catalog = {
+            "english-plan-copy": {},
+            "english-plan-copy-2": {},
+        }
+        copied = self.runtime.call("BuildOrderEditor_CopyDraft", source, catalog)
+        self.assertIsNone(copied["original_id"])
+        self.assertIsNone(copied["original_civ"])
+        self.assertIsNone(copied["original_title"])
+        self.assertEqual(copied["title"], "Plan (copy 3)")
+
+    def test_alternatives_and_unit_families_convert_to_canonical_runtime_payloads(self) -> None:
+        one = self.runtime.call(
+            "BuildOrderEditor_SetAlternatives",
+            {},
+            ["building_barracks_eng"],
+        )
+        self.assertEqual(one["id"], "building_barracks_eng")
+        self.assertIsNone(one["oneof"])
+
+        many = self.runtime.call(
+            "BuildOrderEditor_SetAlternatives",
+            {},
+            ["building_barracks_eng", "building_archery_range_eng"],
+        )
+        self.assertIsNone(many["id"])
+        self.assertEqual(
+            many["oneof"].array(),
+            ["building_barracks_eng", "building_archery_range_eng"],
+        )
+
+        draft = self.valid_draft(
+            [
+                {
+                    "kind": "built",
+                    "optional": False,
+                    "payload": {
+                        "alternatives": ["building_barracks_eng"],
+                        "count": 1,
+                    },
+                },
+                {
+                    "kind": "age_up",
+                    "optional": False,
+                    "payload": {
+                        "alternatives": [
+                            "building_landmark_age2_eng",
+                            "building_town_center_eng",
+                        ]
+                    },
+                },
+                {
+                    "kind": "units",
+                    "optional": False,
+                    "payload": {
+                        "family": {
+                            "label": "Spearman",
+                            "ids": [
+                                "unit_spearman_1_eng",
+                                "unit_spearman_2_eng",
+                            ],
+                        },
+                        "count": 2,
+                    },
+                },
+            ],
+            title="Conversion",
+        )
+        new_id, order = self.runtime.call("BuildOrderEditor_ToRuntime", draft)
+        self.assertEqual(new_id, "english-conversion")
+        checks = order["steps"][1]["checks"].array()
+        self.assertEqual(checks[0]["payload"]["id"], "building_barracks_eng")
+        self.assertIsNone(checks[0]["payload"]["oneof"])
+        self.assertEqual(
+            checks[1]["payload"]["oneof"].array(),
+            ["building_landmark_age2_eng", "building_town_center_eng"],
+        )
+        self.assertIsNone(checks[1]["payload"]["id"])
+        self.assertEqual(
+            checks[2]["payload"]["ids"].array(),
+            ["unit_spearman_1_eng", "unit_spearman_2_eng"],
+        )
+        self.assertIsNone(checks[2]["payload"]["id"])
+        self.assertEqual(
+            [check["id"] for check in checks],
+            [
+                "english-conversion:1:built:1",
+                "english-conversion:1:age_up:1",
+                "english-conversion:1:units:1",
+            ],
+        )
+
+    def test_vils_and_resources_expand_in_card_and_resource_order(self) -> None:
+        draft = self.valid_draft(
+            [
+                {
+                    "kind": "vils",
+                    "optional": False,
+                    "payload": {
+                        "food": 7,
+                        "wood": 3,
+                        "no_collect": ["gold", "stone"],
+                    },
+                },
+                {
+                    "kind": "resources",
+                    "optional": False,
+                    "payload": {"food": 100, "stone": 200},
+                },
+            ],
+            title="Economy",
+        )
+        _, order = self.runtime.call("BuildOrderEditor_ToRuntime", draft)
+        checks = order["steps"][1]["checks"].array()
+        self.assertEqual(
+            [check["kind"] for check in checks],
+            ["vils", "vils", "vils", "resources", "resources"],
+        )
+        self.assertEqual(checks[0]["payload"]["food"], 7)
+        self.assertEqual(checks[0]["payload"]["wood"], 3)
+        self.assertEqual(
+            [(check["payload"]["resource"], check["payload"]["no_collect"]) for check in checks[1:3]],
+            [("gold", True), ("stone", True)],
+        )
+        self.assertEqual(
+            [(check["payload"]["resource"], check["payload"]["count"]) for check in checks[3:]],
+            [("food", 100), ("stone", 200)],
+        )
+
+    def test_add_delete_and_reorder_recompute_entering_ages(self) -> None:
+        normal_step = lambda title: {
+            "title": title,
+            "checks": [{"kind": "hints", "optional": True, "payload": {"text": title}}],
+        }
+        age_step = {
+            "title": "Age",
+            "checks": [
+                {
+                    "kind": "age_up",
+                    "optional": False,
+                    "payload": {"alternatives": ["landmark"]},
+                }
+            ],
+        }
+        draft = self.runtime.table(
+            {
+                "civ": "english",
+                "title": "Ages",
+                "steps": [normal_step("One"), normal_step("Two")],
+            }
+        )
+        self.runtime.call("BuildOrderEditor_InferAges", draft)
+        self.assertEqual([step["inferred_age"] for step in draft["steps"].array()], [1, 1])
+
+        draft["steps"].append(self.runtime.table(age_step))
+        self.runtime.call("BuildOrderEditor_InferAges", draft)
+        self.assertEqual([step["inferred_age"] for step in draft["steps"].array()], [1, 1, 1])
+
+        self.assertTrue(self.runtime.call("BuildOrderEditor_Move", draft["steps"], 3, 1))
+        self.assertEqual([step["inferred_age"] for step in draft["steps"].array()], [1, 2, 2])
+
+        draft["steps"].delete_at(1)
+        self.runtime.call("BuildOrderEditor_InferAges", draft)
+        self.assertEqual([step["inferred_age"] for step in draft["steps"].array()], [1, 1])
+
+    def test_unchanged_unicode_title_preserves_original_id_but_rename_derives_one(self) -> None:
+        source = {
+            "id": "english-cafe",
+            "civ": "english",
+            "title": "Café",
+            "steps": [
+                {
+                    "title": "Opening",
+                    "checks": [
+                        {
+                            "id": "english-cafe:1:hints:1",
+                            "kind": "hints",
+                            "title": "[HINT] Scout",
+                            "optional": True,
+                            "payload": {"text": "Scout"},
+                        }
+                    ],
+                }
+            ],
+        }
+        draft = self.runtime.call("BuildOrderEditor_EditDraft", source)
+        unchanged_id, unchanged = self.runtime.call("BuildOrderEditor_ToRuntime", draft)
+        self.assertEqual(unchanged_id, "english-cafe")
+        self.assertEqual(unchanged["id"], "english-cafe")
+
+        draft["title"] = "Cafe Fast"
+        renamed_id, renamed = self.runtime.call("BuildOrderEditor_ToRuntime", draft)
+        self.assertEqual(renamed_id, "english-cafe-fast")
+        self.assertEqual(renamed["id"], "english-cafe-fast")
+
+        draft = self.runtime.call("BuildOrderEditor_EditDraft", source)
+        draft["civ"] = "french"
+        reciv_id, reciv = self.runtime.call("BuildOrderEditor_ToRuntime", draft)
+        self.assertEqual(reciv_id, "french-caf")
+        self.assertEqual(reciv["id"], "french-caf")
+
+    def test_false_no_collect_is_rejected_instead_of_defaulted(self) -> None:
+        draft = self.valid_draft(
+            [
+                {
+                    "kind": "vils",
+                    "optional": False,
+                    "payload": {"food": 7, "no_collect": False},
+                }
+            ]
+        )
+        errors = self.runtime.call("BuildOrderEditor_Validate", draft, None)
+        self.assertIn(
+            "steps.1.checks.1.payload.no_collect",
+            [error["path"] for error in errors.array()],
+        )
+        self.assertEqual(
+            self.runtime.call("BuildOrderEditor_ToRuntime", draft),
+            (None, None),
+        )
+
+    def test_hints_are_optional_and_optional_upgrade_title_is_explicit(self) -> None:
+        imported_hint = self.runtime.call(
+            "BuildOrderEditor_FromRuntimeCheck",
+            {
+                "kind": "hints",
+                "optional": False,
+                "payload": {"text": "Scout"},
+            },
+        )
+        self.assertTrue(imported_hint["optional"])
+
+        draft = self.valid_draft(
+            [
+                {
+                    "kind": "hints",
+                    "optional": False,
+                    "payload": {"text": "Scout"},
+                },
+                {
+                    "kind": "upgrades",
+                    "optional": True,
+                    "payload": {"id": "wheelbarrow", "queued": False},
+                },
+            ],
+            title="Guidance",
+        )
+        _, order = self.runtime.call("BuildOrderEditor_ToRuntime", draft)
+        hint, upgrade = order["steps"][1]["checks"].array()
+        self.assertTrue(hint["optional"])
+        self.assertEqual(hint["title"], "[HINT] Scout")
+        self.assertTrue(upgrade["optional"])
+        self.assertEqual(upgrade["title"], "[Optional] Research wheelbarrow")
+        queued_title = self.runtime.call(
+            "BuildOrderEditor_MakeCheckTitle",
+            {
+                "kind": "upgrades",
+                "optional": True,
+                "payload": {"id": "wheelbarrow", "queued": True},
+            },
+            {},
+        )
+        self.assertEqual(queued_title, "[Optional] Queue wheelbarrow for research")
 
 
 if __name__ == "__main__":

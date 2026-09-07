@@ -214,9 +214,13 @@ function BuildOrderEditor_FromRuntimeCheck(runtimeCheck)
 		payload.queued = payload.queued == true
 	end
 
+	local optional = runtimeCheck.optional == true
+	if runtimeCheck.kind == "hints" then
+		optional = true
+	end
 	return {
 		kind = runtimeCheck.kind,
-		optional = runtimeCheck.optional == true,
+		optional = optional,
 		payload = payload,
 	}
 end
@@ -292,6 +296,8 @@ function BuildOrderEditor_EditDraft(order)
 	end
 	local draft = BuildOrderEditor_DeepCopy(order)
 	draft.original_id = order.id
+	draft.original_civ = order.civ
+	draft.original_title = order.title
 	draft.id = nil
 	draft.steps = BuildOrderEditor_FromRuntimeSteps(draft.steps)
 	BuildOrderEditor_InferAges(draft)
@@ -301,6 +307,8 @@ end
 function BuildOrderEditor_CopyDraft(order, catalog)
 	local draft = BuildOrderEditor_EditDraft(order)
 	draft.original_id = nil
+	draft.original_civ = nil
+	draft.original_title = nil
 	local baseTitle = draft.title
 	local copyNumber = 1
 	while true do
@@ -557,10 +565,14 @@ function BuildOrderEditor_ValidateCheck(errors, path, check, discovery, civ)
 	local payload = check.payload
 	if check.kind == "vils" then
 		local selected = BuildOrderEditor_ValidateResourceFields(errors, path .. ".payload", payload)
-		BuildOrderEditor_ValidateNoCollect(errors, path .. ".payload.no_collect", payload.no_collect or {})
+		local noCollect = payload.no_collect
+		if noCollect == nil then
+			noCollect = {}
+		end
+		BuildOrderEditor_ValidateNoCollect(errors, path .. ".payload.no_collect", noCollect)
 		local noCollectCount = 0
-		if type(payload.no_collect) == "table" then
-			noCollectCount = #payload.no_collect
+		if type(noCollect) == "table" then
+			noCollectCount = #noCollect
 		end
 		if selected == 0 and noCollectCount == 0 then
 			BuildOrderEditor_AddError(errors, path .. ".payload", "must select a threshold or no-collect resource")
@@ -699,10 +711,14 @@ function BuildOrderEditor_MakeCheckTitle(draftCheck, runtimePayload)
 		return "Age up: " .. BuildOrderEditor_JoinSelectionLabels(payload.alternatives)
 	elseif draftCheck.kind == "upgrades" then
 		local label = BuildOrderEditor_GetSelectionLabel(payload.id)
+		local title = "Research " .. label
 		if payload.queued then
-			return "Queue " .. label .. " for research"
+			title = "Queue " .. label .. " for research"
 		end
-		return "Research " .. label
+		if draftCheck.optional then
+			return "[Optional] " .. title
+		end
+		return title
 	elseif draftCheck.kind == "produce" then
 		local label = BuildOrderEditor_GetSelectionLabel(payload.family)
 		if payload.constant then
@@ -724,6 +740,10 @@ end
 function BuildOrderEditor_VilsToRuntime(draftCheck)
 	local checks = {}
 	local payload = draftCheck.payload or {}
+	local noCollect = payload.no_collect
+	if noCollect == nil then
+		noCollect = {}
+	end
 	local thresholds = {}
 	for _, resource in ipairs(BUILD_ORDER_EDITOR_RESOURCES) do
 		if payload[resource] ~= nil then
@@ -737,7 +757,7 @@ function BuildOrderEditor_VilsToRuntime(draftCheck)
 			payload = thresholds,
 		})
 	end
-	for _, resource in ipairs(payload.no_collect or {}) do
+	for _, resource in ipairs(noCollect) do
 		table.insert(checks, {
 			kind = "vils",
 			optional = draftCheck.optional == true,
@@ -798,6 +818,9 @@ function BuildOrderEditor_CheckToRuntime(draftCheck)
 	else
 		payload = BuildOrderEditor_DeepCopy(draftCheck.payload)
 	end
+	if draftCheck.kind == "hints" then
+		optional = true
+	end
 	return {
 		{
 			kind = draftCheck.kind,
@@ -814,6 +837,10 @@ function BuildOrderEditor_ToRuntime(draft)
 	end
 
 	local orderID = BuildOrderEditor_MakeID(draft.civ, draft.title)
+	if draft.original_id ~= nil and draft.civ == draft.original_civ
+		and draft.title == draft.original_title then
+		orderID = draft.original_id
+	end
 	local runtimeSteps = {}
 	for stepIndex, draftStep in ipairs(draft.steps) do
 		local runtimeStep = {
