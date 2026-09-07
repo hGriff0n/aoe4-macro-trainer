@@ -221,6 +221,22 @@ class BuildOrderEditorUIContractTests(unittest.TestCase):
                 handle = named(named(self.xaml_root, template_name), handle_name)
                 self.assertEqual(handle.tag, f"{{{PRESENTATION_NS}}}Border")
 
+        for template_name in (
+            "BuildOrderStepCardTemplate",
+            "BuildOrderCheckCardTemplate",
+        ):
+            with self.subTest(leave_target=template_name):
+                template_xml = ET.tostring(
+                    named(self.xaml_root, template_name), encoding="unicode"
+                )
+                self.assertIn('RoutedEvent="UIElement.MouseLeave"', template_xml)
+                self.assertIn("[drag_target_leave_command]", template_xml)
+        editor_xml = ET.tostring(
+            named(self.xaml_root, "BuildOrderEditorScreen"), encoding="unicode"
+        )
+        self.assertIn('RoutedEvent="UIElement.MouseLeave"', editor_xml)
+        self.assertIn("[commands][drag_cancel]", editor_xml)
+
         begin = function_body(self.source, "BuildOrderEditorUI_BeginDrag")
         target = function_body(self.source, "BuildOrderEditorUI_UpdateDragTarget")
         commit = function_body(self.source, "BuildOrderEditorUI_CommitDrag")
@@ -279,6 +295,7 @@ class BuildOrderEditorUIProjectionTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         ui_source = UI_SCAR.read_text(encoding="utf-8")
+        cls.xaml_root = ET.fromstring(extract_xaml(ui_source))
         cls.runtime = ScarRuntime(
             MODEL_SCAR.read_text(encoding="utf-8")
             + "\n"
@@ -286,6 +303,153 @@ class BuildOrderEditorUIProjectionTests(unittest.TestCase):
             + "\n"
             + strip_xaml(ui_source)
         )
+
+    def configure_reorder_callback(self):
+        calls = []
+        globals_table = self.runtime.table({})
+        globals_table["BuildOrderEditorUITest_RecordReorder"] = (
+            lambda parent_path, from_index, to_index: calls.append(
+                (parent_path, from_index, to_index)
+            )
+        )
+        self.runtime.globals["_G"] = globals_table
+        state = self.runtime.globals["BUILD_ORDER_EDITOR_UI_STATE"]
+        state["callbacks"] = self.runtime.table(
+            {"reorder": "BuildOrderEditorUITest_RecordReorder"}
+        )
+        state["draggable_paths"] = self.runtime.table(
+            {
+                "steps.1": {
+                    "parent_path": "steps",
+                    "index": 1,
+                    "max_index": 2,
+                    "card_kind": "step",
+                },
+                "steps.2": {
+                    "parent_path": "steps",
+                    "index": 2,
+                    "max_index": 2,
+                    "card_kind": "step",
+                },
+            }
+        )
+        self.runtime.call("BuildOrderEditorUI_ClearDrag")
+        return state, calls
+
+    def test_nested_objects_and_object_list_entries_project_and_render_recursively(
+        self,
+    ) -> None:
+        schema = {
+            "node_type": "object",
+            "label": "Root",
+            "fields": [
+                {
+                    "key": "settings",
+                    "node_type": "object",
+                    "label": "Settings",
+                    "fields": [
+                        {
+                            "key": "name",
+                            "node_type": "primitive",
+                            "label": "Name",
+                            "value_type": "string",
+                            "required": True,
+                        },
+                        {
+                            "key": "advanced",
+                            "node_type": "object",
+                            "label": "Advanced",
+                            "fields": [
+                                {
+                                    "key": "note",
+                                    "node_type": "primitive",
+                                    "label": "Note",
+                                    "value_type": "string",
+                                    "required": False,
+                                }
+                            ],
+                        },
+                    ],
+                },
+                {
+                    "key": "groups",
+                    "node_type": "list",
+                    "label": "Groups",
+                    "min_items": 0,
+                    "item": {
+                        "node_type": "object",
+                        "label": "Group",
+                        "fields": [
+                            {
+                                "key": "name",
+                                "node_type": "primitive",
+                                "label": "Name",
+                                "value_type": "string",
+                                "required": True,
+                            }
+                        ],
+                    },
+                },
+            ],
+        }
+        draft = {
+            "settings": {"name": "Default", "advanced": {"note": "Careful"}},
+            "groups": [{"name": "First"}],
+        }
+        root = self.runtime.call(
+            "BuildOrderEditorUI_ProjectDraft",
+            draft,
+            [],
+            None,
+            {"settings": False, "groups.1": False},
+            schema,
+        )
+
+        settings = find_view_node(root, "settings")
+        self.assertEqual(settings["node_type"], "object")
+        self.assertEqual(settings["object_visibility"], "Visible")
+        self.assertFalse(settings["expanded"])
+        self.assertEqual(
+            find_view_node(root, "settings.advanced")["path"], "settings.advanced"
+        )
+        self.assertEqual(
+            find_view_node(root, "settings.advanced.note")["value"], "Careful"
+        )
+
+        group = find_view_node(root, "groups.1")
+        self.assertEqual(group["node_type"], "object")
+        self.assertEqual(group["object_visibility"], "Visible")
+        self.assertFalse(group["expanded"])
+        self.assertEqual(find_view_node(root, "groups.1.name")["value"], "First")
+
+        flat_fields = self.runtime.table([])
+        self.runtime.call("BuildOrderEditorUI_CollectFlatFields", root, flat_fields)
+        self.assertEqual(
+            [field["path"] for field in flat_fields.array()],
+            ["settings", "groups"],
+        )
+
+        object_template = named(self.xaml_root, "BuildOrderObjectCardTemplate")
+        object_xml = ET.tostring(object_template, encoding="unicode")
+        self.assertIn('IsExpanded="{Binding [expanded], Mode=OneWay}"', object_xml)
+        self.assertIn('ItemsSource="{Binding [fields]}"', object_xml)
+        self.assertIn(
+            'ItemTemplate="{DynamicResource BuildOrderFieldTemplate}"', object_xml
+        )
+
+        list_item_template = named(self.xaml_root, "BuildOrderListItemTemplate")
+        list_item_xml = ET.tostring(list_item_template, encoding="unicode")
+        self.assertIn('Content="{Binding}"', list_item_xml)
+        self.assertIn(
+            'ContentTemplate="{DynamicResource BuildOrderFieldTemplate}"',
+            list_item_xml,
+        )
+
+        field_template = named(self.xaml_root, "BuildOrderFieldTemplate")
+        field_xml = ET.tostring(field_template, encoding="unicode")
+        self.assertIn("[object_visibility]", field_xml)
+        self.assertIn("BuildOrderObjectCardTemplate", field_xml)
+        self.assertIn('ItemsSource="{Binding [items]}"', field_xml)
 
     def test_recursive_projection_uses_stable_paths_expansion_and_exact_errors(self) -> None:
         draft = {
@@ -444,6 +608,51 @@ class BuildOrderEditorUIProjectionTests(unittest.TestCase):
             )
         )
         self.assertIsNone(state["drag_target_path"])
+
+    def test_compatible_hover_then_leave_cannot_commit_a_stale_target(self) -> None:
+        state, calls = self.configure_reorder_callback()
+        leave_target = self.runtime.globals.get(
+            "BuildOrderEditorUI_LeaveDragTarget"
+        )
+        self.assertIsNotNone(leave_target)
+
+        self.assertTrue(self.runtime.call("BuildOrderEditorUI_BeginDrag", "steps.1"))
+        self.assertTrue(
+            self.runtime.call("BuildOrderEditorUI_UpdateDragTarget", "steps.2")
+        )
+        self.assertTrue(
+            self.runtime.call("BuildOrderEditorUI_LeaveDragTarget", "steps.2")
+        )
+        self.assertFalse(self.runtime.call("BuildOrderEditorUI_CommitDrag", None))
+        self.assertIsNone(state["drag_source_path"])
+        self.assertIsNone(state["drag_target_path"])
+        self.assertEqual(calls, [])
+
+    def test_commit_requires_target_to_still_be_actively_hovered(self) -> None:
+        state, calls = self.configure_reorder_callback()
+        self.assertTrue(self.runtime.call("BuildOrderEditorUI_BeginDrag", "steps.1"))
+        self.assertTrue(
+            self.runtime.call("BuildOrderEditorUI_UpdateDragTarget", "steps.2")
+        )
+        state["drag_target_active"] = False
+
+        self.assertFalse(self.runtime.call("BuildOrderEditorUI_CommitDrag", None))
+        self.assertEqual(calls, [])
+
+    def test_leaving_editor_cancels_drag_before_external_mouse_up(self) -> None:
+        state, calls = self.configure_reorder_callback()
+        cancel_drag = self.runtime.globals.get("BuildOrderEditorUI_CancelDrag")
+        self.assertIsNotNone(cancel_drag)
+
+        self.assertTrue(self.runtime.call("BuildOrderEditorUI_BeginDrag", "steps.1"))
+        self.assertTrue(
+            self.runtime.call("BuildOrderEditorUI_UpdateDragTarget", "steps.2")
+        )
+        self.assertTrue(self.runtime.call("BuildOrderEditorUI_CancelDrag", None))
+        self.assertFalse(self.runtime.call("BuildOrderEditorUI_CommitDrag", None))
+        self.assertIsNone(state["drag_source_path"])
+        self.assertIsNone(state["drag_target_path"])
+        self.assertEqual(calls, [])
 
     def test_live_projection_keeps_an_unknown_saved_internal_id_as_a_fallback(self) -> None:
         draft = {

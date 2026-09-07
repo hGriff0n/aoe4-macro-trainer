@@ -16,6 +16,7 @@ BUILD_ORDER_EDITOR_UI_STATE = {
 	draggable_paths = {},
 	drag_source_path = nil,
 	drag_target_path = nil,
+	drag_target_active = false,
 }
 
 BUILD_ORDER_EDITOR_UI_XAML = [[
@@ -55,55 +56,50 @@ BUILD_ORDER_EDITOR_UI_XAML = [[
 			</StackPanel>
 		</DataTemplate>
 
+		<DataTemplate x:Key="BuildOrderObjectCardTemplate">
+			<Border Margin="0,4,0,0"
+			        Padding="7"
+			        Background="#CC242424"
+			        BorderBrush="#FF707070"
+			        BorderThickness="1">
+				<Expander IsExpanded="{Binding [expanded], Mode=OneWay}">
+					<Expander.Header>
+						<DockPanel LastChildFill="True">
+							<Button DockPanel.Dock="Right"
+							        Margin="5,0,0,0"
+							        Command="{Binding [collapse_command]}"
+							        CommandParameter="{Binding}"
+							        Content="Collapse" />
+							<Button DockPanel.Dock="Right"
+							        Margin="5,0,0,0"
+							        Command="{Binding [expand_command]}"
+							        CommandParameter="{Binding}"
+							        Content="Expand" />
+							<TextBlock VerticalAlignment="Center"
+							           FontWeight="Bold"
+							           Text="{Binding [label]}" />
+						</DockPanel>
+					</Expander.Header>
+					<ItemsControl Margin="0,4,0,0"
+					              ItemsSource="{Binding [fields]}"
+					              ItemTemplate="{DynamicResource BuildOrderFieldTemplate}" />
+				</Expander>
+			</Border>
+		</DataTemplate>
+
 		<DataTemplate x:Key="BuildOrderListItemTemplate">
 			<Border Margin="0,3,0,0"
 			        Padding="6"
 			        BorderBrush="#FF606060"
 			        BorderThickness="1">
 				<StackPanel>
-					<TextBlock FontWeight="Bold" Text="{Binding [label]}" />
-					<TextBox Visibility="{Binding [text_visibility]}"
-					         Text="{Binding [display_value], Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
-						<TextBox.Triggers>
-							<EventTrigger RoutedEvent="UIElement.LostKeyboardFocus">
-								<esActions:CallCommandAction Command="{Binding [field_change_command]}"
-								                             CommandParameter="{Binding}" />
-							</EventTrigger>
-						</TextBox.Triggers>
-					</TextBox>
-					<ComboBox Visibility="{Binding [enum_visibility]}"
-					          ItemsSource="{Binding [options]}"
-					          ItemTemplate="{StaticResource BuildOrderLiveOptionTemplate}"
-					          SelectedItem="{Binding [selected_option], Mode=TwoWay}">
-						<ComboBox.Triggers>
-							<EventTrigger RoutedEvent="Selector.SelectionChanged">
-								<esActions:CallCommandAction Command="{Binding [field_change_command]}"
-								                             CommandParameter="{Binding}" />
-							</EventTrigger>
-						</ComboBox.Triggers>
-					</ComboBox>
-					<ComboBox Visibility="{Binding [live_visibility]}"
-					          ItemsSource="{Binding [options]}"
-					          ItemTemplate="{StaticResource BuildOrderLiveOptionTemplate}"
-					          SelectedItem="{Binding [selected_option], Mode=TwoWay}">
-						<ComboBox.Triggers>
-							<EventTrigger RoutedEvent="Selector.SelectionChanged">
-								<esActions:CallCommandAction Command="{Binding [field_change_command]}"
-								                             CommandParameter="{Binding}" />
-							</EventTrigger>
-						</ComboBox.Triggers>
-					</ComboBox>
-					<TextBlock Margin="0,3,0,0"
-					           Foreground="#FFB8B8B8"
-					           Visibility="{Binding [empty_options_visibility]}"
-					           Text="No compatible options discovered." />
+					<ContentControl Content="{Binding}"
+					                ContentTemplate="{DynamicResource BuildOrderFieldTemplate}" />
 					<Button Margin="0,4,0,0"
 					        HorizontalAlignment="Left"
 					        Command="{Binding [delete_command]}"
 					        CommandParameter="{Binding}"
 					        Content="Delete item" />
-					<ItemsControl ItemsSource="{Binding [errors]}"
-					              ItemTemplate="{StaticResource BuildOrderErrorTemplate}" />
 				</StackPanel>
 			</Border>
 		</DataTemplate>
@@ -114,7 +110,9 @@ BUILD_ORDER_EDITOR_UI_XAML = [[
 			        BorderBrush="#FF555555"
 			        BorderThickness="0,0,0,1">
 				<StackPanel>
-					<TextBlock FontWeight="Bold" Text="{Binding [label]}" />
+					<TextBlock FontWeight="Bold"
+					           Visibility="{Binding [inline_label_visibility]}"
+					           Text="{Binding [label]}" />
 					<Button Margin="0,3,0,0"
 					        HorizontalAlignment="Left"
 					        Visibility="{Binding [add_visibility]}"
@@ -161,6 +159,9 @@ BUILD_ORDER_EDITOR_UI_XAML = [[
 					           Foreground="#FFB8B8B8"
 					           Visibility="{Binding [empty_options_visibility]}"
 					           Text="No compatible options discovered." />
+					<ContentControl Visibility="{Binding [object_visibility]}"
+					                Content="{Binding}"
+					                ContentTemplate="{StaticResource BuildOrderObjectCardTemplate}" />
 					<StackPanel Visibility="{Binding [list_visibility]}">
 						<ItemsControl ItemsSource="{Binding [items]}"
 						              ItemTemplate="{StaticResource BuildOrderListItemTemplate}" />
@@ -263,6 +264,10 @@ BUILD_ORDER_EDITOR_UI_XAML = [[
 						<esActions:CallCommandAction Command="{Binding [drag_target_command]}"
 						                             CommandParameter="{Binding}" />
 					</EventTrigger>
+					<EventTrigger RoutedEvent="UIElement.MouseLeave">
+						<esActions:CallCommandAction Command="{Binding [drag_target_leave_command]}"
+						                             CommandParameter="{Binding}" />
+					</EventTrigger>
 				</Border.Triggers>
 				<DockPanel LastChildFill="True">
 					<Border x:Name="BuildOrderCheckDragHandle"
@@ -337,6 +342,10 @@ BUILD_ORDER_EDITOR_UI_XAML = [[
 				<Border.Triggers>
 					<EventTrigger RoutedEvent="UIElement.MouseEnter">
 						<esActions:CallCommandAction Command="{Binding [drag_target_command]}"
+						                             CommandParameter="{Binding}" />
+					</EventTrigger>
+					<EventTrigger RoutedEvent="UIElement.MouseLeave">
+						<esActions:CallCommandAction Command="{Binding [drag_target_leave_command]}"
 						                             CommandParameter="{Binding}" />
 					</EventTrigger>
 				</Border.Triggers>
@@ -490,6 +499,9 @@ BUILD_ORDER_EDITOR_UI_XAML = [[
 					<EventTrigger RoutedEvent="UIElement.PreviewMouseLeftButtonUp">
 						<esActions:CallCommandAction Command="{Binding [commands][drag_commit]}" />
 					</EventTrigger>
+					<EventTrigger RoutedEvent="UIElement.MouseLeave">
+						<esActions:CallCommandAction Command="{Binding [commands][drag_cancel]}" />
+					</EventTrigger>
 				</Grid.Triggers>
 				<Border x:Name="BuildOrderEditorActionHeader"
 				        Grid.Row="0"
@@ -627,6 +639,7 @@ function BuildOrderEditorUI_AttachCommands(node, context)
 	node.collapse_command = commands.collapse
 	node.drag_begin_command = commands.drag_begin
 	node.drag_target_command = commands.drag_target
+	node.drag_target_leave_command = commands.drag_target_leave
 	node.drag_commit_command = commands.drag_commit
 	node.move_up_command = commands.move_up
 	node.move_down_command = commands.move_down
@@ -657,6 +670,8 @@ function BuildOrderEditorUI_BaseNode(schema, path, context)
 		live_visibility = "Collapsed",
 		empty_options_visibility = "Collapsed",
 		list_visibility = "Collapsed",
+		object_visibility = "Collapsed",
+		inline_label_visibility = "Visible",
 		no_collect_visibility = "Collapsed",
 	}
 	return BuildOrderEditorUI_AttachCommands(node, context)
@@ -885,6 +900,8 @@ function BuildOrderEditorUI_ProjectOptional(schema, value, path, context)
 		child.enum_visibility = "Collapsed"
 		child.live_visibility = "Collapsed"
 		child.list_visibility = "Collapsed"
+		child.object_visibility = "Collapsed"
+		child.inline_label_visibility = "Visible"
 	end
 	return child
 end
@@ -939,13 +956,17 @@ function BuildOrderEditorUI_CollectResourceGroups(node, output)
 	return output
 end
 
-function BuildOrderEditorUI_CollectFlatFields(node, output)
+function BuildOrderEditorUI_CollectFlatFields(node, output, includeObject)
 	if node.is_resource_group then
 		return output
 	end
 	if node.node_type == "object" then
-		for _, field in ipairs(node.fields or {}) do
-			BuildOrderEditorUI_CollectFlatFields(field, output)
+		if includeObject then
+			table.insert(output, node)
+		else
+			for _, field in ipairs(node.fields or {}) do
+				BuildOrderEditorUI_CollectFlatFields(field, output, true)
+			end
 		end
 	elseif node.node_type == "list" and not node.is_steps and not node.is_checks then
 		table.insert(output, node)
@@ -957,6 +978,8 @@ end
 
 function BuildOrderEditorUI_ProjectObject(schema, value, path, context)
 	local node = BuildOrderEditorUI_BaseNode(schema, path, context)
+	node.object_visibility = "Visible"
+	node.inline_label_visibility = "Collapsed"
 	local objectValue = value
 	if type(objectValue) ~= "table" then
 		objectValue = {}
@@ -1000,6 +1023,8 @@ function BuildOrderEditorUI_ProjectObject(schema, value, path, context)
 	end
 	if schema.adapter == "resources" then
 		node.is_resource_group = true
+		node.object_visibility = "Collapsed"
+		node.inline_label_visibility = "Visible"
 		for _, field in ipairs(node.fields) do
 			if field.key == "food" then
 				node.food = field
@@ -1100,9 +1125,26 @@ function BuildOrderEditorUI_ParameterPath(parameter)
 	return nil
 end
 
+function BuildOrderEditorUI_ClearDragTarget(parameter)
+	local path = BuildOrderEditorUI_ParameterPath(parameter)
+	if path ~= nil and BUILD_ORDER_EDITOR_UI_STATE.drag_target_path ~= path then
+		return false
+	end
+	BUILD_ORDER_EDITOR_UI_STATE.drag_target_path = nil
+	BUILD_ORDER_EDITOR_UI_STATE.drag_target_active = false
+	return true
+end
+
 function BuildOrderEditorUI_ClearDrag()
 	BUILD_ORDER_EDITOR_UI_STATE.drag_source_path = nil
-	BUILD_ORDER_EDITOR_UI_STATE.drag_target_path = nil
+	BuildOrderEditorUI_ClearDragTarget(nil)
+end
+
+function BuildOrderEditorUI_CancelDrag(parameter)
+	local wasDragging = BUILD_ORDER_EDITOR_UI_STATE.drag_source_path ~= nil
+		or BUILD_ORDER_EDITOR_UI_STATE.drag_target_path ~= nil
+	BuildOrderEditorUI_ClearDrag()
+	return wasDragging
 end
 
 function BuildOrderEditorUI_AreCompatiblePaths(sourcePath, targetPath)
@@ -1121,7 +1163,7 @@ function BuildOrderEditorUI_BeginDrag(parameter)
 		return false
 	end
 	BUILD_ORDER_EDITOR_UI_STATE.drag_source_path = path
-	BUILD_ORDER_EDITOR_UI_STATE.drag_target_path = nil
+	BuildOrderEditorUI_ClearDragTarget(nil)
 	return true
 end
 
@@ -1129,11 +1171,16 @@ function BuildOrderEditorUI_UpdateDragTarget(parameter)
 	local path = BuildOrderEditorUI_ParameterPath(parameter)
 	local sourcePath = BUILD_ORDER_EDITOR_UI_STATE.drag_source_path
 	if not BuildOrderEditorUI_AreCompatiblePaths(sourcePath, path) then
-		BUILD_ORDER_EDITOR_UI_STATE.drag_target_path = nil
+		BuildOrderEditorUI_ClearDragTarget(nil)
 		return false
 	end
 	BUILD_ORDER_EDITOR_UI_STATE.drag_target_path = path
+	BUILD_ORDER_EDITOR_UI_STATE.drag_target_active = true
 	return true
+end
+
+function BuildOrderEditorUI_LeaveDragTarget(parameter)
+	return BuildOrderEditorUI_ClearDragTarget(parameter)
 end
 
 function BuildOrderEditorUI_InvokeCallback(key, first, second, third)
@@ -1151,8 +1198,9 @@ function BuildOrderEditorUI_CommitDrag(parameter)
 	local source = BUILD_ORDER_EDITOR_UI_STATE.draggable_paths[sourcePath]
 	local target = BUILD_ORDER_EDITOR_UI_STATE.draggable_paths[targetPath]
 	local compatible = BuildOrderEditorUI_AreCompatiblePaths(sourcePath, targetPath)
+	local targetActive = BUILD_ORDER_EDITOR_UI_STATE.drag_target_active == true
 	BuildOrderEditorUI_ClearDrag()
-	if not compatible or type(source) ~= "table" or type(target) ~= "table" then
+	if not targetActive or not compatible or type(source) ~= "table" or type(target) ~= "table" then
 		return false
 	end
 	return BuildOrderEditorUI_InvokeCallback(
@@ -1221,7 +1269,9 @@ function BuildOrderEditorUI_CreateCommands()
 		reorder = UI_CreateCommand(BuildOrderEditorUI_CommandName("reorder")),
 		drag_begin = UI_CreateCommand("BuildOrderEditorUI_BeginDrag"),
 		drag_target = UI_CreateCommand("BuildOrderEditorUI_UpdateDragTarget"),
+		drag_target_leave = UI_CreateCommand("BuildOrderEditorUI_LeaveDragTarget"),
 		drag_commit = UI_CreateCommand("BuildOrderEditorUI_CommitDrag"),
+		drag_cancel = UI_CreateCommand("BuildOrderEditorUI_CancelDrag"),
 		move_up = UI_CreateCommand("BuildOrderEditorUI_MoveUp"),
 		move_down = UI_CreateCommand("BuildOrderEditorUI_MoveDown"),
 	}
