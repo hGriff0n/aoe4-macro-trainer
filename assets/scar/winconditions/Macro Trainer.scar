@@ -221,7 +221,6 @@ function Mod_OnGameOver()
 	BuildOrderDatastore_Stop()
 	BuildOrderStartup_Stop()
 	BuildOrderEditor_Stop()
-	BuildOrderEditorUI_Stop()
 	BuildOrder_Stop()
 	Mod_StopSimspeedCycle()
 end

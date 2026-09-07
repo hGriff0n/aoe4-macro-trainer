@@ -564,7 +564,7 @@ class BuildOrderEditorUIProjectionTests(unittest.TestCase):
         self.assertEqual(len(step["flat_fields"]), 1)
         self.assertEqual(step["flat_fields"][1]["path"], "steps.1.title")
         check = find_view_node(root, "steps.1.checks.2")
-        self.assertEqual(check["label"], "Build")
+        self.assertEqual(check["label"], f"${MOD_NAMESPACE}:75")
         self.assertEqual(check["kind"], "built")
         count = find_view_node(root, "steps.1.checks.2.payload.count")
         self.assertEqual(count["errors"].array(), ["must be a positive integer"])
@@ -799,7 +799,7 @@ class BuildOrderEditorUIProjectionTests(unittest.TestCase):
         )
         self.assertTrue(view["save_enabled"])
 
-    def test_projected_step_offers_every_supported_check_kind(self) -> None:
+    def test_projected_check_kind_options_use_stable_localized_labels(self) -> None:
         state = self.runtime.globals["BUILD_ORDER_EDITOR_UI_STATE"]
         state["commands"] = self.runtime.table(
             {"add_check": "add-check-command"}
@@ -839,10 +839,73 @@ class BuildOrderEditorUIProjectionTests(unittest.TestCase):
         self.assertEqual(add_check["path"], "steps.1.checks")
         self.assertEqual(add_check["add_check_command"], "add-check-command")
         self.assertEqual(
-            [option["id"] for option in add_check["options"].array()],
-            self.runtime.globals["BUILD_ORDER_EDITOR_CHECK_ORDER"].array(),
+            [
+                (option["id"], option["label"])
+                for option in add_check["options"].array()
+            ],
+            [
+                ("vils", f"${MOD_NAMESPACE}:73"),
+                ("rallypoint", f"${MOD_NAMESPACE}:74"),
+                ("built", f"${MOD_NAMESPACE}:75"),
+                ("age_up", f"${MOD_NAMESPACE}:76"),
+                ("upgrades", f"${MOD_NAMESPACE}:77"),
+                ("produce", f"${MOD_NAMESPACE}:78"),
+                ("resources", f"${MOD_NAMESPACE}:79"),
+                ("buildings", f"${MOD_NAMESPACE}:80"),
+                ("units", f"${MOD_NAMESPACE}:81"),
+                ("hints", f"${MOD_NAMESPACE}:82"),
+            ],
         )
         self.assertEqual(add_check["selected_option"]["id"], "vils")
+        rows = csv_rows(LOCDB_PATH)
+        self.assertEqual(
+            [rows[loc_id][6] for loc_id in range(73, 83)],
+            [
+                "Villagers",
+                "Rally point",
+                "Build",
+                "Age up",
+                "Technology",
+                "Produce",
+                "Resources",
+                "Existing buildings",
+                "Existing units",
+                "Hint",
+            ],
+        )
+
+    def test_projected_optional_field_uses_stable_localized_label(self) -> None:
+        draft = {
+            "civ": "english",
+            "title": "Technology",
+            "steps": [
+                {
+                    "title": "Opening",
+                    "inferred_age": 1,
+                    "checks": [
+                        {
+                            "kind": "upgrades",
+                            "optional": False,
+                            "payload": {"id": "", "queued": False},
+                        }
+                    ],
+                }
+            ],
+        }
+        discovery = {
+            "entities": [],
+            "squads": [],
+            "upgrades": [],
+            "families": [],
+        }
+
+        root = self.runtime.call(
+            "BuildOrderEditorUI_ProjectDraft", draft, [], discovery, {}
+        )
+        optional = find_view_node(root, "steps.1.checks.1.optional")
+
+        self.assertEqual(optional["label"], f"${MOD_NAMESPACE}:83")
+        self.assertEqual(csv_rows(LOCDB_PATH)[83][6], "Optional")
 
 
 if __name__ == "__main__":

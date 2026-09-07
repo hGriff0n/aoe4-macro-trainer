@@ -8,6 +8,7 @@ from tests.scar_runtime import LuaResults, ScarRuntime
 
 ROOT = Path(__file__).resolve().parents[1]
 STARTUP_PATH = ROOT / "assets" / "scar" / "build_orders" / "startup.scar"
+EDITOR_PATH = ROOT / "assets" / "scar" / "build_orders" / "editor.scar"
 MAIN_PATH = ROOT / "assets" / "scar" / "winconditions" / "Macro Trainer.scar"
 LOCDB_PATH = ROOT / "assets" / "locdb" / "Macro Trainer_en.csv"
 MOD_NAMESPACE = "dfb5645698a84afb91cf7a2dfb0f4a4e"
@@ -297,7 +298,7 @@ class BuildOrderStartupBehaviorTests(unittest.TestCase):
         self.assertEqual(self.sim_rates, [8])
         self.assertEqual(self.cycle_starts, 1)
 
-    def test_missing_or_invalid_selection_returns_to_selector_without_resuming(self) -> None:
+    def test_missing_selection_returns_to_selector_without_resuming(self) -> None:
         state = self.runtime.globals["_mod"]
         state["selectedBuildOrderID"] = "english-missing"
         self.assertTrue(self.start())
@@ -316,6 +317,24 @@ class BuildOrderStartupBehaviorTests(unittest.TestCase):
             self.call("BuildOrderStartup_Select", {"id": "not-in-selector"})
         )
         self.assertEqual(state["selectedBuildOrderID"], "english-missing")
+
+    def test_wrong_civilization_selection_uses_mismatch_message_without_resuming(
+        self,
+    ) -> None:
+        state = self.runtime.globals["_mod"]
+        state["selectedBuildOrderID"] = "french-alpha"
+
+        self.assertTrue(self.start())
+        self.assertEqual(
+            self.selector_models[-1]["message"],
+            f"${MOD_NAMESPACE}:52",
+        )
+        self.assertEqual(state["selectedBuildOrderID"], "french-alpha")
+
+        self.assertFalse(self.call("BuildOrderStartup_Unpause"))
+        self.assertEqual(self.selector_models[-1]["message"], f"${MOD_NAMESPACE}:52")
+        self.assertEqual(self.sim_rates, [])
+        self.assertEqual(self.objective_starts, [])
 
     def test_ui_creation_failure_uses_two_choice_escape_and_never_auto_resumes(self) -> None:
         self.selector_result = False
@@ -359,6 +378,23 @@ class BuildOrderStartupBehaviorTests(unittest.TestCase):
         self.assertFalse(state["startupAwaitingChoice"])
         self.assertEqual(state["compatibleBuildOrderIDs"].array(), [])
 
+    def test_stop_preserves_non_nil_selection_for_a_later_start(self) -> None:
+        state = self.runtime.globals["_mod"]
+        state["selectedBuildOrderID"] = "english-zulu"
+        self.start()
+
+        self.assertTrue(self.call("BuildOrderStartup_Stop"))
+        self.assertEqual(state["selectedBuildOrderID"], "english-zulu")
+
+        self.assertTrue(self.start())
+        self.assertEqual(state["selectedBuildOrderID"], "english-zulu")
+        selected = [
+            option
+            for option in self.selector_orders()
+            if option["selected"] is True
+        ]
+        self.assertEqual([option["id"] for option in selected], ["english-zulu"])
+
 
 class BuildOrderStartupContractTests(unittest.TestCase):
     @classmethod
@@ -391,7 +427,6 @@ class BuildOrderStartupContractTests(unittest.TestCase):
             "BuildOrderDatastore_Stop()",
             "BuildOrderStartup_Stop()",
             "BuildOrderEditor_Stop()",
-            "BuildOrderEditorUI_Stop()",
             "BuildOrder_Stop()",
             "Mod_StopSimspeedCycle()",
         ):
@@ -417,6 +452,55 @@ class BuildOrderStartupContractTests(unittest.TestCase):
                 self.assertIn(loc_id, rows)
                 self.assertEqual(rows[loc_id][6], text)
                 self.assertIn(f'"${MOD_NAMESPACE}:{loc_id}"', self.startup)
+
+
+class BuildOrderGameOverBehaviorTests(unittest.TestCase):
+    def test_game_over_runs_ui_teardown_once_through_editor_stop(self) -> None:
+        editor = EDITOR_PATH.read_text(encoding="utf-8")
+        main = MAIN_PATH.read_text(encoding="utf-8")
+        game_over = "function Mod_OnGameOver()\n" + function_body(
+            main, "Mod_OnGameOver"
+        )
+        runtime = ScarRuntime(editor + "\n" + game_over)
+        calls = {
+            "datastore": 0,
+            "startup": 0,
+            "discovery": 0,
+            "ui": 0,
+            "objectives": 0,
+            "simspeed": 0,
+        }
+
+        def record(name):
+            def callback():
+                calls[name] += 1
+
+            return callback
+
+        runtime.globals["BuildOrderDatastore_Stop"] = record("datastore")
+        runtime.globals["BuildOrderStartup_Stop"] = record("startup")
+        runtime.globals["BuildOrderDiscovery_Clear"] = record("discovery")
+        runtime.globals["BuildOrderEditorUI_Stop"] = record("ui")
+        runtime.globals["BuildOrder_Stop"] = record("objectives")
+        runtime.globals["Mod_StopSimspeedCycle"] = record("simspeed")
+        runtime.globals["BUILD_ORDER_EDITOR_STATE"]["draft"] = runtime.table(
+            {"title": "Open draft"}
+        )
+
+        runtime.call("Mod_OnGameOver")
+
+        self.assertEqual(
+            calls,
+            {
+                "datastore": 1,
+                "startup": 1,
+                "discovery": 1,
+                "ui": 1,
+                "objectives": 1,
+                "simspeed": 1,
+            },
+        )
+        self.assertIsNone(runtime.globals["BUILD_ORDER_EDITOR_STATE"]["draft"])
 
 
 if __name__ == "__main__":

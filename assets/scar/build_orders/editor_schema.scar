@@ -60,6 +60,23 @@ BUILD_ORDER_EDITOR_ADAPTERS = {
 	live_age_up = { discovery_kinds = { "entity", "upgrade" } },
 }
 
+BUILD_ORDER_EDITOR_CHECK_LABELS = {
+	vils = "$dfb5645698a84afb91cf7a2dfb0f4a4e:73",
+	rallypoint = "$dfb5645698a84afb91cf7a2dfb0f4a4e:74",
+	built = "$dfb5645698a84afb91cf7a2dfb0f4a4e:75",
+	age_up = "$dfb5645698a84afb91cf7a2dfb0f4a4e:76",
+	upgrades = "$dfb5645698a84afb91cf7a2dfb0f4a4e:77",
+	produce = "$dfb5645698a84afb91cf7a2dfb0f4a4e:78",
+	resources = "$dfb5645698a84afb91cf7a2dfb0f4a4e:79",
+	buildings = "$dfb5645698a84afb91cf7a2dfb0f4a4e:80",
+	units = "$dfb5645698a84afb91cf7a2dfb0f4a4e:81",
+	hints = "$dfb5645698a84afb91cf7a2dfb0f4a4e:82",
+}
+
+BUILD_ORDER_EDITOR_FIELD_LABELS = {
+	optional = "$dfb5645698a84afb91cf7a2dfb0f4a4e:83",
+}
+
 BUILD_ORDER_EDITOR_CHECK_ORDER = {
 	"vils",
 	"rallypoint",
@@ -75,7 +92,7 @@ BUILD_ORDER_EDITOR_CHECK_ORDER = {
 
 BUILD_ORDER_EDITOR_CHECK_SCHEMAS = {
 	vils = {
-		label = "Villagers",
+		label = BUILD_ORDER_EDITOR_CHECK_LABELS.vils,
 		fields = {
 			BuildOrderEditorSchema_Object("payload", "Assignments", {
 				BuildOrderEditorSchema_Optional("food", "Food", BuildOrderEditorSchema_Primitive(nil, "Food", "positive_integer", false, nil)),
@@ -87,7 +104,7 @@ BUILD_ORDER_EDITOR_CHECK_SCHEMAS = {
 		},
 	},
 	rallypoint = {
-		label = "Rally point",
+		label = BUILD_ORDER_EDITOR_CHECK_LABELS.rallypoint,
 		fields = {
 			BuildOrderEditorSchema_Object("payload", "Rally point", {
 				BuildOrderEditorSchema_Enum("resource", "Resource", BUILD_ORDER_EDITOR_ADAPTERS.no_collect.values, true, nil),
@@ -95,7 +112,7 @@ BUILD_ORDER_EDITOR_CHECK_SCHEMAS = {
 		},
 	},
 	built = {
-		label = "Build",
+		label = BUILD_ORDER_EDITOR_CHECK_LABELS.built,
 		fields = {
 			BuildOrderEditorSchema_Object("payload", "Building", {
 				BuildOrderEditorSchema_List("alternatives", "Buildings", BuildOrderEditorSchema_Primitive(nil, "Building", "live_id", true, "live_entity"), 1, "alternatives"),
@@ -106,7 +123,7 @@ BUILD_ORDER_EDITOR_CHECK_SCHEMAS = {
 		},
 	},
 	age_up = {
-		label = "Age up",
+		label = BUILD_ORDER_EDITOR_CHECK_LABELS.age_up,
 		fields = {
 			BuildOrderEditorSchema_Object("payload", "Age-up choice", {
 				BuildOrderEditorSchema_List("alternatives", "Choices", BuildOrderEditorSchema_Primitive(nil, "Choice", "live_id", true, "live_age_up"), 1, "alternatives"),
@@ -116,17 +133,17 @@ BUILD_ORDER_EDITOR_CHECK_SCHEMAS = {
 		},
 	},
 	upgrades = {
-		label = "Technology",
+		label = BUILD_ORDER_EDITOR_CHECK_LABELS.upgrades,
 		fields = {
 			BuildOrderEditorSchema_Object("payload", "Technology", {
 				BuildOrderEditorSchema_Primitive("id", "Technology", "live_id", true, "live_upgrade"),
 				BuildOrderEditorSchema_Primitive("queued", "Complete when queued", "boolean", true, nil),
 			}, nil),
-			BuildOrderEditorSchema_Primitive("optional", "Optional", "boolean", true, nil),
+			BuildOrderEditorSchema_Primitive("optional", BUILD_ORDER_EDITOR_FIELD_LABELS.optional, "boolean", true, nil),
 		},
 	},
 	produce = {
-		label = "Produce",
+		label = BUILD_ORDER_EDITOR_CHECK_LABELS.produce,
 		fields = {
 			BuildOrderEditorSchema_Object("payload", "Unit family", {
 				BuildOrderEditorSchema_Primitive("family", "Unit family", "live_family", true, "live_family"),
@@ -137,7 +154,7 @@ BUILD_ORDER_EDITOR_CHECK_SCHEMAS = {
 		},
 	},
 	resources = {
-		label = "Resources",
+		label = BUILD_ORDER_EDITOR_CHECK_LABELS.resources,
 		fields = {
 			BuildOrderEditorSchema_Object("payload", "Stockpile", {
 				BuildOrderEditorSchema_Optional("food", "Food", BuildOrderEditorSchema_Primitive(nil, "Food", "positive_integer", false, nil)),
@@ -148,7 +165,7 @@ BUILD_ORDER_EDITOR_CHECK_SCHEMAS = {
 		},
 	},
 	buildings = {
-		label = "Existing buildings",
+		label = BUILD_ORDER_EDITOR_CHECK_LABELS.buildings,
 		fields = {
 			BuildOrderEditorSchema_Object("payload", "Building", {
 				BuildOrderEditorSchema_Primitive("id", "Building", "live_id", true, "live_entity"),
@@ -157,7 +174,7 @@ BUILD_ORDER_EDITOR_CHECK_SCHEMAS = {
 		},
 	},
 	units = {
-		label = "Existing units",
+		label = BUILD_ORDER_EDITOR_CHECK_LABELS.units,
 		fields = {
 			BuildOrderEditorSchema_Object("payload", "Unit family", {
 				BuildOrderEditorSchema_Primitive("family", "Unit family", "live_family", true, "live_family"),
@@ -166,7 +183,7 @@ BUILD_ORDER_EDITOR_CHECK_SCHEMAS = {
 		},
 	},
 	hints = {
-		label = "Hint",
+		label = BUILD_ORDER_EDITOR_CHECK_LABELS.hints,
 		fields = {
 			BuildOrderEditorSchema_Object("payload", "Hint", {
 				BuildOrderEditorSchema_Primitive("text", "Text", "string", true, nil),

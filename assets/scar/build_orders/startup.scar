@@ -174,9 +174,13 @@ function BuildOrderStartup_Start()
 	Rule_Remove(BuildOrderStartup_PauseNextTick)
 	Rule_Add(BuildOrderStartup_PauseNextTick)
 	local message = nil
-	if _mod.selectedBuildOrderID ~= nil
-		and not BuildOrderStartup_IsCompatibleID(_mod.selectedBuildOrderID) then
-		message = BUILD_ORDER_STARTUP_MISSING_SELECTION
+	if _mod.selectedBuildOrderID ~= nil then
+		local selectedBuildOrder = BUILD_ORDER_CATALOG[_mod.selectedBuildOrderID]
+		if type(selectedBuildOrder) ~= "table" then
+			message = BUILD_ORDER_STARTUP_MISSING_SELECTION
+		elseif not BuildOrderStartup_IsCompatibleID(_mod.selectedBuildOrderID) then
+			message = BUILD_ORDER_STARTUP_INVALID_SELECTION
+		end
 	end
 	BuildOrderStartup_ShowSelector(message)
 	return true
@@ -309,13 +313,13 @@ function BuildOrderStartup_Unpause()
 		end
 		return true
 	end
-	if not BuildOrderStartup_IsCompatibleID(_mod.selectedBuildOrderID) then
-		BuildOrderStartup_ShowSelector(BUILD_ORDER_STARTUP_MISSING_SELECTION)
-		return false
-	end
 	local buildOrder = BUILD_ORDER_CATALOG[_mod.selectedBuildOrderID]
 	if type(buildOrder) ~= "table" then
 		BuildOrderStartup_ShowSelector(BUILD_ORDER_STARTUP_MISSING_SELECTION)
+		return false
+	end
+	if not BuildOrderStartup_IsCompatibleID(_mod.selectedBuildOrderID) then
+		BuildOrderStartup_ShowSelector(BUILD_ORDER_STARTUP_INVALID_SELECTION)
 		return false
 	end
 	return BuildOrderStartup_StartSelected(buildOrder)
@@ -371,7 +375,6 @@ function BuildOrderStartup_Stop()
 	_mod.startupScreen = "hidden"
 	_mod.startupPriorSelectionID = nil
 	_mod.startupMessage = nil
-	_mod.selectedBuildOrderID = nil
 	_mod.compatibleBuildOrderIDs = {}
 	_mod.buildOrderStarted = false
 	Rule_Remove(BuildOrderStartup_PauseNextTick)

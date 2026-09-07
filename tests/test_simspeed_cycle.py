@@ -276,7 +276,6 @@ class SimspeedCycleContractTests(unittest.TestCase):
         self.assertEqual(game_over.count("BuildOrderDatastore_Stop()"), 1)
         self.assertEqual(game_over.count("BuildOrderStartup_Stop()"), 1)
         self.assertEqual(game_over.count("BuildOrderEditor_Stop()"), 1)
-        self.assertEqual(game_over.count("BuildOrderEditorUI_Stop()"), 1)
         self.assertEqual(game_over.count("BuildOrder_Stop()"), 1)
         self.assertEqual(game_over.count("Mod_StopSimspeedCycle()"), 1)
 

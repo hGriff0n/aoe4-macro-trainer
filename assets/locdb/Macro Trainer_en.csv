@@ -68,3 +68,14 @@
 70,,,Build-order editor action.,,,Move up
 71,,,Build-order editor drag label.,,,Drag step
 72,,,Build-order editor action.,,,Delete step
+73,,,Build-order check-kind label.,,,Villagers
+74,,,Build-order check-kind label.,,,Rally point
+75,,,Build-order check-kind label.,,,Build
+76,,,Build-order check-kind label.,,,Age up
+77,,,Build-order check-kind label.,,,Technology
+78,,,Build-order check-kind label.,,,Produce
+79,,,Build-order check-kind label.,,,Resources
+80,,,Build-order check-kind label.,,,Existing buildings
+81,,,Build-order check-kind label.,,,Existing units
+82,,,Build-order check-kind label.,,,Hint
+83,,,Build-order editor field label.,,,Optional
