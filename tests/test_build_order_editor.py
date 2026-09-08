@@ -27,6 +27,12 @@ def function_body(source: str, name: str) -> str:
 
 
 def strip_xaml(source: str) -> str:
+    source = re.sub(
+        r"BUILD_ORDER_EDITOR_UI_PROBE_XAML\s*=\s*\[\[.*?\]\]",
+        'BUILD_ORDER_EDITOR_UI_PROBE_XAML = ""',
+        source,
+        flags=re.DOTALL,
+    )
     return re.sub(
         r"BUILD_ORDER_EDITOR_UI_XAML\s*=\s*\[\[.*?\]\]",
         'BUILD_ORDER_EDITOR_UI_XAML = ""',

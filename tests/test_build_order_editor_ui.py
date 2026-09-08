@@ -31,15 +31,19 @@ def function_body(source: str, name: str) -> str:
     return match.group(1)
 
 
-def extract_xaml(source: str) -> str:
+def extract_long_string(source: str, name: str) -> str:
     match = re.search(
-        r"BUILD_ORDER_EDITOR_UI_XAML\s*=\s*\[\[(.*?)\]\]",
+        rf"{re.escape(name)}\s*=\s*\[\[(.*?)\]\]",
         source,
         flags=re.DOTALL,
     )
     if match is None:
-        raise AssertionError("missing BUILD_ORDER_EDITOR_UI_XAML")
+        raise AssertionError(f"missing {name}")
     return match.group(1)
+
+
+def extract_xaml(source: str) -> str:
+    return extract_long_string(source, "BUILD_ORDER_EDITOR_UI_XAML")
 
 
 def named(root: ET.Element, name: str) -> ET.Element:
@@ -51,6 +55,12 @@ def named(root: ET.Element, name: str) -> ET.Element:
 
 
 def strip_xaml(source: str) -> str:
+    source = re.sub(
+        r"BUILD_ORDER_EDITOR_UI_PROBE_XAML\s*=\s*\[\[.*?\]\]",
+        'BUILD_ORDER_EDITOR_UI_PROBE_XAML = ""',
+        source,
+        flags=re.DOTALL,
+    )
     return re.sub(
         r"BUILD_ORDER_EDITOR_UI_XAML\s*=\s*\[\[.*?\]\]",
         'BUILD_ORDER_EDITOR_UI_XAML = ""',
@@ -108,7 +118,19 @@ class BuildOrderEditorUIContractTests(unittest.TestCase):
         self.assertIn("BUILD_ORDER_EDITOR_UI_STATE.callbacks = {}", stop)
         self.assertIn("BUILD_ORDER_EDITOR_UI_STATE.commands = nil", stop)
 
-    def test_one_presenter_is_created_under_scar_default_with_failure_fallback(self) -> None:
+    def test_minimal_probe_is_an_empty_visible_frame(self) -> None:
+        probe = extract_long_string(self.source, "BUILD_ORDER_EDITOR_UI_PROBE_XAML")
+        root = ET.fromstring(probe)
+
+        self.assertEqual(root.tag, f"{{{PRESENTATION_NS}}}Border")
+        self.assertEqual(root.get(f"{{{XAML_NS}}}Name"), "BuildOrderEditorProbe")
+        self.assertEqual(len(root), 1)
+        self.assertEqual(root[0].tag, f"{{{PRESENTATION_NS}}}Grid")
+        self.assertEqual(len(root[0]), 0)
+        self.assertNotIn("{Binding", probe)
+        self.assertNotIn("DataTemplate", probe)
+
+    def test_probe_presenter_excludes_commands_and_data_context(self) -> None:
         self.assertEqual(self.source.count("UI_AddChild("), 1)
         create = function_body(self.source, "BuildOrderEditorUI_CreatePresenter")
         self.assertIn(
@@ -116,8 +138,10 @@ class BuildOrderEditorUIContractTests(unittest.TestCase):
             create,
         )
         self.assertIn("IsHitTestVisible = true", create)
-        self.assertIn("Xaml = BUILD_ORDER_EDITOR_UI_XAML", create)
-        self.assertIn("DataContext = UI_CreateDataContext(", create)
+        self.assertIn("Xaml = BUILD_ORDER_EDITOR_UI_PROBE_XAML", create)
+        self.assertNotIn("BuildOrderEditorUI_CreateCommands", create)
+        self.assertNotIn("BuildOrderEditorUI_BuildViewModel", create)
+        self.assertNotIn("DataContext", create)
 
         ensure = function_body(self.source, "BuildOrderEditorUI_EnsureCreated")
         self.assertIn("if BUILD_ORDER_EDITOR_UI_STATE.created then", ensure)
@@ -125,7 +149,7 @@ class BuildOrderEditorUIContractTests(unittest.TestCase):
         self.assertRegex(ensure, r"if not success then[\s\S]*?return false")
         self.assertIn("return true", ensure)
 
-    def test_one_bound_model_switches_all_four_screens(self) -> None:
+    def test_probe_screen_selection_does_not_refresh_data_context(self) -> None:
         for name, screen in (
             ("BuildOrderEditorUI_ShowSelector", "selector"),
             ("BuildOrderEditorUI_ShowEditor", "editor"),
@@ -135,8 +159,9 @@ class BuildOrderEditorUIContractTests(unittest.TestCase):
             with self.subTest(name=name):
                 body = function_body(self.source, name)
                 self.assertIn(f'BuildOrderEditorUI_SetScreen("{screen}"', body)
-        refresh = function_body(self.source, "BuildOrderEditorUI_Refresh")
-        self.assertIn("UI_SetDataContext(BUILD_ORDER_EDITOR_UI_NAME", refresh)
+        set_screen = function_body(self.source, "BuildOrderEditorUI_SetScreen")
+        self.assertNotIn("BuildOrderEditorUI_Refresh", set_screen)
+        self.assertNotIn("UI_SetDataContext", set_screen)
 
     def test_callbacks_are_commands_but_ui_does_not_mutate_the_draft(self) -> None:
         create = function_body(self.source, "BuildOrderEditorUI_CreateCommands")

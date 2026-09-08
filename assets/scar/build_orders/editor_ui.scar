@@ -1,4 +1,23 @@
 BUILD_ORDER_EDITOR_UI_NAME = "BuildOrderEditorUI"
+
+-- Diagnostic spike: keep the known-failing editor XAML below for comparison,
+-- but do not hand it to the engine yet. This probe deliberately contains no
+-- bindings, resources, templates, commands, or data context.
+BUILD_ORDER_EDITOR_UI_PROBE_XAML = [[
+<Border x:Name="BuildOrderEditorProbe"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Width="320"
+        Height="180"
+        HorizontalAlignment="Center"
+        VerticalAlignment="Center"
+        Background="#F2181818"
+        BorderBrush="#FFD0D0D0"
+        BorderThickness="2">
+	<Grid />
+</Border>
+]]
+
 BUILD_ORDER_EDITOR_UI_RESOURCES = { "food", "wood", "gold", "stone" }
 BUILD_ORDER_EDITOR_UI_LIVE_LISTS = {
 	live_building = "buildings",
@@ -1582,17 +1601,9 @@ function BuildOrderEditorUI_Refresh()
 end
 
 function BuildOrderEditorUI_CreatePresenter()
-	if BUILD_ORDER_EDITOR_UI_STATE.commands == nil then
-		BUILD_ORDER_EDITOR_UI_STATE.commands = BuildOrderEditorUI_CreateCommands()
-	end
-	BUILD_ORDER_EDITOR_UI_STATE.view_model = BuildOrderEditorUI_BuildViewModel(
-		BUILD_ORDER_EDITOR_UI_STATE.screen,
-		BUILD_ORDER_EDITOR_UI_STATE.model
-	)
 	UI_AddChild("ScarDefault", "XamlPresenter", BUILD_ORDER_EDITOR_UI_NAME, {
 		IsHitTestVisible = true,
-		Xaml = BUILD_ORDER_EDITOR_UI_XAML,
-		DataContext = UI_CreateDataContext(BUILD_ORDER_EDITOR_UI_STATE.view_model),
+		Xaml = BUILD_ORDER_EDITOR_UI_PROBE_XAML,
 	})
 end
 
@@ -1617,9 +1628,6 @@ function BuildOrderEditorUI_SetScreen(screen, model)
 	BUILD_ORDER_EDITOR_UI_STATE.screen = screen
 	BUILD_ORDER_EDITOR_UI_STATE.model = type(model) == "table" and model or {}
 	BuildOrderEditorUI_ClearDrag()
-	if BUILD_ORDER_EDITOR_UI_STATE.created then
-		BuildOrderEditorUI_Refresh()
-	end
 	return true
 end
 
