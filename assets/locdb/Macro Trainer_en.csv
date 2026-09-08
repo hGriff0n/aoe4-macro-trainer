@@ -137,3 +137,4 @@
 139,,,Build-order editor save error.,,,The build order could not be converted.
 140,,,Build-order editor save error.,,,Another build order already has that ID.
 141,,,Build-order editor save error.,,,The build order could not be saved.
+142,,,Build-order editor schema label.,,,Check details

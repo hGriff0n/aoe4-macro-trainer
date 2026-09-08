@@ -869,6 +869,55 @@ class BuildOrderEditorUIProjectionTests(unittest.TestCase):
         self.assertEqual(messages[1]["label"], f"${MOD_NAMESPACE}:94")
         self.assertEqual(messages[1]["message"], f"${MOD_NAMESPACE}:111")
 
+    def test_validation_paths_use_explicit_semantic_field_labels(self) -> None:
+        cases = (
+            ("age_up", 97),
+            ("assignments", 90),
+            ("building", 92),
+            ("buildings", 93),
+            ("builders", 95),
+            ("choice", 99),
+            ("choices", 98),
+            ("civ", 85),
+            ("civilization", 85),
+            ("title", 86),
+            ("steps", 87),
+            ("steps.1.checks", 89),
+            ("steps.1.checks.1.kind", 107),
+            ("steps.1.checks.1.payload", 142),
+            ("steps.1.checks.1.optional", 83),
+            ("steps.1.checks.1.payload.alternatives", 98),
+            ("steps.1.checks.1.payload.alternatives.1", 98),
+            ("steps.1.checks.1.payload.id", 99),
+            ("steps.1.checks.1.payload.family", 102),
+            ("steps.1.checks.1.payload.queued", 101),
+            ("steps.1.checks.1.payload.constant", 103),
+            ("steps.1.checks.1.payload.vils", 95),
+            ("steps.1.checks.1.payload.location", 96),
+            ("steps.1.checks.1.payload.count", 94),
+            ("steps.1.checks.1.payload.entering_age", 110),
+            ("steps.1.checks.1.payload.food", 62),
+            ("steps.1.checks.1.payload.wood", 63),
+            ("steps.1.checks.1.payload.gold", 64),
+            ("steps.1.checks.1.payload.stone", 65),
+            ("steps.1.checks.1.payload.no_collect", 66),
+            ("steps.1.checks.1.payload.resource", 91),
+            ("steps.1.checks.1.payload.text", 106),
+            ("steps.1.checks.1.payload.hint", 105),
+            ("steps.1.checks.1.payload.rallypoint", 74),
+            ("steps.1.checks.1.payload.resources", 104),
+            ("steps.1.checks.1.payload.technology", 100),
+            ("steps.1.checks.1.payload.unit_family", 102),
+            ("steps.1.checks.1.payload.inferred_age", 110),
+        )
+
+        for path, loc_id in cases:
+            with self.subTest(path=path):
+                self.assertEqual(
+                    self.runtime.call("BuildOrderEditorUI_FriendlyErrorLabel", path),
+                    f"${MOD_NAMESPACE}:{loc_id}",
+                )
+
     def test_unknown_projection_labels_are_stable_localization_ids(self) -> None:
         unknown_check = self.runtime.call(
             "BuildOrderEditorUI_ProjectVariant",
@@ -897,6 +946,7 @@ class BuildOrderEditorUIProjectionTests(unittest.TestCase):
         self.assertEqual(labels["assignments"], f"${MOD_NAMESPACE}:90")
         self.assertEqual(labels["count"], f"${MOD_NAMESPACE}:94")
         self.assertEqual(labels["entering_age"], f"${MOD_NAMESPACE}:110")
+        self.assertEqual(labels["check_details"], f"${MOD_NAMESPACE}:142")
         self.assertEqual(
             errors["must contain a title that can form an ID"],
             f"${MOD_NAMESPACE}:133",

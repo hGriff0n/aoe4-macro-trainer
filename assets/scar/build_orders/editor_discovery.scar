@@ -21,9 +21,45 @@ BUILD_ORDER_DISCOVERY_LISTS = {
 BUILD_ORDER_DISCOVERY_CURRENT = nil
 
 BUILD_ORDER_DISCOVERY_CIV_ALIASES = {
+	abbasid = "abbasid",
 	abbasid_ha_01 = "abbasid",
+	ayyubid = "ayyubids",
 	ayyubid_cmp = "ayyubids",
+	ayyubids = "ayyubids",
+	byzantine = "byzantines",
+	byzantine_ha_mac = "macedonian_dynasty",
+	byzantines = "byzantines",
+	chinese = "chinese",
+	chinese_ha_01 = "zhu_xi",
+	chinese_ha_jin = "jin_dynasty",
+	delhi = "delhi",
+	english = "english",
+	english_ha_01 = "house_of_lancaster",
+	french = "french",
+	french_ha_01 = "jeanne_darc",
+	golden_horde = "golden_horde",
+	house_of_lancaster = "house_of_lancaster",
+	hre = "hre",
+	hre_ha_01 = "order_of_the_dragon",
+	japanese = "japanese",
+	japanese_ha_01 = "sengoku_daimyo",
+	jeanne_darc = "jeanne_darc",
+	jin_dynasty = "jin_dynasty",
+	macedonian_dynasty = "macedonian_dynasty",
+	malian = "malians",
+	malians = "malians",
+	mongol = "mongols",
 	mongol_ha_gol = "golden_horde",
+	mongols = "mongols",
+	order_of_the_dragon = "order_of_the_dragon",
+	ottoman = "ottomans",
+	ottomans = "ottomans",
+	rus = "rus",
+	sengoku_daimyo = "sengoku_daimyo",
+	sultanate_ha_tug = "tughlaq_dynasty",
+	templar = "templar",
+	tughlaq_dynasty = "tughlaq_dynasty",
+	zhu_xi = "zhu_xi",
 }
 
 function BuildOrderDiscovery_CanonicalCivID(raceName)
@@ -119,7 +155,10 @@ function BuildOrderDiscovery_IsAgeUpOption(kind, pbg, civ)
 	return false
 end
 
-function BuildOrderDiscovery_IsTechnologyForPlayer(player, pbg)
+-- SCAR exposes no read-only tech-tree membership query for an upgrade PBG.
+-- This is a best-effort availability signal only: it is player-specific, but
+-- must not be interpreted as a guaranteed civilization-membership predicate.
+function BuildOrderDiscovery_IsTechnologyBestEffortAvailable(player, pbg)
 	return pbg ~= nil and Player_GetUpgradeBPCost(player, pbg) ~= nil
 end
 
@@ -233,12 +272,12 @@ function BuildOrderDiscovery_Collect(player)
 		if BuildOrderDiscovery_BelongsToRace("entity", pathName, race) then
 			local pbg = BP_GetEntityBlueprint(pathName)
 			if BuildOrderDiscovery_IsBuilding(pbg) then
-				local option = BuildOrderDiscovery_CreateOption("building", pathName, pbg, race)
+				local buildingOption = BuildOrderDiscovery_CreateOption("building", pathName, pbg, race)
+				table.insert(snapshot.buildings, buildingOption)
 				if BuildOrderDiscovery_IsAgeUpOption("entity", pbg, snapshot.civ) then
-					option.kind = "age_up"
-					table.insert(snapshot.age_ups, option)
-				else
-					table.insert(snapshot.buildings, option)
+					local ageUpOption = BuildOrderDiscovery_CreateOption("building", pathName, pbg, race)
+					ageUpOption.kind = "age_up"
+					table.insert(snapshot.age_ups, ageUpOption)
 				end
 			end
 		end
@@ -255,7 +294,7 @@ function BuildOrderDiscovery_Collect(player)
 	for index = 0, BP_GetPropertyBagGroupCount(PBG_UpgradeProperties) - 1 do
 		local pathName = BP_GetPropertyBagGroupPathName(PBG_UpgradeProperties, index)
 		local pbg = BP_GetUpgradeBlueprint(pathName)
-		if BuildOrderDiscovery_IsTechnologyForPlayer(player, pbg) then
+		if BuildOrderDiscovery_IsTechnologyBestEffortAvailable(player, pbg) then
 			local option = BuildOrderDiscovery_CreateOption("technology", pathName, pbg, race)
 			if BuildOrderDiscovery_IsAgeUpOption("upgrade", pbg, snapshot.civ) then
 				option.kind = "age_up"

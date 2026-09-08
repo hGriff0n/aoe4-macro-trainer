@@ -7,6 +7,50 @@ BUILD_ORDER_EDITOR_UI_LIVE_LISTS = {
 	live_family = "families",
 }
 
+-- Validation paths are persistence/schema keys, not player-facing labels. Keep
+-- their presentation mapping explicit so a new internal segment cannot leak
+-- into the editor or inherit an unrelated ancestor label.
+BUILD_ORDER_EDITOR_ERROR_FIELD_LABEL_KEYS = {
+	age_up = "age_up_choice",
+	alternatives = "choices",
+	assignments = "assignments",
+	building = "building",
+	buildings = "buildings",
+	builders = "builders",
+	checks = "checks",
+	choice = "choice",
+	choices = "choices",
+	city = "civilization",
+	civ = "civilization",
+	civilization = "civilization",
+	constant = "constant_production",
+	count = "count",
+	entering_age = "entering_age",
+	family = "unit_family",
+	food = "food",
+	gold = "gold",
+	hint = "hint",
+	id = "choice",
+	inferred_age = "entering_age",
+	kind = "check_kind",
+	location = "location",
+	no_collect = "no_collect",
+	optional = "optional",
+	payload = "check_details",
+	queued = "complete_when_queued",
+	rallypoint = "rallypoint",
+	resource = "resource",
+	resources = "stockpile",
+	steps = "steps",
+	stone = "stone",
+	technology = "technology",
+	text = "text",
+	title = "title",
+	unit_family = "unit_family",
+	vils = "builders",
+	wood = "wood",
+}
+
 BUILD_ORDER_EDITOR_UI_STATE = {
 	created = false,
 	screen = "hidden",
@@ -663,13 +707,17 @@ function BuildOrderEditorUI_FriendlyErrorLabel(path)
 	if type(path) ~= "string" or path == "" then
 		return labels.build_order or ""
 	end
-	local label = nil
+	local fieldKeys = BUILD_ORDER_EDITOR_ERROR_FIELD_LABEL_KEYS or {}
+	local semanticKey = nil
 	for segment in string.gmatch(path, "[^%.]+") do
-		if labels[segment] ~= nil then
-			label = labels[segment]
+		if fieldKeys[segment] ~= nil then
+			semanticKey = fieldKeys[segment]
 		end
 	end
-	return label or labels.build_order or ""
+	if semanticKey ~= nil and labels[semanticKey] ~= nil then
+		return labels[semanticKey]
+	end
+	return labels.unknown_field or labels.build_order or ""
 end
 
 function BuildOrderEditorUI_LocalizedErrorMessage(record)

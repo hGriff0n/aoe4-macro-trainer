@@ -42,3 +42,28 @@ This is the single final review-fix wave from review head `4b1e63e633b6837a09863
 ## Remaining concern / acceptance boundary
 
 The code and SCAR audits are automated-green, but this fix wave intentionally did not run the Content Editor or an in-game match. After a user-authorized rebuild, live-engine confirmation should exercise actual local civ aliases, local tech-tree availability, dynamic inline-XAML localization, and the buildings handler in a match.
+
+## Re-review round 2 (2026-09-08)
+
+### RED/GREEN evidence
+
+| Re-review finding | Focused RED | GREEN correction and coverage |
+| --- | --- | --- |
+| Canonical civ aliases | `test_canonical_civ_aliases_cover_every_supported_civilization` initially exposed the incomplete three-alias table: 13 official/current-race aliases did not resolve to repository canonical IDs. | `BUILD_ORDER_DISCOVERY_CIV_ALIASES` now covers every supported `SOURCE_CIVILIZATIONS` target and current official race-name variants. The table-driven executable test covers all supported civs, including `byzantine -> byzantines`, `mongol -> mongols`, and `ottoman -> ottomans`; the existing startup test confirms it calls the same discovery canonical helper. |
+| Technology availability and landmarks | The mixed discovery behavior test failed because landmarks were routed out of `buildings`; it expected each local landmark as both `building` and `age_up`. | `Collect` now creates two independent option records for a local landmark, preserving its building entry while adding its age-up entry. The focused test also proves a `nil` player upgrade cost is excluded. |
+| Friendly error paths | `steps.1.checks.1.payload` rendered the ancestor `Checks` token (`:89`) instead of a semantic field label. | Added the stable `Check details` localization entry (`:142`), a `payload -> check_details` mapping, and an expanded table-driven projection test for every schema/path semantic key. No dotted internal path is rendered. |
+
+### Live upgrade API decision and residual limitation
+
+AoE4 MCP was checked for documented `upgrade`, `research`, `technology`, `tech tree`, `availability`, `race`, and player-query APIs. The high-confidence non-mutating upgrade APIs are `BP_GetUpgradeBlueprint`, `BP_GetUpgradeUIInfo`, `BP_IsUpgradeOfType`, `Player_GetUpgradeBPCost`, and `Player_HasUpgrade`; the last reports already-purchased state. There is no documented `Player_CanResearch`, `Player_CanUpgrade`, available-upgrades/tech-tree enumeration, or upgrade `type_ext` race query. `Entity_QueueProductionItemByPBG` is documented to push an item onto a queue, so it is not a safe discovery probe.
+
+The implementation therefore keeps `Player_GetUpgradeBPCost(player, pbg) ~= nil` as the only player-specific, non-mutating live best-effort availability filter. Its helper and comment explicitly state that it is **not** a guaranteed civilization/tech-tree membership predicate. No static/generated civ-to-upgrade catalog or naming heuristic was added. A user-authorized rebuild must include manual cross-civilization technology selection verification, especially a foreign upgrade with a non-`nil` cost.
+
+### Round-2 files and verification
+
+- Changed: `editor_discovery.scar`, `editor_schema.scar`, `editor_ui.scar`, English locdb entry `142`, and focused discovery/UI tests.
+- Focused RED→GREEN: landmark dual-list behavior, best-effort availability contract, canonical-alias table, and semantic path labels.
+- Focused suites: discovery (21), UI (32), and startup (15) tests passed.
+- Full direct suite: `python -m unittest discover -s tests -p "test_*.py" -v` — **390 tests, OK**.
+- AoE4 MCP `scan_project` returned `ok`. Complete-file `check_code` checks returned `ok`, with no missing locdb IDs for discovery, schema, and UI. The UI checker still classifies Lua `and`/`or` as parser artifacts; they are not calls.
+- No Content Editor, package build, push, or PR was run in this round.

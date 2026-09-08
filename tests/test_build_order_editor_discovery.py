@@ -3,10 +3,41 @@ import unittest
 from pathlib import Path
 
 from tests.scar_runtime import ScarRuntime
+from tools.build_orders.identity_generator import SOURCE_CIVILIZATIONS
 
 
 ROOT = Path(__file__).resolve().parents[1]
 DISCOVERY_SCAR = ROOT / "assets" / "scar" / "build_orders" / "editor_discovery.scar"
+
+
+OFFICIAL_RACE_NAME_CASES = (
+    ("abbasid", "abbasid"),
+    ("abbasid_ha_01", "abbasid"),
+    ("ayyubid", "ayyubids"),
+    ("ayyubid_cmp", "ayyubids"),
+    ("byzantine", "byzantines"),
+    ("byzantine_ha_mac", "macedonian_dynasty"),
+    ("chinese", "chinese"),
+    ("chinese_ha_01", "zhu_xi"),
+    ("chinese_ha_jin", "jin_dynasty"),
+    ("delhi", "delhi"),
+    ("english", "english"),
+    ("english_ha_01", "house_of_lancaster"),
+    ("french", "french"),
+    ("french_ha_01", "jeanne_darc"),
+    ("golden_horde", "golden_horde"),
+    ("hre", "hre"),
+    ("hre_ha_01", "order_of_the_dragon"),
+    ("japanese", "japanese"),
+    ("japanese_ha_01", "sengoku_daimyo"),
+    ("malian", "malians"),
+    ("mongol", "mongols"),
+    ("mongol_ha_gol", "golden_horde"),
+    ("ottoman", "ottomans"),
+    ("rus", "rus"),
+    ("sultanate_ha_tug", "tughlaq_dynasty"),
+    ("templar", "templar"),
+)
 
 
 def function_body(source: str, name: str) -> str:
@@ -34,7 +65,7 @@ class BuildOrderEditorDiscoveryContractTests(unittest.TestCase):
             "BuildOrderDiscovery_BelongsToRace",
             "BuildOrderDiscovery_IsBuilding",
             "BuildOrderDiscovery_IsAgeUpOption",
-            "BuildOrderDiscovery_IsTechnologyForPlayer",
+            "BuildOrderDiscovery_IsTechnologyBestEffortAvailable",
             "BuildOrderDiscovery_CollectFamilies",
             "BuildOrderDiscovery_Sort",
             "BuildOrderDiscovery_Collect",
@@ -55,6 +86,25 @@ class BuildOrderEditorDiscoveryContractTests(unittest.TestCase):
         canonical = function_body(self.source, "BuildOrderDiscovery_CanonicalCivID")
         self.assertIn('type(raceName) ~= "string"', canonical)
         self.assertIn("string.lower(raceName)", canonical)
+
+    def test_canonical_civ_aliases_cover_every_supported_civilization(self) -> None:
+        expected_civilizations = {
+            civilization
+            for civilization in SOURCE_CIVILIZATIONS.values()
+            if civilization is not None
+        }
+        self.assertEqual(
+            {civilization for _race_name, civilization in OFFICIAL_RACE_NAME_CASES},
+            expected_civilizations,
+        )
+
+        runtime = ScarRuntime(DISCOVERY_SCAR.read_text(encoding="utf-8"))
+        for race_name, expected in OFFICIAL_RACE_NAME_CASES:
+            with self.subTest(race_name=race_name):
+                self.assertEqual(
+                    runtime.call("BuildOrderDiscovery_CanonicalCivID", race_name),
+                    expected,
+                )
 
     def test_collect_enumerates_all_three_property_bag_groups(self) -> None:
         body = function_body(self.source, "BuildOrderDiscovery_Collect")
@@ -105,15 +155,18 @@ class BuildOrderEditorDiscoveryContractTests(unittest.TestCase):
         self.assertIn("BP_IsUpgradeOfType(pbg, ageType)", body)
         self.assertNotIn("Player_CanConstruct", body)
 
-    def test_discovery_uses_documented_category_predicates_and_player_costs(self) -> None:
+    def test_discovery_uses_documented_category_predicates_and_best_effort_player_availability(self) -> None:
         building = function_body(self.source, "BuildOrderDiscovery_IsBuilding")
         age_up = function_body(self.source, "BuildOrderDiscovery_IsAgeUpOption")
-        technology = function_body(self.source, "BuildOrderDiscovery_IsTechnologyForPlayer")
+        technology = function_body(
+            self.source, "BuildOrderDiscovery_IsTechnologyBestEffortAvailable"
+        )
 
         self.assertIn('Entity_IsEBPOfType(pbg, "building")', building)
         self.assertIn('Entity_IsEBPOfType(pbg, "landmark")', age_up)
         self.assertIn("BP_IsUpgradeOfType(pbg, upgradeType)", age_up)
         self.assertIn("Player_GetUpgradeBPCost(player, pbg)", technology)
+        self.assertIn("best-effort availability", self.source)
 
     def test_collection_resolves_each_property_bag_blueprint(self) -> None:
         body = function_body(self.source, "BuildOrderDiscovery_Collect")
@@ -199,7 +252,7 @@ class BuildOrderEditorDiscoveryContractTests(unittest.TestCase):
 
 
 class BuildOrderEditorDiscoveryBehaviorTests(unittest.TestCase):
-    def test_collects_only_local_buildings_and_technologies_and_separates_age_ups(self) -> None:
+    def test_collects_race_filtered_buildings_and_cost_available_technologies_and_keeps_landmarks_in_both_lists(self) -> None:
         runtime = ScarRuntime(DISCOVERY_SCAR.read_text(encoding="utf-8"))
         local_race = object()
         foreign_race = object()
@@ -212,7 +265,7 @@ class BuildOrderEditorDiscoveryBehaviorTests(unittest.TestCase):
         ]
         upgrade_paths = [
             "upgrade_wheelbarrow_eng",
-            "upgrade_wheelbarrow_fre",
+            "upgrade_no_player_cost",
         ]
         entity_types = {
             "building_house_eng": {"building"},
@@ -274,8 +327,15 @@ class BuildOrderEditorDiscoveryBehaviorTests(unittest.TestCase):
         snapshot = runtime.call("BuildOrderDiscovery_Collect", "local-player")
 
         self.assertEqual(
-            [option["id"] for option in snapshot["buildings"].array()],
-            ["building_house_eng"],
+            [
+                (option["id"], option["kind"])
+                for option in snapshot["buildings"].array()
+            ],
+            [
+                ("building_house_eng", "building"),
+                ("building_landmark_feudal_eng", "building"),
+                ("building_landmark_castle_eng", "building"),
+            ],
         )
         self.assertEqual(
             [option["id"] for option in snapshot["technologies"].array()],
@@ -283,12 +343,12 @@ class BuildOrderEditorDiscoveryBehaviorTests(unittest.TestCase):
         )
         self.assertEqual(
             [
-                (option["id"], option["age"])
+                (option["id"], option["age"], option["kind"])
                 for option in snapshot["age_ups"].array()
             ],
             [
-                ("building_landmark_feudal_eng", 2),
-                ("building_landmark_castle_eng", 3),
+                ("building_landmark_feudal_eng", 2, "age_up"),
+                ("building_landmark_castle_eng", 3, "age_up"),
             ],
         )
 

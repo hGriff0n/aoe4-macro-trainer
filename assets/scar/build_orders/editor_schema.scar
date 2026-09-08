@@ -102,6 +102,7 @@ BUILD_ORDER_EDITOR_FIELD_LABELS = {
 	unknown_check = "$dfb5645698a84afb91cf7a2dfb0f4a4e:108",
 	unknown_field = "$dfb5645698a84afb91cf7a2dfb0f4a4e:109",
 	entering_age = "$dfb5645698a84afb91cf7a2dfb0f4a4e:110",
+	check_details = "$dfb5645698a84afb91cf7a2dfb0f4a4e:142",
 	food = "$dfb5645698a84afb91cf7a2dfb0f4a4e:62",
 	wood = "$dfb5645698a84afb91cf7a2dfb0f4a4e:63",
 	gold = "$dfb5645698a84afb91cf7a2dfb0f4a4e:64",

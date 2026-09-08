@@ -224,3 +224,19 @@ Review head `4b1e63e633b6837a09863bb746d923ac5faea150` received one final focuse
 Final AoE4 MCP project scan was `ok`. `check_code` returned `ok` with no missing locdb IDs for every changed SCAR file. The only reported low-confidence API remains the exact official `Game_SaveTextDataStore` declaration with no indexed usage sample; `and`, `or`, and the freshly declared startup helper are checker parser/index artifacts, not unresolved production calls. The Content Editor was deliberately **not** run during this fix wave, per controller instruction; rebuild and in-game confirmation remain the explicit acceptance boundary.
 
 The final direct Python command, `python -m unittest discover -s tests -p "test_*.py" -v`, completed with **388 tests, OK**. `git diff --check` was rerun before commit.
+
+## Final review-fix wave: re-review round 2 (2026-09-08)
+
+The re-review narrowed to complete canonical race aliases, technology availability semantics, landmark categorization, and friendly validation paths.
+
+- The shared discovery/startup canonicalizer now maps every supported civilizational target from the repository identity source, including the official forms `byzantine`, `mongol`, and `ottoman` to `byzantines`, `mongols`, and `ottomans`. A table-driven runtime test covers all supported civs and the startup shared-helper behavior remains green.
+- Local landmarks now appear in both live `buildings` and exact-age `age_ups`, as independent structured options. The focused executable discovery test first failed on the absent building records and passes with the dual-list correction.
+- AoE4 MCP confirmed that SCAR exposes no documented read-only player tech-tree/upgrade-race membership query. `Player_GetUpgradeBPCost` remains the only player-specific non-mutating signal, but the helper is now explicitly named/commented as **best-effort availability**, never guaranteed civ membership. A `nil` cost is covered as excluded; no static catalog, naming heuristic, or mutating queue probe was introduced. Manual post-rebuild cross-civ technology validation (including a foreign non-`nil` cost) remains required.
+- Validation path projection now uses an explicit semantic map for schema fields. A new stable English `Check details` token (`:142`) labels bare `payload`; expanded table-driven paths cover civ, kind, alternatives, family, queued, nested payload fields, and schema labels without exposing raw dotted paths.
+
+Verification for this continuation:
+
+- Focused discovery, UI, and startup suites: 21 + 32 + 15 tests, all OK.
+- Full direct suite: **390 tests, OK**.
+- AoE4 MCP scan: `ok`; complete-file checks for discovery/schema/UI: `ok`, no missing localization IDs. `and`/`or` in UI are known checker parser artifacts.
+- No Content Editor, package build, push, or PR was run.
