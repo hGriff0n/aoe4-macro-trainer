@@ -79,3 +79,61 @@
 81,,,Build-order check-kind label.,,,Existing units
 82,,,Build-order check-kind label.,,,Hint
 83,,,Build-order editor field label.,,,Optional
+84,,,Build-order editor schema label.,,,Build order
+85,,,Build-order editor schema label.,,,Civilization
+86,,,Build-order editor schema label.,,,Title
+87,,,Build-order editor schema label.,,,Steps
+88,,,Build-order editor schema label.,,,Step
+89,,,Build-order editor schema label.,,,Checks
+90,,,Build-order editor schema label.,,,Assignments
+91,,,Build-order editor schema label.,,,Resource
+92,,,Build-order editor schema label.,,,Building
+93,,,Build-order editor schema label.,,,Buildings
+94,,,Build-order editor schema label.,,,Count
+95,,,Build-order editor schema label.,,,Builders
+96,,,Build-order editor schema label.,,,Location
+97,,,Build-order editor schema label.,,,Age-up choice
+98,,,Build-order editor schema label.,,,Choices
+99,,,Build-order editor schema label.,,,Choice
+100,,,Build-order editor schema label.,,,Technology
+101,,,Build-order editor schema label.,,,Complete when queued
+102,,,Build-order editor schema label.,,,Unit family
+103,,,Build-order editor schema label.,,,Constant production
+104,,,Build-order editor schema label.,,,Stockpile
+105,,,Build-order editor schema label.,,,Hint
+106,,,Build-order editor schema label.,,,Text
+107,,,Build-order editor schema label.,,,Check kind
+108,,,Build-order editor fallback label.,,,Unknown check
+109,,,Build-order editor fallback label.,,,Unknown field
+110,,,Build-order editor age label.,,,Entering age
+111,,,Build-order editor validation error.,,,"Enter a positive whole number, or leave this field unselected."
+112,,,Build-order editor validation error.,,,Select a value.
+113,,,Build-order editor validation error.,,,Select a valid game-data value.
+114,,,Build-order editor validation error.,,,The selection is not the required game-data type.
+115,,,Build-order editor validation error.,,,Select a unit family.
+116,,,Build-order editor validation error.,,,Use a canonical unit identifier.
+117,,,Build-order editor validation error.,,,Do not repeat a canonical unit identifier.
+118,,,Build-order editor validation error.,,,The selection does not match a discovered unit family.
+119,,,Build-order editor validation error.,,,Select at least one option.
+120,,,Build-order editor validation error.,,,Do not repeat a selection.
+121,,,Build-order editor validation error.,,,Select a resource list.
+122,,,Build-order editor validation error.,,,"Select food, wood, gold, or stone."
+123,,,Build-order editor validation error.,,,Do not repeat a resource.
+124,,,Build-order editor validation error.,,,Choose true or false.
+125,,,Build-order editor validation error.,,,Enter text or leave this field unselected.
+126,,,Build-order editor validation error.,,,Add a valid check.
+127,,,Build-order editor validation error.,,,Choose a supported check kind.
+128,,,Build-order editor validation error.,,,Enter an object value.
+129,,,Build-order editor validation error.,,,Select a resource threshold or a no-collect resource.
+130,,,Build-order editor validation error.,,,Select at least one resource.
+131,,,Build-order editor validation error.,,,Enter non-empty text.
+132,,,Build-order editor validation error.,,,Enter a valid build-order draft.
+133,,,Build-order editor validation error.,,,Enter a title that can form an ID.
+134,,,Build-order editor validation error.,,,Select a civilization.
+135,,,Build-order editor validation error.,,,Add at least one step.
+136,,,Build-order editor validation error.,,,Enter a valid step.
+137,,,Build-order editor validation error.,,,Add at least one check.
+138,,,Build-order editor validation error.,,,Only one age-up check is allowed per step.
+139,,,Build-order editor save error.,,,The build order could not be converted.
+140,,,Build-order editor save error.,,,Another build order already has that ID.
+141,,,Build-order editor save error.,,,The build order could not be saved.

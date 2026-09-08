@@ -87,11 +87,34 @@ function BuildOrderDatastore_Apply(originalID, newID, buildOrder)
 	if BUILD_ORDER_CATALOG[newID] ~= nil and newID ~= originalID then
 		return false, "id_collision"
 	end
+	local originalValue = nil
+	local hasOriginal = false
+	if originalID ~= nil then
+		originalValue = BUILD_ORDER_CATALOG[originalID]
+		hasOriginal = originalValue ~= nil
+	end
+	local destinationValue = BUILD_ORDER_CATALOG[newID]
+	local hasDestination = destinationValue ~= nil
 	if originalID ~= nil and originalID ~= newID then
 		BUILD_ORDER_CATALOG[originalID] = nil
 	end
 	BUILD_ORDER_CATALOG[newID] = buildOrder
-	BuildOrderDatastore_SaveCatalog()
+	local saved = pcall(BuildOrderDatastore_SaveCatalog)
+	if saved ~= true then
+		if hasDestination then
+			BUILD_ORDER_CATALOG[newID] = destinationValue
+		else
+			BUILD_ORDER_CATALOG[newID] = nil
+		end
+		if originalID ~= nil and originalID ~= newID then
+			if hasOriginal then
+				BUILD_ORDER_CATALOG[originalID] = originalValue
+			else
+				BUILD_ORDER_CATALOG[originalID] = nil
+			end
+		end
+		return false, "persistence_error"
+	end
 	return true, ""
 end
 

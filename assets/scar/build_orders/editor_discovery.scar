@@ -1,27 +1,47 @@
 BUILD_ORDER_DISCOVERY_DEFAULT_ICONS = {
-	entity = "/WPFGUI;component/icons/objectives/objectives_generic_small.png",
+	building = "/WPFGUI;component/icons/objectives/objectives_generic_small.png",
 	squad = "/WPFGUI;component/icons/garrisoned_unit.png",
-	upgrade = "/WPFGUI;component/images/fe/achievement.png",
+	technology = "/WPFGUI;component/images/fe/achievement.png",
+	age_up = "/WPFGUI;component/icons/objectives/objectives_generic_small.png",
 	family = "/WPFGUI;component/icons/garrisoned_unit.png",
 }
 
 BUILD_ORDER_DISCOVERY_LISTS = {
-	entity = "entities",
+	building = "buildings",
 	squad = "squads",
-	upgrade = "upgrades",
+	technology = "technologies",
+	age_up = "age_ups",
 	family = "families",
+	-- Compatibility aliases keep already-open drafts readable while every live editor
+	-- adapter consumes one of the dedicated semantic lists above.
+	entity = "buildings",
+	upgrade = "technologies",
 }
 
 BUILD_ORDER_DISCOVERY_CURRENT = nil
 
+BUILD_ORDER_DISCOVERY_CIV_ALIASES = {
+	abbasid_ha_01 = "abbasid",
+	ayyubid_cmp = "ayyubids",
+	mongol_ha_gol = "golden_horde",
+}
+
+function BuildOrderDiscovery_CanonicalCivID(raceName)
+	if type(raceName) ~= "string" then
+		return ""
+	end
+	local normalized = string.lower(raceName)
+	return BUILD_ORDER_DISCOVERY_CIV_ALIASES[normalized] or normalized
+end
+
 function BuildOrderDiscovery_GetAge(kind, pathName, pbg)
 	for age = 2, 4 do
 		local ageType = "scar_age" .. age
-		if kind == "entity" and Entity_IsEBPOfType(pbg, ageType) then
+		if (kind == "entity" or kind == "building") and Entity_IsEBPOfType(pbg, ageType) then
 			return age
 		elseif kind == "squad" and Squad_IsSBPOfType(pbg, ageType) then
 			return age
-		elseif kind == "upgrade" and BP_IsUpgradeOfType(pbg, ageType) then
+		elseif (kind == "upgrade" or kind == "technology") and BP_IsUpgradeOfType(pbg, ageType) then
 			return age
 		end
 	end
@@ -30,11 +50,11 @@ end
 
 function BuildOrderDiscovery_GetPresentation(kind, pathName, pbg, race)
 	local uiInfo = nil
-	if kind == "entity" then
+	if kind == "entity" or kind == "building" then
 		uiInfo = BP_GetEntityUIInfo(pbg)
 	elseif kind == "squad" then
 		uiInfo = BP_GetSquadUIInfo(pbg, race)
-	elseif kind == "upgrade" then
+	elseif kind == "upgrade" or kind == "technology" then
 		uiInfo = BP_GetUpgradeUIInfo(pbg)
 	end
 
@@ -58,7 +78,7 @@ function BuildOrderDiscovery_GetPresentation(kind, pathName, pbg, race)
 end
 
 function BuildOrderDiscovery_BelongsToRace(kind, pathName, race)
-	if kind == "entity" then
+	if kind == "entity" or kind == "building" then
 		local count = BP_GetEntityTypeExtRaceCount(pathName)
 		for index = 0, count - 1 do
 			if BP_GetEntityTypeExtRaceBlueprintAtIndex(pathName, index) == race then
@@ -74,6 +94,33 @@ function BuildOrderDiscovery_BelongsToRace(kind, pathName, race)
 		end
 	end
 	return false
+end
+
+BUILD_ORDER_DISCOVERY_AGE_UP_UPGRADE_TYPES = {
+	abbasid = "abbasid_wing_upgrade",
+	ayyubids = "ayyubid_cmp_upgrade",
+	templar = "age_up_upgrade",
+	golden_horde = "age_up_upgrade",
+}
+
+function BuildOrderDiscovery_IsBuilding(pbg)
+	return pbg ~= nil and Entity_IsEBPOfType(pbg, "building")
+end
+
+function BuildOrderDiscovery_IsAgeUpOption(kind, pbg, civ)
+	if kind == "entity" then
+		return Entity_IsEBPOfType(pbg, "landmark")
+			and BuildOrderDiscovery_GetAge("entity", nil, pbg) ~= nil
+	elseif kind == "upgrade" then
+		local upgradeType = BUILD_ORDER_DISCOVERY_AGE_UP_UPGRADE_TYPES[civ]
+		return upgradeType ~= nil and BP_IsUpgradeOfType(pbg, upgradeType)
+			and BuildOrderDiscovery_GetAge("upgrade", nil, pbg) ~= nil
+	end
+	return false
+end
+
+function BuildOrderDiscovery_IsTechnologyForPlayer(player, pbg)
+	return pbg ~= nil and Player_GetUpgradeBPCost(player, pbg) ~= nil
 end
 
 function BuildOrderDiscovery_CreateOption(kind, pathName, pbg, race)
@@ -167,12 +214,17 @@ end
 
 function BuildOrderDiscovery_Collect(player)
 	local race = Player_GetRace(player)
+	local raceName = Player_GetRaceName(player)
 	local snapshot = {
-		civ = race,
-		civ_name = Player_GetRaceName(player),
+		race = race,
+		civ = BuildOrderDiscovery_CanonicalCivID(raceName),
+		civ_name = raceName,
+		buildings = {},
 		entities = {},
 		squads = {},
+		technologies = {},
 		upgrades = {},
+		age_ups = {},
 		families = {},
 	}
 
@@ -180,7 +232,15 @@ function BuildOrderDiscovery_Collect(player)
 		local pathName = BP_GetPropertyBagGroupPathName(PBG_EntityProperties, index)
 		if BuildOrderDiscovery_BelongsToRace("entity", pathName, race) then
 			local pbg = BP_GetEntityBlueprint(pathName)
-			table.insert(snapshot.entities, BuildOrderDiscovery_CreateOption("entity", pathName, pbg, race))
+			if BuildOrderDiscovery_IsBuilding(pbg) then
+				local option = BuildOrderDiscovery_CreateOption("building", pathName, pbg, race)
+				if BuildOrderDiscovery_IsAgeUpOption("entity", pbg, snapshot.civ) then
+					option.kind = "age_up"
+					table.insert(snapshot.age_ups, option)
+				else
+					table.insert(snapshot.buildings, option)
+				end
+			end
 		end
 	end
 
@@ -195,13 +255,24 @@ function BuildOrderDiscovery_Collect(player)
 	for index = 0, BP_GetPropertyBagGroupCount(PBG_UpgradeProperties) - 1 do
 		local pathName = BP_GetPropertyBagGroupPathName(PBG_UpgradeProperties, index)
 		local pbg = BP_GetUpgradeBlueprint(pathName)
-		table.insert(snapshot.upgrades, BuildOrderDiscovery_CreateOption("upgrade", pathName, pbg, race))
+		if BuildOrderDiscovery_IsTechnologyForPlayer(player, pbg) then
+			local option = BuildOrderDiscovery_CreateOption("technology", pathName, pbg, race)
+			if BuildOrderDiscovery_IsAgeUpOption("upgrade", pbg, snapshot.civ) then
+				option.kind = "age_up"
+				table.insert(snapshot.age_ups, option)
+			else
+				table.insert(snapshot.technologies, option)
+			end
+		end
 	end
 
 	snapshot.families = BuildOrderDiscovery_CollectFamilies(snapshot, player, race)
-	BuildOrderDiscovery_Sort(snapshot.entities)
+	snapshot.entities = snapshot.buildings
+	snapshot.upgrades = snapshot.technologies
+	BuildOrderDiscovery_Sort(snapshot.buildings)
 	BuildOrderDiscovery_Sort(snapshot.squads)
-	BuildOrderDiscovery_Sort(snapshot.upgrades)
+	BuildOrderDiscovery_Sort(snapshot.technologies)
+	BuildOrderDiscovery_Sort(snapshot.age_ups)
 	BuildOrderDiscovery_Sort(snapshot.families)
 	BUILD_ORDER_DISCOVERY_CURRENT = snapshot
 	return snapshot
@@ -216,6 +287,20 @@ function BuildOrderDiscovery_Filter(snapshot, kind, maximumAge)
 	local options = snapshot[listName] or {}
 	for _, option in ipairs(options) do
 		if option.age <= maximumAge then
+			table.insert(filtered, option)
+		end
+	end
+	return filtered
+end
+
+function BuildOrderDiscovery_FilterExactAge(snapshot, kind, expectedAge)
+	local filtered = {}
+	local listName = BUILD_ORDER_DISCOVERY_LISTS[kind]
+	if snapshot == nil or listName == nil then
+		return filtered
+	end
+	for _, option in ipairs(snapshot[listName] or {}) do
+		if option.age == expectedAge then
 			table.insert(filtered, option)
 		end
 	end

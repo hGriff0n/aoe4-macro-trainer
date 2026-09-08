@@ -3,10 +3,13 @@ import unittest
 from pathlib import Path
 
 from tests.scar_runtime import LuaResults, LuaTable, ScarRuntime
+from tools.build_orders.datastore import _render_value, parse_datastore
 
 
 ROOT = Path(__file__).resolve().parents[1]
 EDITOR_SCAR = ROOT / "assets" / "scar" / "build_orders" / "editor.scar"
+DATASTORE_SCAR = ROOT / "assets" / "scar" / "build_orders" / "datastore.scar"
+DISCOVERY_SCAR = ROOT / "assets" / "scar" / "build_orders" / "editor_discovery.scar"
 MODEL_SCAR = ROOT / "assets" / "scar" / "build_orders" / "editor_model.scar"
 SCHEMA_SCAR = ROOT / "assets" / "scar" / "build_orders" / "editor_schema.scar"
 UI_SCAR = ROOT / "assets" / "scar" / "build_orders" / "editor_ui.scar"
@@ -47,6 +50,24 @@ def find_view_node(root, path: str):
             return node
         pending.extend(child_nodes(node))
     raise AssertionError(f"missing projected node {path}")
+
+
+def lua_to_python(value):
+    if isinstance(value, LuaTable):
+        array = value.array()
+        if len(value.data) == len(array):
+            return [lua_to_python(item) for item in array]
+        return {key: lua_to_python(item) for key, item in value.data.items()}
+    return value
+
+
+def parse_saved_editor_order(order) -> object:
+    saved = lua_to_python(order)
+    datastore = {
+        "schema_version": 1,
+        "build_orders": {saved["id"]: saved},
+    }
+    return parse_datastore("LuaDataStore = " + _render_value(datastore, 0) + "\n")
 
 
 def valid_order(
@@ -126,38 +147,40 @@ def discovery_snapshot():
     return {
         "civ": "english",
         "civ_name": "English",
-        "entities": [
+        "buildings": [
             {
                 "id": "house_dark",
-                "kind": "entity",
+                "kind": "building",
                 "age": 1,
                 "label": "House",
                 "icon": "house",
             },
             {
-                "id": "landmark_feudal",
-                "kind": "entity",
-                "age": 2,
-                "label": "Feudal Landmark",
-                "icon": "landmark",
-            },
-            {
                 "id": "barracks_feudal",
-                "kind": "entity",
+                "kind": "building",
                 "age": 2,
                 "label": "Barracks",
                 "icon": "barracks",
             },
             {
                 "id": "keep_castle",
-                "kind": "entity",
+                "kind": "building",
                 "age": 3,
                 "label": "Keep",
                 "icon": "keep",
             },
         ],
+        "age_ups": [
+            {
+                "id": "landmark_feudal",
+                "kind": "age_up",
+                "age": 2,
+                "label": "Feudal Landmark",
+                "icon": "landmark",
+            }
+        ],
         "squads": [],
-        "upgrades": [],
+        "technologies": [],
         "families": [],
     }
 
@@ -204,6 +227,8 @@ class BuildOrderEditorBehaviorTests(unittest.TestCase):
         editor_source = EDITOR_SCAR.read_text(encoding="utf-8")
         cls.runtime_source = "\n".join(
             (
+                DATASTORE_SCAR.read_text(encoding="utf-8"),
+                DISCOVERY_SCAR.read_text(encoding="utf-8"),
                 MODEL_SCAR.read_text(encoding="utf-8"),
                 SCHEMA_SCAR.read_text(encoding="utf-8"),
                 strip_xaml(UI_SCAR.read_text(encoding="utf-8")),
@@ -231,6 +256,10 @@ class BuildOrderEditorBehaviorTests(unittest.TestCase):
         self.apply_exception = None
 
         self.runtime.globals["Game_GetLocalPlayer"] = lambda: "local-player"
+        self.real_discovery_collect = self.runtime.globals[
+            "BuildOrderDiscovery_Collect"
+        ]
+        self.real_datastore_apply = self.runtime.globals["BuildOrderDatastore_Apply"]
         self.runtime.globals["BuildOrderDiscovery_Collect"] = self.collect
         self.runtime.globals["BuildOrderDiscovery_Clear"] = self.clear_discovery
         self.runtime.globals["BuildOrderEditorUI_SetCallbacks"] = (
@@ -295,6 +324,91 @@ class BuildOrderEditorBehaviorTests(unittest.TestCase):
         self.runtime.globals["BUILD_ORDER_CATALOG"] = self.runtime.table(
             {order["id"]: order for order in orders}
         )
+
+    def test_non_string_race_handle_creates_and_saves_with_canonical_civ_id(self) -> None:
+        race_handle = object()
+        property_groups = {
+            "entity-properties": ["building_house_eng"],
+            "squad-properties": [],
+            "upgrade-properties": [],
+        }
+        stored = []
+
+        self.runtime.globals["BuildOrderDiscovery_Collect"] = (
+            self.real_discovery_collect
+        )
+        self.runtime.globals["BuildOrderDatastore_Apply"] = self.real_datastore_apply
+        self.runtime.globals["BuildOrderEditorUI_SetCallbacks"] = lambda _callbacks: None
+        self.runtime.globals["BuildOrderEditorUI_ShowEditor"] = lambda _model: True
+        self.runtime.globals["BuildOrderEditorUI_Hide"] = lambda: None
+        self.runtime.globals["PBG_EntityProperties"] = "entity-properties"
+        self.runtime.globals["PBG_SquadProperties"] = "squad-properties"
+        self.runtime.globals["PBG_UpgradeProperties"] = "upgrade-properties"
+        self.runtime.globals["table"]["sort"] = lambda _values, _compare: None
+        self.runtime.globals["Player_GetRace"] = lambda _player: race_handle
+        self.runtime.globals["Player_GetRaceName"] = lambda _player: "English"
+        self.runtime.globals["BP_GetPropertyBagGroupCount"] = (
+            lambda group: len(property_groups[group])
+        )
+        self.runtime.globals["BP_GetPropertyBagGroupPathName"] = (
+            lambda group, index: property_groups[group][index]
+        )
+        self.runtime.globals["BP_GetEntityTypeExtRaceCount"] = lambda _path: 1
+        self.runtime.globals["BP_GetEntityTypeExtRaceBlueprintAtIndex"] = (
+            lambda _path, _index: race_handle
+        )
+        self.runtime.globals["BP_GetSquadTypeExtRaceCount"] = lambda _path: 0
+        self.runtime.globals["BP_GetSquadTypeExtRaceBlueprintAtIndex"] = (
+            lambda _path, _index: None
+        )
+        self.runtime.globals["BP_GetEntityBlueprint"] = lambda path: path
+        self.runtime.globals["BP_GetSquadBlueprint"] = lambda path: path
+        self.runtime.globals["BP_GetUpgradeBlueprint"] = lambda path: path
+        self.runtime.globals["Entity_IsEBPOfType"] = (
+            lambda _pbg, kind: kind == "building"
+        )
+        self.runtime.globals["Squad_IsSBPOfType"] = lambda _pbg, _kind: False
+        self.runtime.globals["BP_IsUpgradeOfType"] = lambda _pbg, _kind: False
+        self.runtime.globals["BP_GetEntityUIInfo"] = lambda _pbg: self.runtime.table(
+            {"screenName": "House", "iconName": "house"}
+        )
+        self.runtime.globals["BP_GetSquadUIInfo"] = lambda _pbg, _race: None
+        self.runtime.globals["BP_GetUpgradeUIInfo"] = lambda _pbg: None
+        self.runtime.globals["Loc_ToAnsi"] = lambda value: value
+        self.runtime.globals["AI_CombatFitnessGetSquadArchetypeNames"] = (
+            lambda: self.runtime.table([])
+        )
+        self.runtime.globals["AI_CombatFitnessGetSquadArchetypePBGs"] = (
+            lambda _name: self.runtime.table([])
+        )
+        self.runtime.globals["Game_StoreTableData"] = (
+            lambda datastore_id, value: stored.append((datastore_id, value))
+        )
+        self.runtime.globals["Game_SaveTextDataStore"] = lambda _datastore_id, _path: None
+
+        self.assertTrue(self.runtime.call("BuildOrderEditor_OpenCreate", None))
+        draft = self.runtime.globals["BUILD_ORDER_EDITOR_STATE"]["draft"]
+        self.assertEqual(draft["civ"], "english")
+        draft["title"] = "Race Handle"
+        draft["steps"] = self.runtime.table(
+            [
+                {
+                    "title": "Opening",
+                    "checks": [
+                        {
+                            "kind": "hints",
+                            "optional": True,
+                            "payload": {"text": "Scout"},
+                        }
+                    ],
+                }
+            ]
+        )
+
+        self.assertTrue(self.runtime.call("BuildOrderEditor_Save"))
+        saved = self.runtime.globals["BUILD_ORDER_CATALOG"]["english-race-handle"]
+        self.assertEqual(saved["civ"], "english")
+        self.assertEqual(len(stored), 1)
 
     def call_with_callback(self, name, *arguments):
         result = self.runtime.globals[name](*arguments)
@@ -463,7 +577,7 @@ class BuildOrderEditorBehaviorTests(unittest.TestCase):
         building = find_view_node(root, "steps.2.checks.1.payload.id")
         self.assertEqual(
             [option["id"] for option in building["options"].array()],
-            ["house_dark", "landmark_feudal", "barracks_feudal"],
+            ["house_dark", "barracks_feudal"],
         )
 
     def test_pointer_and_accessible_reorder_share_model_move_and_refresh_ages(self) -> None:
@@ -547,6 +661,98 @@ class BuildOrderEditorBehaviorTests(unittest.TestCase):
         self.assertIsNone(state["on_complete"])
         self.assertEqual(self.ui_hides, 1)
 
+    def test_editor_save_round_trips_canonical_check_ids_through_python_datastore_parser(self) -> None:
+        order = valid_order()
+        self.set_catalog([order])
+        self.runtime.call("BuildOrderEditor_OpenEdit", order["id"], None)
+
+        self.assertTrue(self.runtime.call("BuildOrderEditor_Save"))
+        saved = self.apply_calls[0][2]
+        self.assertEqual(saved["steps"][1]["checks"][1]["id"], f"{order['id']}:1:1")
+
+        parsed = parse_saved_editor_order(saved)
+        self.assertEqual(parsed.build_orders[0].id, order["id"])
+        self.assertEqual(parsed.build_orders[0].steps[0].checks[0].kind, "hints")
+
+    def test_family_selected_option_keeps_presentation_through_ui_command_and_save(self) -> None:
+        discovery = discovery_snapshot()
+        discovery["families"] = [
+            {
+                "ids": ["unit_spearman_1_eng", "unit_spearman_2_eng"],
+                "kind": "family",
+                "age": 1,
+                "label": "Spearman",
+                "icon": "unit_spearman",
+            }
+        ]
+        self.runtime.globals["BuildOrderDiscovery_Collect"] = (
+            lambda _player: self.runtime.table(discovery)
+        )
+
+        for kind, expected_title in (
+            ("produce", "Produce 2 Spearman"),
+            ("units", "Have 2 active Spearman"),
+        ):
+            with self.subTest(kind=kind):
+                self.apply_calls.clear()
+                self.assertTrue(self.runtime.call("BuildOrderEditor_OpenCreate", None))
+                state = self.runtime.globals["BUILD_ORDER_EDITOR_STATE"]
+                state["draft"]["title"] = f"{kind.title()} family"
+                payload = {"family": {"ids": []}, "count": 2}
+                if kind == "produce":
+                    payload["constant"] = False
+                    payload["queued"] = False
+                state["draft"]["steps"] = self.runtime.table(
+                    [
+                        {
+                            "title": "Opening",
+                            "checks": [
+                                {
+                                    "kind": kind,
+                                    "optional": False,
+                                    "payload": payload,
+                                }
+                            ],
+                        }
+                    ]
+                )
+                self.assertTrue(self.runtime.call("BuildOrderEditor_Refresh"))
+
+                root = self.project_latest_model()
+                field = find_view_node(root, "steps.1.checks.1.payload.family")
+                option = field["options"][1]
+                self.assertEqual(option["value"]["label"], "Spearman")
+                self.assertEqual(option["value"]["icon"], "unit_spearman")
+                self.assertEqual(
+                    option["value"]["ids"].array(),
+                    ["unit_spearman_1_eng", "unit_spearman_2_eng"],
+                )
+
+                self.assertTrue(
+                    self.runtime.call(
+                        "BuildOrderEditor_FieldChange",
+                        {
+                            "path": "steps.1.checks.1.payload.family",
+                            "selected_option": option,
+                        },
+                    )
+                )
+                selected = state["draft"]["steps"][1]["checks"][1]["payload"]["family"]
+                self.assertEqual(selected["label"], "Spearman")
+                self.assertEqual(selected["icon"], "unit_spearman")
+                self.assertEqual(
+                    selected["ids"].array(),
+                    ["unit_spearman_1_eng", "unit_spearman_2_eng"],
+                )
+
+                self.assertTrue(self.runtime.call("BuildOrderEditor_Save"))
+                saved = self.apply_calls[0][2]["steps"][1]["checks"][1]
+                self.assertEqual(saved["title"], expected_title)
+                self.assertEqual(
+                    saved["payload"]["ids"].array(),
+                    ["unit_spearman_1_eng", "unit_spearman_2_eng"],
+                )
+
     def test_unknown_saved_internal_id_survives_controller_validation_and_save(self) -> None:
         order = valid_order()
         order["steps"][0]["checks"] = [
@@ -584,13 +790,19 @@ class BuildOrderEditorBehaviorTests(unittest.TestCase):
         self.assertFalse(self.runtime.call("BuildOrderEditor_Save"))
         self.assertIs(state["draft"], draft)
         self.assertEqual(state["errors"][1]["path"], "save")
-        self.assertIn("id_collision", state["errors"][1]["message"])
+        self.assertEqual(
+            state["errors"][1]["message"],
+            "$dfb5645698a84afb91cf7a2dfb0f4a4e:140",
+        )
         self.assertEqual(completions, [])
 
         self.apply_exception = RuntimeError("datastore unavailable")
         self.assertFalse(self.runtime.call("BuildOrderEditor_Save"))
         self.assertIs(state["draft"], draft)
-        self.assertIn("datastore unavailable", state["errors"][1]["message"])
+        self.assertEqual(
+            state["errors"][1]["message"],
+            "$dfb5645698a84afb91cf7a2dfb0f4a4e:141",
+        )
         self.assertEqual(completions, [])
 
     def test_ui_parameter_adapters_route_values_toggles_and_shared_reorder(self) -> None:

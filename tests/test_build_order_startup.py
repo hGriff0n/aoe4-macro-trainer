@@ -209,6 +209,25 @@ class BuildOrderStartupBehaviorTests(unittest.TestCase):
         self.assertEqual(self.rule_remove_me, 1)
         self.assertEqual(self.sim_rates, [0])
 
+    def test_startup_uses_the_discovery_canonical_civilization_conversion(self) -> None:
+        self.runtime.globals["BUILD_ORDER_CATALOG"] = self.runtime.table(
+            {
+                "ayyubids-feudal": build_order(
+                    "ayyubids-feudal", "Feudal", "ayyubids"
+                )
+            }
+        )
+        self.runtime.globals["Player_GetRaceName"] = lambda _player: "ayyubid_cmp"
+        self.runtime.globals["BuildOrderDiscovery_CanonicalCivID"] = (
+            lambda race_name: "ayyubids"
+            if race_name == "ayyubid_cmp"
+            else race_name.lower()
+        )
+
+        compatible = self.call("BuildOrderStartup_CollectCompatible")
+
+        self.assertEqual(compatible.array(), ["ayyubids-feudal"])
+
     def test_select_changes_state_without_resuming_and_edit_cancel_restores_it(self) -> None:
         self.start()
         self.assertTrue(

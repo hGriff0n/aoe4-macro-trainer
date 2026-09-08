@@ -1,0 +1,101 @@
+BUILDINGS_STATE = {}
+BUILDINGS_POLLING = false
+BUILDINGS_SCAN_STATE = nil
+BUILDINGS_POLL_INTERVAL_SECONDS = 1
+
+function Buildings_BlueprintsEqual(left, right)
+	return left ~= nil and right ~= nil
+		and left.PropertyBagGroupID == right.PropertyBagGroupID
+		and left.PropertyBagGroupModPackID == right.PropertyBagGroupModPackID
+		and left.PropertyBagGroupType == right.PropertyBagGroupType
+end
+
+function Buildings_ResolvePBG(id)
+	if type(id) ~= "string" or id == "" then
+		return nil
+	end
+	return BP_GetEntityBlueprint(id)
+end
+
+function Buildings_MatchesPBG(expected, candidate)
+	return Buildings_BlueprintsEqual(expected, candidate)
+end
+
+function Buildings_ScanEntity(groupID, entityIndex, entity)
+	local state = BUILDINGS_SCAN_STATE
+	if state == nil then
+		return true
+	end
+	-- Player_GetEntities is player-scoped, but retain the owner guard for converted entities.
+	if Entity_GetPlayerOwner(entity) ~= state.player then
+		return false
+	end
+	if Entity_IsBuilding(entity) == false then
+		return false
+	end
+	if Entity_GetBuildingProgress(entity) < 1.0 then
+		return false
+	end
+	if Buildings_MatchesPBG(state.pbg, Entity_GetBlueprint(entity)) == false then
+		return false
+	end
+	state.count = state.count + 1
+	return false
+end
+
+function Buildings_Poll()
+	BuildOrder_BeginCheckUpdates()
+	for _, state in pairs(BUILDINGS_STATE) do
+		state.count = 0
+		if state.pbg ~= nil then
+			BUILDINGS_SCAN_STATE = state
+			EGroup_ForEach(Player_GetEntities(state.player), Buildings_ScanEntity)
+		end
+		BUILDINGS_SCAN_STATE = nil
+		BuildOrder_SetCheckComplete(state.checkID, state.count >= state.payload.count)
+	end
+	BuildOrder_EndCheckUpdates()
+end
+
+function Buildings_Activate(check, objectiveID, context)
+	if context == nil then
+		return
+	end
+	local player = context.localPlayer
+	if player == nil then
+		return
+	end
+
+	local pbg = Buildings_ResolvePBG(check.payload.id)
+	BUILDINGS_STATE[check.id] = {
+		checkID = check.id,
+		player = player,
+		objectiveID = objectiveID,
+		payload = check.payload,
+		pbg = pbg,
+		count = 0,
+	}
+	if BUILDINGS_POLLING == false then
+		BUILDINGS_POLLING = true
+		Rule_AddInterval(Buildings_Poll, BUILDINGS_POLL_INTERVAL_SECONDS)
+	end
+	Buildings_Poll()
+end
+
+function Buildings_Deactivate(check, objectiveID, context)
+	local state = BUILDINGS_STATE[check.id]
+	if state == nil then
+		return
+	end
+
+	BUILDINGS_STATE[check.id] = nil
+	if next(BUILDINGS_STATE) == nil and BUILDINGS_POLLING then
+		Rule_Remove(Buildings_Poll)
+		BUILDINGS_POLLING = false
+	end
+end
+
+BuildOrder_RegisterHandler("buildings", {
+	activate = Buildings_Activate,
+	deactivate = Buildings_Deactivate,
+})

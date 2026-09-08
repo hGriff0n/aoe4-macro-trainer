@@ -358,7 +358,7 @@ function BuildOrderEditor_FieldChange(parameter)
 
 	local value = parameter.value
 	if type(parameter.selected_option) == "table" then
-		value = parameter.selected_option.value
+		value = BuildOrderEditor_DeepCopy(parameter.selected_option.value)
 	elseif parameter.value_type == "positive_integer" then
 		value = tonumber(parameter.display_value)
 	elseif parameter.value_type == "string" then
@@ -439,7 +439,8 @@ function BuildOrderEditor_AddSaveError(message)
 	BUILD_ORDER_EDITOR_STATE.errors = {
 		{
 			path = "save",
-			message = tostring(message or "persistence_error"),
+			message = BuildOrderEditor_LocalizeError(message or "persistence_error"),
+			localized = true,
 		},
 	}
 	BuildOrderEditor_Present()

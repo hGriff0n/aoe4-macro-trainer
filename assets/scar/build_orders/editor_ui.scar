@@ -1,8 +1,9 @@
 BUILD_ORDER_EDITOR_UI_NAME = "BuildOrderEditorUI"
 BUILD_ORDER_EDITOR_UI_RESOURCES = { "food", "wood", "gold", "stone" }
 BUILD_ORDER_EDITOR_UI_LIVE_LISTS = {
-	live_entity = "entities",
-	live_upgrade = "upgrades",
+	live_building = "buildings",
+	live_technology = "technologies",
+	live_age_up = "age_ups",
 	live_family = "families",
 }
 
@@ -37,6 +38,16 @@ BUILD_ORDER_EDITOR_UI_XAML = [[
 			           Foreground="#FFFF7777"
 			           Text="{Binding}"
 			           TextWrapping="Wrap" />
+		</DataTemplate>
+
+		<DataTemplate x:Key="BuildOrderValidationMessageTemplate">
+			<StackPanel Margin="0,2,0,0" Orientation="Horizontal">
+				<TextBlock Foreground="#FFFF7777" Text="{Binding [label]}" />
+				<TextBlock Margin="5,0,0,0"
+				           Foreground="#FFFF7777"
+				           Text="{Binding [message]}"
+				           TextWrapping="Wrap" />
+			</StackPanel>
 		</DataTemplate>
 
 		<DataTemplate x:Key="BuildOrderLiveOptionTemplate">
@@ -398,9 +409,15 @@ BUILD_ORDER_EDITOR_UI_XAML = [[
 								<TextBlock FontSize="17"
 								           FontWeight="Bold"
 								           Text="{Binding [label]}" />
-								<TextBlock FontSize="11"
-								           Foreground="#FFC8C8C8"
-								           Text="{Binding [age_label]}" />
+								<StackPanel Orientation="Horizontal">
+									<TextBlock FontSize="11"
+									           Foreground="#FFC8C8C8"
+									           Text="{Binding [age_label]}" />
+									<TextBlock Margin="4,0,0,0"
+									           FontSize="11"
+									           Foreground="#FFC8C8C8"
+									           Text="{Binding [age_number]}" />
+								</StackPanel>
 							</StackPanel>
 						</DockPanel>
 					</Expander.Header>
@@ -578,7 +595,7 @@ BUILD_ORDER_EDITOR_UI_XAML = [[
 						        CommandParameter="steps"
 						        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:41" />
 						<ItemsControl ItemsSource="{Binding [validation_messages]}"
-						              ItemTemplate="{StaticResource BuildOrderErrorTemplate}" />
+						              ItemTemplate="{StaticResource BuildOrderValidationMessageTemplate}" />
 					</StackPanel>
 				</ScrollViewer>
 			</Grid>
@@ -628,13 +645,41 @@ function BuildOrderEditorUI_ErrorMap(errors)
 	for _, record in ipairs(errors or {}) do
 		if type(record) == "table" and type(record.path) == "string"
 			and type(record.message) == "string" then
+			local message = record.message
+			if record.localized ~= true and type(BuildOrderEditor_LocalizeError) == "function" then
+				message = BuildOrderEditor_LocalizeError(message)
+			end
 			if errorMap[record.path] == nil then
 				errorMap[record.path] = {}
 			end
-			table.insert(errorMap[record.path], record.message)
+			table.insert(errorMap[record.path], message)
 		end
 	end
 	return errorMap
+end
+
+function BuildOrderEditorUI_FriendlyErrorLabel(path)
+	local labels = BUILD_ORDER_EDITOR_FIELD_LABELS or {}
+	if type(path) ~= "string" or path == "" then
+		return labels.build_order or ""
+	end
+	local label = nil
+	for segment in string.gmatch(path, "[^%.]+") do
+		if labels[segment] ~= nil then
+			label = labels[segment]
+		end
+	end
+	return label or labels.build_order or ""
+end
+
+function BuildOrderEditorUI_LocalizedErrorMessage(record)
+	if type(record) ~= "table" or type(record.message) ~= "string" then
+		return ""
+	end
+	if record.localized == true or type(BuildOrderEditor_LocalizeError) ~= "function" then
+		return record.message
+	end
+	return BuildOrderEditor_LocalizeError(record.message)
 end
 
 function BuildOrderEditorUI_Context(context, parentAdapter, currentAge)
@@ -732,16 +777,25 @@ function BuildOrderEditorUI_NormalizeOption(option, fieldPath, context)
 		and option.label ~= "" then
 		label = option.label
 	end
+	local icon = type(option) == "table" and option.icon or ""
+	local value = type(option) == "table" and option.id or nil
+	if type(option) == "table" and type(option.ids) == "table" then
+		value = {
+			label = label,
+			icon = icon,
+			ids = BuildOrderEditor_DeepCopy(option.ids),
+		}
+	end
 	local normalized = {
 		id = type(option) == "table" and option.id or nil,
-		ids = type(option) == "table" and option.ids or nil,
+		ids = type(option) == "table" and BuildOrderEditor_DeepCopy(option.ids) or nil,
 		kind = type(option) == "table" and option.kind or nil,
 		age = type(option) == "table" and option.age or nil,
 		label = label,
-		icon = type(option) == "table" and option.icon or "",
+		icon = icon,
 		id_fallback = idFallback,
 		path = fieldPath,
-		value = type(option) == "table" and (option.id or option.ids) or nil,
+		value = value,
 		selected = false,
 	}
 	if context and type(context.commands) == "table" then
@@ -763,11 +817,12 @@ function BuildOrderEditorUI_ValuesEqual(value, option)
 	return false
 end
 
-function BuildOrderEditorUI_NormalizeOptions(options, value, fieldPath, context, maximumAge)
+function BuildOrderEditorUI_NormalizeOptions(options, value, fieldPath, context, maximumAge, exactAge)
 	local normalized = {}
 	for _, option in ipairs(options or {}) do
 		if type(option) == "table"
-			and (maximumAge == nil or option.age == nil or option.age <= maximumAge) then
+			and ((exactAge ~= nil and option.age == exactAge)
+				or (exactAge == nil and (maximumAge == nil or option.age == nil or option.age <= maximumAge))) then
 			local item = BuildOrderEditorUI_NormalizeOption(option, fieldPath, context)
 			item.selected = BuildOrderEditorUI_ValuesEqual(value, option)
 			table.insert(normalized, item)
@@ -823,15 +878,15 @@ end
 function BuildOrderEditorUI_LiveOptions(adapter, value, fieldPath, context)
 	local listName = BUILD_ORDER_EDITOR_UI_LIVE_LISTS[adapter]
 	local maximumAge = context.current_age
+	local exactAge = nil
 	if adapter == "live_age_up" then
-		local ageUpKind = BuildOrderEditor_GetAgeUpDiscoveryKind(context.civ)
-		listName = BUILD_ORDER_EDITOR_DISCOVERY_LISTS[ageUpKind]
-		if maximumAge ~= nil and maximumAge < BUILD_ORDER_EDITOR_MAX_AGE then
-			maximumAge = maximumAge + 1
+		if maximumAge ~= nil then
+			exactAge = maximumAge + 1
 		end
 	end
 	if type(context.discovery) ~= "table" or listName == nil then
 		local emptyOptions = {}
+		emptyOptions.live_candidate_count = 0
 		local fallback = BuildOrderEditorUI_FallbackOption(value, fieldPath, context)
 		if fallback ~= nil then
 			table.insert(emptyOptions, fallback)
@@ -843,8 +898,11 @@ function BuildOrderEditorUI_LiveOptions(adapter, value, fieldPath, context)
 		value,
 		fieldPath,
 		context,
-		maximumAge
+		maximumAge,
+		exactAge
 	)
+	local liveCandidateCount = #options
+	options.live_candidate_count = liveCandidateCount
 	local hasSelection = false
 	for _, option in ipairs(options) do
 		if option.selected then
@@ -879,15 +937,16 @@ function BuildOrderEditorUI_ProjectPrimitive(schema, value, path, context)
 	node.required = schema.required == true
 	node.value_type = schema.value_type
 	node.adapter = schema.adapter
-	local isLive = schema.adapter == "live_entity"
-		or schema.adapter == "live_upgrade"
+	local isLive = schema.adapter == "live_building"
+		or schema.adapter == "live_technology"
 		or schema.adapter == "live_family"
 		or schema.adapter == "live_age_up"
 	if isLive then
 		node.options = BuildOrderEditorUI_LiveOptions(schema.adapter, value, path, context)
 		node.selected_option = BuildOrderEditorUI_SelectedOption(node.options)
+		node.live_candidate_count = node.options.live_candidate_count or 0
 		node.live_visibility = "Visible"
-		if #node.options == 0 then
+		if node.live_candidate_count == 0 then
 			node.empty_options_visibility = "Visible"
 		end
 	elseif schema.value_type == "boolean" then
@@ -1010,8 +1069,10 @@ function BuildOrderEditorUI_ProjectObject(schema, value, path, context)
 	node.value = value
 	node.inferred_age = objectValue.inferred_age
 	node.age_label = ""
+	node.age_number = nil
 	if type(node.inferred_age) == "number" then
-		node.age_label = "Entering age " .. node.inferred_age
+		node.age_label = (BUILD_ORDER_EDITOR_FIELD_LABELS or {}).entering_age or ""
+		node.age_number = node.inferred_age
 	end
 	if type(objectValue.title) == "string" and objectValue.title ~= "" then
 		node.label = objectValue.title
@@ -1072,7 +1133,7 @@ function BuildOrderEditorUI_ProjectVariant(schema, value, path, context)
 	if type(variant) ~= "table" then
 		local missing = BuildOrderEditorUI_BaseNode({
 			key = nil,
-			label = kind or "Unknown check",
+			label = (BUILD_ORDER_EDITOR_FIELD_LABELS or {}).unknown_check or "",
 			node_type = "object",
 		}, path, context)
 		missing.kind = kind
@@ -1101,7 +1162,7 @@ function BuildOrderEditorUI_ProjectNode(schema, value, path, context)
 	if type(schema) ~= "table" then
 		return BuildOrderEditorUI_BaseNode({
 			key = nil,
-			label = "Unknown field",
+			label = (BUILD_ORDER_EDITOR_FIELD_LABELS or {}).unknown_field or "",
 			node_type = "primitive",
 		}, path, context)
 	end
@@ -1349,11 +1410,10 @@ function BuildOrderEditorUI_ValidationMessages(errors)
 	local messages = {}
 	for _, record in ipairs(errors or {}) do
 		if type(record) == "table" and type(record.message) == "string" then
-			local message = record.message
-			if type(record.path) == "string" and record.path ~= "" then
-				message = record.path .. ": " .. message
-			end
-			table.insert(messages, message)
+			table.insert(messages, {
+				label = BuildOrderEditorUI_FriendlyErrorLabel(record.path),
+				message = BuildOrderEditorUI_LocalizedErrorMessage(record),
+			})
 		end
 	end
 	return messages

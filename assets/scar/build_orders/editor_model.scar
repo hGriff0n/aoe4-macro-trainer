@@ -13,18 +13,14 @@ BUILD_ORDER_EDITOR_CHECK_KINDS = {
 	hints = true,
 }
 BUILD_ORDER_EDITOR_DISCOVERY_LISTS = {
-	entity = "entities",
+	building = "buildings",
 	squad = "squads",
-	upgrade = "upgrades",
+	technology = "technologies",
+	age_up = "age_ups",
 	family = "families",
+	entity = "buildings",
+	upgrade = "technologies",
 }
-BUILD_ORDER_EDITOR_UPGRADE_AGE_UP_CIVS = {
-	abbasid = true,
-	ayyubids = true,
-	templar = true,
-	golden_horde = true,
-}
-
 function BuildOrderEditor_DeepCopy(value, seen)
 	if type(value) ~= "table" then
 		return value
@@ -328,10 +324,26 @@ function BuildOrderEditor_CopyDraft(order, catalog)
 	return draft
 end
 
+function BuildOrderEditor_LocalizeError(message)
+	local labels = BUILD_ORDER_EDITOR_ERROR_LABELS
+	if type(labels) == "table" then
+		local localized = labels[message]
+		if type(localized) == "string" and localized ~= "" then
+			return localized
+		end
+		if type(labels.persistence_error) == "string" then
+			return labels.persistence_error
+		end
+	end
+	return message
+end
+
 function BuildOrderEditor_AddError(errors, path, message)
+	local localizedMessage = BuildOrderEditor_LocalizeError(message)
 	table.insert(errors, {
 		path = path,
-		message = message,
+		message = localizedMessage,
+		localized = true,
 	})
 end
 
@@ -389,9 +401,10 @@ function BuildOrderEditor_DiscoveryHasID(discovery, kind, id)
 end
 
 function BuildOrderEditor_DiscoveryHasAnyScalarID(discovery, id)
-	return BuildOrderEditor_DiscoveryHasID(discovery, "entity", id)
+	return BuildOrderEditor_DiscoveryHasID(discovery, "building", id)
 		or BuildOrderEditor_DiscoveryHasID(discovery, "squad", id)
-		or BuildOrderEditor_DiscoveryHasID(discovery, "upgrade", id)
+		or BuildOrderEditor_DiscoveryHasID(discovery, "technology", id)
+		or BuildOrderEditor_DiscoveryHasID(discovery, "age_up", id)
 end
 
 function BuildOrderEditor_ValidateLiveID(errors, path, id, discovery, expectedKinds)
@@ -498,14 +511,7 @@ function BuildOrderEditor_ValidateAlternatives(errors, path, ids, discovery, exp
 end
 
 function BuildOrderEditor_GetAgeUpDiscoveryKind(civ)
-	if type(civ) ~= "string" then
-		return "entity"
-	end
-	local normalizedCiv = string.lower(civ or "")
-	if BUILD_ORDER_EDITOR_UPGRADE_AGE_UP_CIVS[normalizedCiv] == true then
-		return "upgrade"
-	end
-	return "entity"
+	return "age_up"
 end
 
 function BuildOrderEditor_ValidateNoCollect(errors, path, values)
@@ -587,7 +593,7 @@ function BuildOrderEditor_ValidateCheck(errors, path, check, discovery, civ)
 			BuildOrderEditor_AddError(errors, path .. ".payload.resource", "must be food, wood, gold, or stone")
 		end
 	elseif check.kind == "built" then
-		BuildOrderEditor_ValidateAlternatives(errors, path .. ".payload.alternatives", payload.alternatives, discovery, { "entity" })
+		BuildOrderEditor_ValidateAlternatives(errors, path .. ".payload.alternatives", payload.alternatives, discovery, { "building" })
 		BuildOrderEditor_ValidateRequiredPositiveInteger(errors, path .. ".payload.count", payload.count)
 		BuildOrderEditor_ValidateOptionalPositiveInteger(errors, path .. ".payload.vils", payload.vils)
 		BuildOrderEditor_ValidateOptionalString(errors, path .. ".payload.location", payload.location)
@@ -597,7 +603,7 @@ function BuildOrderEditor_ValidateCheck(errors, path, check, discovery, civ)
 		BuildOrderEditor_ValidateOptionalPositiveInteger(errors, path .. ".payload.vils", payload.vils)
 		BuildOrderEditor_ValidateOptionalString(errors, path .. ".payload.location", payload.location)
 	elseif check.kind == "upgrades" then
-		BuildOrderEditor_ValidateLiveID(errors, path .. ".payload.id", payload.id, discovery, { "upgrade" })
+		BuildOrderEditor_ValidateLiveID(errors, path .. ".payload.id", payload.id, discovery, { "technology" })
 		BuildOrderEditor_ValidateBoolean(errors, path .. ".payload.queued", payload.queued)
 	elseif check.kind == "produce" then
 		BuildOrderEditor_ValidateFamily(errors, path .. ".payload.family", payload.family, discovery)
@@ -605,7 +611,7 @@ function BuildOrderEditor_ValidateCheck(errors, path, check, discovery, civ)
 		BuildOrderEditor_ValidateBoolean(errors, path .. ".payload.constant", payload.constant)
 		BuildOrderEditor_ValidateBoolean(errors, path .. ".payload.queued", payload.queued)
 	elseif check.kind == "buildings" then
-		BuildOrderEditor_ValidateLiveID(errors, path .. ".payload.id", payload.id, discovery, { "entity" })
+		BuildOrderEditor_ValidateLiveID(errors, path .. ".payload.id", payload.id, discovery, { "building" })
 		BuildOrderEditor_ValidateRequiredPositiveInteger(errors, path .. ".payload.count", payload.count)
 	elseif check.kind == "units" then
 		BuildOrderEditor_ValidateFamily(errors, path .. ".payload.family", payload.family, discovery)
@@ -847,13 +853,12 @@ function BuildOrderEditor_ToRuntime(draft)
 			title = draftStep.title,
 			checks = {},
 		}
-		local kindOccurrences = {}
+		local checkIndex = 0
 		for _, draftCheck in ipairs(draftStep.checks) do
 			local converted = BuildOrderEditor_CheckToRuntime(draftCheck)
 			for _, runtimeCheck in ipairs(converted) do
-				kindOccurrences[draftCheck.kind] = (kindOccurrences[draftCheck.kind] or 0) + 1
-				local occurrence = kindOccurrences[draftCheck.kind]
-				runtimeCheck.id = orderID .. ":" .. stepIndex .. ":" .. runtimeCheck.kind .. ":" .. occurrence
+				checkIndex = checkIndex + 1
+				runtimeCheck.id = orderID .. ":" .. stepIndex .. ":" .. checkIndex
 				runtimeCheck.title = BuildOrderEditor_MakeCheckTitle(draftCheck, runtimeCheck.payload)
 				table.insert(runtimeStep.checks, runtimeCheck)
 			end

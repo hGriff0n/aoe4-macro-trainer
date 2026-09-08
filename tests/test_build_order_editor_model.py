@@ -41,9 +41,10 @@ class BuildOrderEditorModelContractTests(unittest.TestCase):
             'alternatives = { min_items = 1 }',
             'resources = { keys = { "food", "wood", "gold", "stone" } }',
             'no_collect = { values = { "food", "wood", "gold", "stone" } }',
-            'live_entity = { discovery_kind = "entity" }',
-            'live_upgrade = { discovery_kind = "upgrade" }',
+            'live_building = { discovery_kind = "building" }',
+            'live_technology = { discovery_kind = "technology" }',
             'live_family = { discovery_kind = "family" }',
+            'live_age_up = { discovery_kind = "age_up" }',
         }
         for adapter in required_adapters:
             self.assertIn(adapter, self.schema)
@@ -111,11 +112,13 @@ class BuildOrderEditorModelContractTests(unittest.TestCase):
 
         convert = function_body(self.model, "BuildOrderEditor_ToRuntime")
         self.assertIn("BuildOrderEditor_MakeID(draft.civ, draft.title)", convert)
-        self.assertIn("kindOccurrences[draftCheck.kind]", convert)
+        self.assertIn("local checkIndex = 0", convert)
+        self.assertIn("checkIndex = checkIndex + 1", convert)
         self.assertIn(
-            'orderID .. ":" .. stepIndex .. ":" .. runtimeCheck.kind .. ":" .. occurrence',
+            'orderID .. ":" .. stepIndex .. ":" .. checkIndex',
             convert,
         )
+        self.assertNotIn("kindOccurrences", convert)
 
     def test_move_preserves_relative_order_and_rejects_invalid_indices(self) -> None:
         move = function_body(self.model, "BuildOrderEditor_Move")
@@ -198,23 +201,13 @@ class BuildOrderEditorModelContractTests(unittest.TestCase):
         self.assertIn("break", infer)
         self.assertNotIn('check.kind == "built"', infer)
 
-    def test_age_up_discovery_uses_the_four_upgrade_civs_case_insensitively(self) -> None:
-        for civ in ("abbasid", "ayyubids", "templar", "golden_horde"):
-            self.assertIn(f"\t{civ} = true,", self.model)
-
+    def test_age_up_discovery_uses_one_dedicated_exact_age_list(self) -> None:
         kind = function_body(self.model, "BuildOrderEditor_GetAgeUpDiscoveryKind")
-        self.assertIn('if type(civ) ~= "string" then', kind)
-        self.assertIn("string.lower(civ or \"\")", kind)
-        self.assertIn('return "upgrade"', kind)
-        self.assertIn('return "entity"', kind)
-
-        self.assertIn(
-            'live_age_up = { discovery_kinds = { "entity", "upgrade" } }',
-            self.schema,
-        )
+        self.assertEqual(kind.strip(), 'return "age_up"\nend')
+        self.assertNotIn("BUILD_ORDER_EDITOR_UPGRADE_AGE_UP_CIVS", self.model)
         self.assertRegex(
             self.schema,
-            r'BuildOrderEditorSchema_List\("alternatives", "Choices",.*?"live_age_up"\)',
+            r'BuildOrderEditorSchema_List\("alternatives", BUILD_ORDER_EDITOR_FIELD_LABELS\.choices,.*?"live_age_up"\)',
         )
 
     def test_validation_reports_stable_ordered_dotted_paths(self) -> None:
@@ -230,7 +223,9 @@ class BuildOrderEditorModelContractTests(unittest.TestCase):
         add_error = function_body(self.model, "BuildOrderEditor_AddError")
         self.assertIn("table.insert(errors", add_error)
         self.assertIn("path = path", add_error)
-        self.assertIn("message = message", add_error)
+        self.assertIn("BuildOrderEditor_LocalizeError(message)", add_error)
+        self.assertIn("message = localizedMessage", add_error)
+        self.assertIn("localized = true", add_error)
 
     def test_validation_accepts_only_positive_integers_or_unselected_resources(self) -> None:
         positive = function_body(self.model, "BuildOrderEditor_ValidateOptionalPositiveInteger")
@@ -444,9 +439,9 @@ class BuildOrderEditorModelBehaviorTests(unittest.TestCase):
         self.assertEqual(
             [check["id"] for check in checks],
             [
-                "english-conversion:1:built:1",
-                "english-conversion:1:age_up:1",
-                "english-conversion:1:units:1",
+                "english-conversion:1:1",
+                "english-conversion:1:2",
+                "english-conversion:1:3",
             ],
         )
 

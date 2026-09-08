@@ -1,4 +1,5 @@
 import csv
+import csv
 import re
 import unittest
 import xml.etree.ElementTree as ET
@@ -332,6 +333,14 @@ class BuildOrderEditorUIContractTests(unittest.TestCase):
         self.assertTrue(seen)
         self.assertTrue(seen.issubset(rows))
 
+    def test_dynamic_validation_template_renders_localized_label_and_message_separately(self) -> None:
+        template = named(self.xaml_root, "BuildOrderValidationMessageTemplate")
+        text_blocks = list(template.iter(f"{{{PRESENTATION_NS}}}TextBlock"))
+        self.assertEqual(
+            [block.get("Text") for block in text_blocks],
+            ["{Binding [label]}", "{Binding [message]}"],
+        )
+
     def test_invalid_draft_disables_save(self) -> None:
         header = named(self.xaml_root, "BuildOrderEditorActionHeader")
         save = next(
@@ -536,17 +545,18 @@ class BuildOrderEditorUIProjectionTests(unittest.TestCase):
             }
         ]
         discovery = {
-            "entities": [
+            "buildings": [
                 {
                     "id": "building_barracks_eng",
-                    "kind": "entity",
+                    "kind": "building",
                     "age": 1,
                     "label": "Barracks",
                     "icon": "barracks-icon",
                 }
             ],
             "squads": [],
-            "upgrades": [],
+            "technologies": [],
+            "age_ups": [],
             "families": [],
         }
         root = self.runtime.call(
@@ -561,13 +571,15 @@ class BuildOrderEditorUIProjectionTests(unittest.TestCase):
         self.assertEqual(step["node_type"], "object")
         self.assertFalse(step["expanded"])
         self.assertEqual(step["inferred_age"], 1)
+        self.assertEqual(step["age_label"], f"${MOD_NAMESPACE}:110")
+        self.assertEqual(step["age_number"], 1)
         self.assertEqual(len(step["flat_fields"]), 1)
         self.assertEqual(step["flat_fields"][1]["path"], "steps.1.title")
         check = find_view_node(root, "steps.1.checks.2")
         self.assertEqual(check["label"], f"${MOD_NAMESPACE}:75")
         self.assertEqual(check["kind"], "built")
         count = find_view_node(root, "steps.1.checks.2.payload.count")
-        self.assertEqual(count["errors"].array(), ["must be a positive integer"])
+        self.assertEqual(count["errors"].array(), [f"${MOD_NAMESPACE}:111"])
 
         alternative = find_view_node(
             root, "steps.1.checks.2.payload.alternatives.1"
@@ -728,9 +740,10 @@ class BuildOrderEditorUIProjectionTests(unittest.TestCase):
             ],
         }
         discovery = {
-            "entities": [],
+            "buildings": [],
             "squads": [],
-            "upgrades": [],
+            "technologies": [],
+            "age_ups": [],
             "families": [],
         }
         root = self.runtime.call(
@@ -747,6 +760,8 @@ class BuildOrderEditorUIProjectionTests(unittest.TestCase):
         self.assertEqual(fallback["icon"], "")
         self.assertTrue(fallback["selected"])
         self.assertTrue(fallback["is_fallback"])
+        self.assertEqual(field["live_candidate_count"], 0)
+        self.assertEqual(field["empty_options_visibility"], "Visible")
 
     def test_empty_live_discovery_projects_an_explicit_empty_state(self) -> None:
         draft = {
@@ -767,9 +782,10 @@ class BuildOrderEditorUIProjectionTests(unittest.TestCase):
             ],
         }
         discovery = {
-            "entities": [],
+            "buildings": [],
             "squads": [],
-            "upgrades": [],
+            "technologies": [],
+            "age_ups": [],
             "families": [],
         }
         root = self.runtime.call(
@@ -778,6 +794,117 @@ class BuildOrderEditorUIProjectionTests(unittest.TestCase):
         field = find_view_node(root, "steps.1.checks.1.payload.id")
         self.assertEqual(len(field["options"]), 0)
         self.assertEqual(field["empty_options_visibility"], "Visible")
+
+    def test_age_up_live_options_are_exactly_the_inferred_next_age(self) -> None:
+        context = {
+            "civ": "english",
+            "current_age": 2,
+            "discovery": {
+                "buildings": [],
+                "technologies": [
+                    {
+                        "id": "ordinary_technology",
+                        "kind": "technology",
+                        "age": 3,
+                        "label": "Ordinary technology",
+                        "icon": "tech",
+                    }
+                ],
+                "age_ups": [
+                    {"id": "prior_age", "kind": "age_up", "age": 1},
+                    {"id": "current_age", "kind": "age_up", "age": 2},
+                    {"id": "next_age", "kind": "age_up", "age": 3},
+                    {"id": "future_age", "kind": "age_up", "age": 4},
+                ],
+                "squads": [],
+                "families": [],
+            },
+        }
+
+        options = self.runtime.call(
+            "BuildOrderEditorUI_LiveOptions",
+            "live_age_up",
+            None,
+            "steps.1.checks.1.payload.alternatives.1",
+            context,
+        )
+
+        self.assertEqual(
+            [option["id"] for option in options.array()],
+            ["next_age"],
+        )
+
+    def test_family_option_value_retains_label_icon_and_canonical_ids(self) -> None:
+        option = self.runtime.call(
+            "BuildOrderEditorUI_NormalizeOption",
+            {
+                "ids": ["unit_spearman_1_eng", "unit_spearman_2_eng"],
+                "kind": "family",
+                "label": "Spearman",
+                "icon": "unit_spearman",
+            },
+            "steps.1.checks.1.payload.family",
+            {},
+        )
+
+        self.assertEqual(option["value"]["label"], "Spearman")
+        self.assertEqual(option["value"]["icon"], "unit_spearman")
+        self.assertEqual(
+            option["value"]["ids"].array(),
+            ["unit_spearman_1_eng", "unit_spearman_2_eng"],
+        )
+
+    def test_validation_messages_use_friendly_localized_labels_instead_of_internal_paths(self) -> None:
+        messages = self.runtime.call(
+            "BuildOrderEditorUI_ValidationMessages",
+            [
+                {
+                    "path": "steps.1.checks.2.payload.count",
+                    "message": "must be a positive integer",
+                }
+            ],
+        )
+
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(messages[1]["label"], f"${MOD_NAMESPACE}:94")
+        self.assertEqual(messages[1]["message"], f"${MOD_NAMESPACE}:111")
+
+    def test_unknown_projection_labels_are_stable_localization_ids(self) -> None:
+        unknown_check = self.runtime.call(
+            "BuildOrderEditorUI_ProjectVariant",
+            {"discriminator": "kind", "variants": {}},
+            {"kind": "retired"},
+            "steps.1.checks.1",
+            {"error_map": {}, "expanded": {}},
+        )
+        unknown_field = self.runtime.call(
+            "BuildOrderEditorUI_ProjectNode",
+            None,
+            None,
+            "unexpected",
+            {"error_map": {}, "expanded": {}},
+        )
+
+        self.assertEqual(unknown_check["label"], f"${MOD_NAMESPACE}:108")
+        self.assertEqual(unknown_field["label"], f"${MOD_NAMESPACE}:109")
+
+    def test_schema_labels_and_error_mappings_use_stable_localization_ids(self) -> None:
+        labels = self.runtime.globals["BUILD_ORDER_EDITOR_FIELD_LABELS"]
+        errors = self.runtime.globals["BUILD_ORDER_EDITOR_ERROR_LABELS"]
+        rows = csv_rows(LOCDB_PATH)
+
+        self.assertEqual(labels["build_order"], f"${MOD_NAMESPACE}:84")
+        self.assertEqual(labels["assignments"], f"${MOD_NAMESPACE}:90")
+        self.assertEqual(labels["count"], f"${MOD_NAMESPACE}:94")
+        self.assertEqual(labels["entering_age"], f"${MOD_NAMESPACE}:110")
+        self.assertEqual(
+            errors["must contain a title that can form an ID"],
+            f"${MOD_NAMESPACE}:133",
+        )
+        self.assertEqual(errors["id_collision"], f"${MOD_NAMESPACE}:140")
+        self.assertEqual(errors["persistence_error"], f"${MOD_NAMESPACE}:141")
+        self.assertEqual(rows[110][6], "Entering age")
+        self.assertEqual(rows[141][6], "The build order could not be saved.")
 
     def test_editor_view_disables_save_while_errors_exist(self) -> None:
         model = {
@@ -824,9 +951,10 @@ class BuildOrderEditorUIProjectionTests(unittest.TestCase):
             },
             "errors": [],
             "discovery": {
-                "entities": [],
+                "buildings": [],
                 "squads": [],
-                "upgrades": [],
+                "technologies": [],
+                "age_ups": [],
                 "families": [],
             },
         }
@@ -893,9 +1021,10 @@ class BuildOrderEditorUIProjectionTests(unittest.TestCase):
             ],
         }
         discovery = {
-            "entities": [],
+            "buildings": [],
             "squads": [],
-            "upgrades": [],
+            "technologies": [],
+            "age_ups": [],
             "families": [],
         }
 

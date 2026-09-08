@@ -2,6 +2,8 @@ import re
 import unittest
 from pathlib import Path
 
+from tests.scar_runtime import LuaResults, ScarRuntime
+
 
 ROOT = Path(__file__).resolve().parents[1]
 DATASTORE_PATH = ROOT / "assets" / "scar" / "build_orders" / "datastore.scar"
@@ -163,7 +165,10 @@ class BuildOrderDatastoreContractTests(unittest.TestCase):
         )
         self.assertIn("BUILD_ORDER_CATALOG[originalID] = nil", apply)
         self.assertIn("BUILD_ORDER_CATALOG[newID] = buildOrder", apply)
-        self.assertEqual(apply.count("BuildOrderDatastore_SaveCatalog()"), 1)
+        self.assertEqual(apply.count("pcall(BuildOrderDatastore_SaveCatalog)"), 1)
+        self.assertIn("BUILD_ORDER_CATALOG[newID] = destinationValue", apply)
+        self.assertIn("BUILD_ORDER_CATALOG[originalID] = originalValue", apply)
+        self.assertIn('return false, "persistence_error"', apply)
         self.assertIn('return true, ""', apply)
 
     def test_save_catalog_stores_the_live_catalog_then_saves_the_datastore(self) -> None:
@@ -179,6 +184,93 @@ class BuildOrderDatastoreContractTests(unittest.TestCase):
         self.assertIn(store, save)
         self.assertIn(persist, save)
         self.assertLess(save.index(store), save.index(persist))
+
+
+class BuildOrderDatastoreBehaviorTests(unittest.TestCase):
+    @staticmethod
+    def lua_pcall(function, *arguments):
+        try:
+            result = function(*arguments)
+        except Exception as error:
+            return LuaResults((False, str(error)))
+        if isinstance(result, LuaResults):
+            return LuaResults((True, *result.values))
+        return LuaResults((True, result))
+
+    @staticmethod
+    def valid_order(identifier: str) -> dict[str, object]:
+        return {
+            "id": identifier,
+            "civ": "english",
+            "title": "Persistence",
+            "steps": [
+                {
+                    "title": "Opening",
+                    "checks": [
+                        {
+                            "id": f"{identifier}:1:1",
+                            "kind": "hints",
+                            "title": "[HINT] Persist",
+                            "optional": True,
+                            "payload": {"text": "Persist"},
+                        }
+                    ],
+                }
+            ],
+        }
+
+    def setUp(self) -> None:
+        self.runtime = ScarRuntime(DATASTORE_PATH.read_text(encoding="utf-8"))
+        self.runtime.globals["pcall"] = self.lua_pcall
+        self.failure: str | None = None
+        self.store_calls: list[str] = []
+        self.save_calls: list[str] = []
+
+        def store(datastore_id, _value) -> None:
+            self.store_calls.append(datastore_id)
+            if self.failure == "store":
+                raise RuntimeError("store failed")
+
+        def save(datastore_id, _path) -> None:
+            self.save_calls.append(datastore_id)
+            if self.failure == "save":
+                raise RuntimeError("save failed")
+
+        self.runtime.globals["Game_StoreTableData"] = store
+        self.runtime.globals["Game_SaveTextDataStore"] = save
+
+    def reset_catalog(self):
+        original = self.runtime.table(self.valid_order("old"))
+        replacement = self.runtime.table(self.valid_order("new"))
+        self.runtime.globals["BUILD_ORDER_CATALOG"] = self.runtime.table(
+            {"old": original}
+        )
+        return original, replacement
+
+    def test_persistence_exceptions_restore_entry_identity_and_allow_retry(self) -> None:
+        for failure in ("store", "save"):
+            with self.subTest(failure=failure):
+                original, replacement = self.reset_catalog()
+                self.failure = failure
+
+                result = self.runtime.call(
+                    "BuildOrderDatastore_Apply", "old", "new", replacement
+                )
+
+                self.assertEqual(result, (False, "persistence_error"))
+                catalog = self.runtime.globals["BUILD_ORDER_CATALOG"]
+                self.assertIs(catalog["old"], original)
+                self.assertIsNone(catalog["new"])
+
+                self.failure = None
+                self.assertEqual(
+                    self.runtime.call(
+                        "BuildOrderDatastore_Apply", "old", "new", replacement
+                    ),
+                    (True, ""),
+                )
+                self.assertIsNone(catalog["old"])
+                self.assertIs(catalog["new"], replacement)
 
 
 if __name__ == "__main__":

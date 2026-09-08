@@ -21,6 +21,14 @@ function BuildOrderStartup_Callbacks()
 	}
 end
 
+function BuildOrderStartup_CanonicalCivID(player)
+	local raceName = Player_GetRaceName(player)
+	if type(BuildOrderDiscovery_CanonicalCivID) == "function" then
+		return BuildOrderDiscovery_CanonicalCivID(raceName)
+	end
+	return string.lower(raceName or "")
+end
+
 function BuildOrderStartup_ChoiceComesBefore(leftID, rightID)
 	local left = BUILD_ORDER_CATALOG[leftID]
 	local right = BUILD_ORDER_CATALOG[rightID]
@@ -33,7 +41,7 @@ function BuildOrderStartup_ChoiceComesBefore(leftID, rightID)
 end
 
 function BuildOrderStartup_CollectCompatible()
-	local actualCiv = string.lower(Player_GetRaceName(Game_GetLocalPlayer()))
+	local actualCiv = BuildOrderStartup_CanonicalCivID(Game_GetLocalPlayer())
 	local compatible = {}
 	for id, buildOrder in pairs(BUILD_ORDER_CATALOG or {}) do
 		if type(id) == "string"
@@ -142,7 +150,7 @@ function BuildOrderStartup_ShowSelector(message)
 	_mod.startupFallbackOpen = false
 	BuildOrderEditorUI_SetCallbacks(BuildOrderStartup_Callbacks())
 	local shown = BuildOrderEditorUI_ShowSelector({
-		current_civ = string.lower(Player_GetRaceName(Game_GetLocalPlayer())),
+		current_civ = BuildOrderStartup_CanonicalCivID(Game_GetLocalPlayer()),
 		orders = BuildOrderStartup_BuildSelectorOrders(),
 		message = message or "",
 	})
@@ -280,7 +288,7 @@ function BuildOrderStartup_StartSelected(buildOrder)
 		return false
 	end
 	local localPlayer = Game_GetLocalPlayer()
-	local actualCiv = string.lower(Player_GetRaceName(localPlayer))
+	local actualCiv = BuildOrderStartup_CanonicalCivID(localPlayer)
 	if type(buildOrder) ~= "table" then
 		BuildOrderStartup_ShowSelector(BUILD_ORDER_STARTUP_MISSING_SELECTION)
 		return false

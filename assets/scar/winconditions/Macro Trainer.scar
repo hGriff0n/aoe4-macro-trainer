@@ -14,6 +14,7 @@ import("build_orders/checks/units.scar")
 import("build_orders/checks/produce.scar")
 import("build_orders/checks/age_up.scar")
 import("build_orders/checks/built.scar")
+import("build_orders/checks/buildings.scar")
 import("build_orders/checks/vils.scar")
 
 -- Import Gameplay Systems

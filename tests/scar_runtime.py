@@ -324,6 +324,18 @@ class _Parser:
 
     def parse_primary(self) -> Any:
         token = self.current
+        if token.kind == "name" and token.value == "function":
+            self.advance()
+            self.expect("(")
+            parameters: list[str] = []
+            if not self.accept(")"):
+                parameters.append(self.expect_name())
+                while self.accept(","):
+                    parameters.append(self.expect_name())
+                self.expect(")")
+            body = self.parse_block({"end"})
+            self.expect("end")
+            return ("lambda", parameters, body)
         if token.kind in {"string", "number"}:
             self.advance()
             return ("literal", token.value)
@@ -489,6 +501,12 @@ def _string_gsub(value: str, pattern: str, replacement: str) -> LuaResults:
     return LuaResults((result, count))
 
 
+def _string_gmatch(value: str, pattern: str):
+    if pattern == "[^%.]+":
+        return iter(value.split("."))
+    raise NotImplementedError(f"unsupported Lua pattern {pattern!r}")
+
+
 class ScarRuntime:
     def __init__(self, source: str) -> None:
         self.globals: dict[str, Any] = {}
@@ -503,6 +521,7 @@ class ScarRuntime:
         string_library = LuaTable()
         string_library["lower"] = lambda value: value.lower()
         string_library["gsub"] = _string_gsub
+        string_library["gmatch"] = _string_gmatch
         math_library = LuaTable()
         math_library["floor"] = _math.floor
         self.globals.update(
@@ -660,6 +679,9 @@ class ScarRuntime:
                 value = _first(self._evaluate(value_expr, frame))
                 table[key] = value
             return table
+        if kind == "lambda":
+            _, parameters, body = expression
+            return _LuaFunction(self, parameters, body)
         if kind == "index":
             table = _first(self._evaluate(expression[1], frame))
             key = _first(self._evaluate(expression[2], frame))
