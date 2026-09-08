@@ -118,7 +118,7 @@ class BuildOrderEditorUIContractTests(unittest.TestCase):
         self.assertIn("BUILD_ORDER_EDITOR_UI_STATE.callbacks = {}", stop)
         self.assertIn("BUILD_ORDER_EDITOR_UI_STATE.commands = nil", stop)
 
-    def test_minimal_probe_is_an_empty_visible_frame(self) -> None:
+    def test_probe_is_a_static_inert_button_shell(self) -> None:
         probe = extract_long_string(self.source, "BUILD_ORDER_EDITOR_UI_PROBE_XAML")
         root = ET.fromstring(probe)
 
@@ -126,7 +126,14 @@ class BuildOrderEditorUIContractTests(unittest.TestCase):
         self.assertEqual(root.get(f"{{{XAML_NS}}}Name"), "BuildOrderEditorProbe")
         self.assertEqual(len(root), 1)
         self.assertEqual(root[0].tag, f"{{{PRESENTATION_NS}}}Grid")
-        self.assertEqual(len(root[0]), 0)
+        headings = root.findall(".//p:TextBlock", NS)
+        self.assertEqual([heading.get("Text") for heading in headings], ["Select Build Order"])
+        buttons = root.findall(".//p:Button", NS)
+        self.assertEqual(
+            [button.get("Content") for button in buttons],
+            ["Create", "Edit", "Unpause"],
+        )
+        self.assertTrue(all(button.get("Command") is None for button in buttons))
         self.assertNotIn("{Binding", probe)
         self.assertNotIn("DataTemplate", probe)
 
