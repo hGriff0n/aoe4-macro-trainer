@@ -137,6 +137,10 @@ class BuildOrderEditorUIContractTests(unittest.TestCase):
         self.assertEqual(
             selector.get(f"{{{XAML_NS}}}Name"), "BuildOrderEditorProbe"
         )
+        self.assertEqual(
+            selector.get("Visibility"),
+            "{Binding [is_ui_visible], Converter={StaticResource BoolToVis}}",
+        )
         self.assertEqual(editor.get(f"{{{XAML_NS}}}Name"), "BuildOrderEditorShellProbe")
         self.assertEqual(editor.get("Panel.ZIndex"), "999")
         self.assertNotIn(f"${MOD_NAMESPACE}:", selector_xaml)
@@ -257,6 +261,7 @@ class BuildOrderEditorUIContractTests(unittest.TestCase):
         self.assertEqual(selector_context["selected_option"]["label"], "New Build Order")
         self.assertEqual(selector_context["selected_index"], 0)
         self.assertEqual(selector_context["action_label"], "Create")
+        self.assertTrue(selector_context["is_ui_visible"])
         self.assertEqual(
             selector_context["commands"]["action"], "command:ActionCallback"
         )
@@ -279,9 +284,13 @@ class BuildOrderEditorUIContractTests(unittest.TestCase):
                 "BuildOrderEditorUI: editor presenter created",
             ],
         )
+        self.assertEqual(updates[-1][0], "BuildOrderSelectorUI")
+        self.assertFalse(updates[-1][1]["is_ui_visible"])
 
         self.assertTrue(runtime.call("BuildOrderEditorUI_Hide"))
         self.assertEqual(removals, ["BuildOrderEditorUI"])
+        self.assertEqual(updates[-1][0], "BuildOrderSelectorUI")
+        self.assertTrue(updates[-1][1]["is_ui_visible"])
         self.assertEqual(
             runtime.globals["BUILD_ORDER_EDITOR_UI_STATE"]["screen"], "selector"
         )

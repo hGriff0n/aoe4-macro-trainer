@@ -14,6 +14,7 @@ BUILD_ORDER_EDITOR_UI_PROBE_XAML = [[
         Height="220"
         HorizontalAlignment="Center"
         VerticalAlignment="Center"
+        Visibility="{Binding [is_ui_visible], Converter={StaticResource BoolToVis}}"
         Background="#F2181818"
         BorderBrush="#FFD0D0D0"
         BorderThickness="2">
@@ -1702,6 +1703,7 @@ function BuildOrderEditorUI_BuildProbeViewModel(screen, model)
 	local canEdit = selectedOption ~= nil and selectedOption.edit_enabled == true
 	return {
 		screen = screen,
+		is_ui_visible = screen == "selector",
 		selector_visibility = BuildOrderEditorUI_Visibility(screen == "selector"),
 		editor_visibility = BuildOrderEditorUI_Visibility(screen == "editor"),
 		selector_options = options,
@@ -1800,10 +1802,12 @@ function BuildOrderEditorUI_ShowEditor(model)
 	if not success then
 		print("BuildOrderEditorUI: editor presenter failed: " .. errorMessage)
 		BUILD_ORDER_EDITOR_UI_STATE.screen = "selector"
+		BuildOrderEditorUI_RefreshProbe()
 		return false
 	end
 	print("BuildOrderEditorUI: editor presenter created")
 	BUILD_ORDER_EDITOR_UI_STATE.editor_created = true
+	BuildOrderEditorUI_RefreshProbe()
 	return true
 end
 
@@ -1816,6 +1820,7 @@ function BuildOrderEditorUI_Hide()
 		UI_Remove(BUILD_ORDER_EDITOR_UI_EDITOR_NAME)
 		BUILD_ORDER_EDITOR_UI_STATE.editor_created = false
 		BUILD_ORDER_EDITOR_UI_STATE.screen = "selector"
+		BuildOrderEditorUI_RefreshProbe()
 		return true
 	end
 	if BUILD_ORDER_EDITOR_UI_STATE.created then
