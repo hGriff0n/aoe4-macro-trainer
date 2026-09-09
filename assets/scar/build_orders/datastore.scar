@@ -157,8 +157,7 @@ function BuildOrderDatastore_FinishLoad()
 		return
 	end
 
-	Game_RetrieveTableData(BUILD_ORDER_DATASTORE_ID, false)
-	local loaded = _G[BUILD_ORDER_DATASTORE_ID]
+	local loaded = Game_RetrieveTableData(BUILD_ORDER_DATASTORE_ID, false)
 	BuildOrderDatastore_Replace(loaded)
 	BuildOrderDatastore_Complete()
 end

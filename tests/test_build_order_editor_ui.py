@@ -60,6 +60,12 @@ def strip_xaml(source: str) -> str:
         source,
         flags=re.DOTALL,
     )
+    source = re.sub(
+        r"BUILD_ORDER_EDITOR_UI_EDITOR_PROBE_XAML\s*=\s*\[\[.*?\]\]",
+        'BUILD_ORDER_EDITOR_UI_EDITOR_PROBE_XAML = ""',
+        source,
+        flags=re.DOTALL,
+    )
     return re.sub(
         r"BUILD_ORDER_EDITOR_UI_XAML\s*=\s*\[\[.*?\]\]",
         'BUILD_ORDER_EDITOR_UI_XAML = ""',
@@ -117,22 +123,24 @@ class BuildOrderEditorUIContractTests(unittest.TestCase):
         self.assertIn("BUILD_ORDER_EDITOR_UI_STATE.callbacks = {}", stop)
         self.assertIn("BUILD_ORDER_EDITOR_UI_STATE.commands = nil", stop)
 
-    def test_probe_layers_editor_region_over_selector_in_one_root(self) -> None:
-        probe_xaml = extract_long_string(self.source, "BUILD_ORDER_EDITOR_UI_PROBE_XAML")
-        root = ET.fromstring(probe_xaml)
-
-        self.assertEqual(root.tag, f"{{{PRESENTATION_NS}}}Grid")
-        self.assertEqual(root.get(f"{{{XAML_NS}}}Name"), "BuildOrderEditorProbe")
-        selector = named(root, "BuildOrderSelectorProbe")
-        editor_overlay = named(root, "BuildOrderEditorOverlayProbe")
-        editor = named(root, "BuildOrderEditorShellProbe")
-        self.assertIsNone(selector.get("Visibility"))
-        self.assertEqual(
-            editor_overlay.get("Visibility"), "{Binding [editor_visibility]}"
+    def test_editor_probe_uses_a_high_z_index_in_a_separate_root(self) -> None:
+        selector_xaml = extract_long_string(
+            self.source, "BUILD_ORDER_EDITOR_UI_PROBE_XAML"
         )
-        self.assertEqual(list(root).index(editor_overlay), list(root).index(selector) + 1)
+        editor_xaml = extract_long_string(
+            self.source, "BUILD_ORDER_EDITOR_UI_EDITOR_PROBE_XAML"
+        )
+        selector = ET.fromstring(selector_xaml)
+        editor = ET.fromstring(editor_xaml)
+
+        self.assertEqual(selector.tag, f"{{{PRESENTATION_NS}}}Border")
+        self.assertEqual(
+            selector.get(f"{{{XAML_NS}}}Name"), "BuildOrderEditorProbe"
+        )
         self.assertEqual(editor.get(f"{{{XAML_NS}}}Name"), "BuildOrderEditorShellProbe")
-        self.assertNotIn(f"${MOD_NAMESPACE}:", probe_xaml)
+        self.assertEqual(editor.get("Panel.ZIndex"), "999")
+        self.assertNotIn(f"${MOD_NAMESPACE}:", selector_xaml)
+        self.assertNotIn(f"${MOD_NAMESPACE}:", editor_xaml)
 
         dropdown = named(selector, "BuildOrderSelectorDropdown")
         self.assertEqual(dropdown.get("ItemsSource"), "{Binding [selector_options]}")
@@ -164,11 +172,12 @@ class BuildOrderEditorUIContractTests(unittest.TestCase):
             [button.get(f"{{{XAML_NS}}}Name") for button in editor.findall(".//p:Button", NS)],
             ["BuildOrderEditorSave", "BuildOrderEditorCancel"],
         )
-        self.assertNotIn("DataTemplate", probe_xaml)
+        self.assertNotIn("DataTemplate", selector_xaml)
+        self.assertNotIn("DataTemplate", editor_xaml)
 
-    def test_probe_creates_one_presenter_for_both_regions(self) -> None:
-        self.assertEqual(self.source.count("UI_AddChild("), 1)
-        create = function_body(self.source, "BuildOrderEditorUI_CreatePresenter")
+    def test_probe_creates_separate_selector_and_editor_presenters(self) -> None:
+        self.assertEqual(self.source.count("UI_AddChild("), 2)
+        create = function_body(self.source, "BuildOrderEditorUI_CreateSelectorPresenter")
         self.assertIn(
             'UI_AddChild("ScarDefault", "XamlPresenter", BUILD_ORDER_EDITOR_UI_SELECTOR_NAME',
             create,
@@ -176,18 +185,28 @@ class BuildOrderEditorUIContractTests(unittest.TestCase):
         self.assertIn("IsHitTestVisible = true", create)
         self.assertIn("Xaml = BUILD_ORDER_EDITOR_UI_PROBE_XAML", create)
         self.assertIn("DataContext", create)
+        create_editor = function_body(
+            self.source, "BuildOrderEditorUI_CreateEditorPresenter"
+        )
+        self.assertIn(
+            'UI_AddChild("ScarDefault", "XamlPresenter", BUILD_ORDER_EDITOR_UI_EDITOR_NAME',
+            create_editor,
+        )
+        self.assertIn("Xaml = BUILD_ORDER_EDITOR_UI_EDITOR_PROBE_XAML", create_editor)
+        self.assertIn("DataContext", create_editor)
         ensure = function_body(self.source, "BuildOrderEditorUI_EnsureCreated")
         self.assertIn("if BUILD_ORDER_EDITOR_UI_STATE.created then", ensure)
-        self.assertIn("pcall(BuildOrderEditorUI_CreatePresenter)", ensure)
+        self.assertIn("pcall(BuildOrderEditorUI_CreateSelectorPresenter)", ensure)
         self.assertRegex(ensure, r"if not success then[\s\S]*?return false")
         self.assertIn("return true", ensure)
 
-    def test_probe_lifecycle_shows_editor_by_updating_the_existing_presenter(self) -> None:
+    def test_probe_lifecycle_keeps_selector_mounted_behind_editor(self) -> None:
         runtime = ScarRuntime(strip_xaml(self.source))
         additions = []
         removals = []
         updates = []
-        runtime.globals["print"] = lambda _message: None
+        messages = []
+        runtime.globals["print"] = messages.append
         runtime.globals["UI_CreateCommand"] = lambda name: f"command:{name}"
         runtime.globals["UI_CreateDataContext"] = lambda value: value
         runtime.globals["UI_AddChild"] = (
@@ -244,17 +263,25 @@ class BuildOrderEditorUIContractTests(unittest.TestCase):
 
         runtime.call("BuildOrderEditorUI_SetCallbacks", {"cancel": "CancelCallback"})
         self.assertTrue(runtime.call("BuildOrderEditorUI_ShowEditor", {}))
-        self.assertEqual([addition[2] for addition in additions], ["BuildOrderSelectorUI"])
-        self.assertEqual(removals, [])
-        self.assertEqual(updates[-1][0], "BuildOrderSelectorUI")
-        self.assertEqual(updates[-1][1]["selector_visibility"], "Visible")
-        self.assertEqual(updates[-1][1]["editor_visibility"], "Visible")
         self.assertEqual(
-            updates[-1][1]["commands"]["cancel"], "command:CancelCallback"
+            [addition[2] for addition in additions],
+            ["BuildOrderSelectorUI", "BuildOrderEditorUI"],
+        )
+        self.assertEqual(removals, [])
+        self.assertEqual(
+            additions[-1][3]["DataContext"]["commands"]["cancel"],
+            "command:CancelCallback",
+        )
+        self.assertEqual(
+            messages,
+            [
+                "BuildOrderEditorUI: creating editor presenter",
+                "BuildOrderEditorUI: editor presenter created",
+            ],
         )
 
         self.assertTrue(runtime.call("BuildOrderEditorUI_Hide"))
-        self.assertEqual(removals, [])
+        self.assertEqual(removals, ["BuildOrderEditorUI"])
         self.assertEqual(
             runtime.globals["BUILD_ORDER_EDITOR_UI_STATE"]["screen"], "selector"
         )
@@ -301,7 +328,7 @@ class BuildOrderEditorUIContractTests(unittest.TestCase):
         self.assertEqual(view["action_label"], "Edit")
 
         editor = runtime.call("BuildOrderEditorUI_BuildProbeViewModel", "editor", {})
-        self.assertEqual(editor["selector_visibility"], "Visible")
+        self.assertEqual(editor["selector_visibility"], "Collapsed")
         self.assertEqual(editor["editor_visibility"], "Visible")
         self.assertFalse(editor["save_enabled"])
 
