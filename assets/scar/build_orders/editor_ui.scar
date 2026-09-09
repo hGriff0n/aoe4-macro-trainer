@@ -4,29 +4,38 @@ BUILD_ORDER_EDITOR_UI_NAME = "BuildOrderEditorUI"
 -- This presenter grows the proven empty shell by one engine-sensitive feature
 -- at a time and deliberately avoids the original templates and editor fields.
 BUILD_ORDER_EDITOR_UI_PROBE_XAML = [[
-<Grid x:Name="BuildOrderEditorProbe"
+<Grid x:Name="BuildOrderWorkspaceProbe"
       xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       xmlns:esActions="clr-namespace:WPFGUI.Shared.Actions;assembly=EngineUI"
-      Width="420"
-      Height="220"
+      Width="960"
+      Height="560"
       HorizontalAlignment="Center"
-      VerticalAlignment="Center">
-	<Border x:Name="BuildOrderSelectorProbe"
-	        Visibility="{Binding [selector_visible], Converter={StaticResource BoolToVis}}"
-	        Background="#F2181818"
-	        BorderBrush="#FFD0D0D0"
-	        BorderThickness="2">
-		<StackPanel Margin="24" VerticalAlignment="Center">
-			<TextBlock Margin="0,0,0,18"
-			           HorizontalAlignment="Center"
-			           FontSize="22"
-			           FontWeight="Bold"
-			           Foreground="#FFFFFFFF"
-			           Text="Choose a Build Order" />
+      VerticalAlignment="Center"
+      Background="#F2181818">
+	<Grid.ColumnDefinitions>
+		<ColumnDefinition Width="*" />
+		<ColumnDefinition Width="2" />
+		<ColumnDefinition Width="*" />
+	</Grid.ColumnDefinitions>
+	<Grid x:Name="BuildOrderSelectorPane" Grid.Column="0" Margin="28">
+		<Grid.RowDefinitions>
+			<RowDefinition Height="Auto" />
+			<RowDefinition Height="*" />
+			<RowDefinition Height="Auto" />
+		</Grid.RowDefinitions>
+		<TextBlock Grid.Row="0"
+		           Margin="0,0,0,24"
+		           FontSize="24"
+		           FontWeight="Bold"
+		           Foreground="#FFFFFFFF"
+		           Text="Choose a Build Order" />
+		<StackPanel Grid.Row="1">
+			<TextBlock Margin="0,0,0,8"
+			           Foreground="#FFD0D0D0"
+			           Text="Build Order" />
 			<ComboBox x:Name="BuildOrderSelectorDropdown"
-			          MinWidth="340"
-			          Margin="0,0,0,14"
+			          MinWidth="360"
 			          DisplayMemberPath="[label]"
 			          ItemsSource="{Binding [selector_options]}"
 			          SelectedIndex="{Binding [selected_index], Mode=OneWay}">
@@ -36,48 +45,33 @@ BUILD_ORDER_EDITOR_UI_PROBE_XAML = [[
 					                              CommandParameter="{Binding SelectedItem, RelativeSource={RelativeSource Self}}" />
 				</ComboBox.Triggers>
 			</ComboBox>
-			<StackPanel HorizontalAlignment="Center" Orientation="Horizontal">
-				<Button x:Name="BuildOrderSelectorAction"
-				        MinWidth="90" Margin="4" Padding="10,6"
-				        Command="{Binding [commands][action]}"
-				        Content="{Binding [action_label]}" />
-				<Button x:Name="BuildOrderSelectorUnpause"
-				        MinWidth="90" Margin="4" Padding="10,6"
-				        Command="{Binding [commands][unpause]}"
-				        Content="Unpause" />
-			</StackPanel>
 		</StackPanel>
-	</Border>
-	<Border x:Name="BuildOrderEditorShellProbe"
-	        Width="320"
-	        Height="160"
-	        HorizontalAlignment="Center"
-	        VerticalAlignment="Center"
-	        Visibility="{Binding [editor_visible], Converter={StaticResource BoolToVis}}"
-	        Background="#F2181818"
-	        BorderBrush="#FFD0D0D0"
-	        BorderThickness="2">
-		<StackPanel Margin="24"
-		            HorizontalAlignment="Center"
-		            VerticalAlignment="Center">
-		<TextBlock Margin="0,0,0,18"
-		           HorizontalAlignment="Center"
-		           FontSize="22"
-		           FontWeight="Bold"
-		           Foreground="#FFFFFFFF"
-		           Text="Build Order" />
-		<StackPanel HorizontalAlignment="Center" Orientation="Horizontal">
-			<Button x:Name="BuildOrderEditorSave"
-			        MinWidth="90" Margin="4" Padding="10,6"
-			        IsEnabled="False"
-			        Content="Save" />
-			<Button x:Name="BuildOrderEditorCancel"
-			        MinWidth="90" Margin="4" Padding="10,6"
-			        Command="{Binding [commands][cancel]}"
-			        Content="Cancel" />
+		<Button x:Name="BuildOrderSelectorUnpause"
+		        Grid.Row="2"
+		        MinWidth="110"
+		        Padding="12,7"
+		        HorizontalAlignment="Left"
+		        Command="{Binding [commands][unpause]}"
+		        Content="Unpause" />
+	</Grid>
+	<Border x:Name="BuildOrderWorkspaceDivider"
+	        Grid.Column="1"
+	        Background="#FF686868" />
+	<Grid x:Name="BuildOrderDetailPane" Grid.Column="2" Margin="28">
+		<StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+			<TextBlock Margin="0,0,0,20"
+			           HorizontalAlignment="Center"
+			           FontSize="24"
+			           FontWeight="Bold"
+			           Foreground="#FFFFFFFF"
+			           Text="New Build Order" />
+			<Button x:Name="BuildOrderCreatePlaceholder"
+			        MinWidth="120"
+			        Padding="14,8"
+			        HorizontalAlignment="Center"
+			        Content="Create" />
 		</StackPanel>
-		</StackPanel>
-	</Border>
+	</Grid>
 </Grid>
 ]]
 

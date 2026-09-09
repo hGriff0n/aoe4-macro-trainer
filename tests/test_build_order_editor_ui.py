@@ -123,24 +123,28 @@ class BuildOrderEditorUIContractTests(unittest.TestCase):
         self.assertIn("BUILD_ORDER_EDITOR_UI_STATE.callbacks = {}", stop)
         self.assertIn("BUILD_ORDER_EDITOR_UI_STATE.commands = nil", stop)
 
-    def test_probe_keeps_selector_and_editor_regions_in_one_presenter(self) -> None:
+    def test_probe_renders_one_persistent_split_pane_workspace(self) -> None:
         probe_xaml = extract_long_string(
             self.source, "BUILD_ORDER_EDITOR_UI_PROBE_XAML"
         )
         root = ET.fromstring(probe_xaml)
-        selector = named(root, "BuildOrderSelectorProbe")
-        editor = named(root, "BuildOrderEditorShellProbe")
+        selector = named(root, "BuildOrderSelectorPane")
+        detail = named(root, "BuildOrderDetailPane")
+        divider = named(root, "BuildOrderWorkspaceDivider")
 
         self.assertEqual(root.tag, f"{{{PRESENTATION_NS}}}Grid")
-        self.assertEqual(root.get(f"{{{XAML_NS}}}Name"), "BuildOrderEditorProbe")
-        self.assertEqual(
-            selector.get("Visibility"),
-            "{Binding [selector_visible], Converter={StaticResource BoolToVis}}",
-        )
-        self.assertEqual(
-            editor.get("Visibility"),
-            "{Binding [editor_visible], Converter={StaticResource BoolToVis}}",
-        )
+        self.assertEqual(root.get(f"{{{XAML_NS}}}Name"), "BuildOrderWorkspaceProbe")
+        self.assertEqual(root.get("Width"), "960")
+        self.assertEqual(root.get("Height"), "560")
+        column_widths = [
+            column.get("Width")
+            for column in root.findall("./p:Grid.ColumnDefinitions/p:ColumnDefinition", NS)
+        ]
+        self.assertEqual(column_widths, ["*", "2", "*"])
+        self.assertEqual(selector.get("Grid.Column"), "0")
+        self.assertEqual(divider.get("Grid.Column"), "1")
+        self.assertEqual(detail.get("Grid.Column"), "2")
+        self.assertNotIn("Visibility=", probe_xaml)
         self.assertNotIn(f"${MOD_NAMESPACE}:", probe_xaml)
 
         dropdown = named(root, "BuildOrderSelectorDropdown")
@@ -155,23 +159,18 @@ class BuildOrderEditorUIContractTests(unittest.TestCase):
         self.assertIn("CallCommandTrigger", dropdown_xml)
         self.assertIn("{Binding [commands][select]}", dropdown_xml)
 
-        action = named(root, "BuildOrderSelectorAction")
-        self.assertEqual(action.get("Content"), "{Binding [action_label]}")
-        self.assertEqual(action.get("Command"), "{Binding [commands][action]}")
-        self.assertIsNone(action.get("CommandParameter"))
         unpause = named(root, "BuildOrderSelectorUnpause")
         self.assertEqual(unpause.get("Command"), "{Binding [commands][unpause]}")
-        save = named(editor, "BuildOrderEditorSave")
-        self.assertEqual(save.get("IsEnabled"), "False")
-        cancel = named(editor, "BuildOrderEditorCancel")
-        self.assertEqual(cancel.get("Command"), "{Binding [commands][cancel]}")
+        create = named(root, "BuildOrderCreatePlaceholder")
+        self.assertEqual(create.get("Content"), "Create")
+        self.assertIsNone(create.get("Command"))
         self.assertEqual(
             [button.get(f"{{{XAML_NS}}}Name") for button in selector.findall(".//p:Button", NS)],
-            ["BuildOrderSelectorAction", "BuildOrderSelectorUnpause"],
+            ["BuildOrderSelectorUnpause"],
         )
         self.assertEqual(
-            [button.get(f"{{{XAML_NS}}}Name") for button in editor.findall(".//p:Button", NS)],
-            ["BuildOrderEditorSave", "BuildOrderEditorCancel"],
+            [button.get(f"{{{XAML_NS}}}Name") for button in detail.findall(".//p:Button", NS)],
+            ["BuildOrderCreatePlaceholder"],
         )
         self.assertNotIn("DataTemplate", probe_xaml)
 
