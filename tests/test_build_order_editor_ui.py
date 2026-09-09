@@ -157,7 +157,7 @@ class BuildOrderEditorUIContractTests(unittest.TestCase):
         action = named(root, "BuildOrderSelectorAction")
         self.assertEqual(action.get("Content"), "{Binding [action_label]}")
         self.assertEqual(action.get("Command"), "{Binding [commands][action]}")
-        self.assertEqual(action.get("CommandParameter"), "{Binding [selected_option]}")
+        self.assertIsNone(action.get("CommandParameter"))
         unpause = named(root, "BuildOrderSelectorUnpause")
         self.assertEqual(unpause.get("Command"), "{Binding [commands][unpause]}")
         save = named(editor, "BuildOrderEditorSave")

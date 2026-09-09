@@ -277,16 +277,16 @@ class BuildOrderStartupBehaviorTests(unittest.TestCase):
         self.start()
 
         self.assertTrue(
-            self.call(
-                "BuildOrderStartup_Action",
-                {"id": self.runtime.globals["BUILD_ORDER_STARTUP_NEW_ORDER_ID"]},
-            )
+            self.call("BuildOrderStartup_Action")
         )
         self.assertEqual(len(self.create_callbacks), 1)
         self.invoke(self.create_callbacks[-1], None)
 
         self.assertTrue(
-            self.call("BuildOrderStartup_Action", {"id": "english-alpha-a"})
+            self.call("BuildOrderStartup_Select", {"id": "english-alpha-a"})
+        )
+        self.assertTrue(
+            self.call("BuildOrderStartup_Action")
         )
         self.assertEqual(self.edit_calls[-1][0], "english-alpha-a")
 

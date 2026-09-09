@@ -223,15 +223,14 @@ function BuildOrderStartup_Select(parameter)
 	return true
 end
 
-function BuildOrderStartup_Action(parameter)
+function BuildOrderStartup_Action()
 	if not _mod.startupActive or _mod.startupScreen ~= "selector" then
 		return false
 	end
-	local id = BuildOrderStartup_ParameterID(parameter)
-	if id == BUILD_ORDER_STARTUP_NEW_ORDER_ID then
+	if _mod.selectedBuildOrderID == nil then
 		return BuildOrderStartup_Create()
 	end
-	return BuildOrderStartup_Edit(parameter)
+	return BuildOrderStartup_Edit(_mod.selectedBuildOrderID)
 end
 
 function BuildOrderStartup_OnEditorComplete(savedID)

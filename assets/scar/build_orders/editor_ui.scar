@@ -43,7 +43,6 @@ BUILD_ORDER_EDITOR_UI_PROBE_XAML = [[
 				<Button x:Name="BuildOrderSelectorAction"
 				        MinWidth="90" Margin="4" Padding="10,6"
 				        Command="{Binding [commands][action]}"
-				        CommandParameter="{Binding [selected_option]}"
 				        Content="{Binding [action_label]}" />
 				<Button x:Name="BuildOrderSelectorUnpause"
 				        MinWidth="90" Margin="4" Padding="10,6"
