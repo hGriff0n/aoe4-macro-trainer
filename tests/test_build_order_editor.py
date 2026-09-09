@@ -33,6 +33,12 @@ def strip_xaml(source: str) -> str:
         source,
         flags=re.DOTALL,
     )
+    source = re.sub(
+        r"BUILD_ORDER_EDITOR_UI_EDITOR_PROBE_XAML\s*=\s*\[\[.*?\]\]",
+        'BUILD_ORDER_EDITOR_UI_EDITOR_PROBE_XAML = ""',
+        source,
+        flags=re.DOTALL,
+    )
     return re.sub(
         r"BUILD_ORDER_EDITOR_UI_XAML\s*=\s*\[\[.*?\]\]",
         'BUILD_ORDER_EDITOR_UI_XAML = ""',

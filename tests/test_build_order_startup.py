@@ -195,6 +195,7 @@ class BuildOrderStartupBehaviorTests(unittest.TestCase):
             ],
         )
         self.assertFalse(self.selector_orders()[0]["editable"])
+        self.assertEqual(self.selector_orders()[0]["label"], "New Build Order")
         self.assertTrue(self.selector_orders()[-1]["selected"])
         self.assertEqual(
             self.runtime.globals["_mod"]["selectedBuildOrderID"],
@@ -461,7 +462,10 @@ class BuildOrderStartupContractTests(unittest.TestCase):
             with self.subTest(loc_id=loc_id):
                 self.assertIn(loc_id, rows)
                 self.assertEqual(rows[loc_id][6], text)
-                self.assertIn(f'"${MOD_NAMESPACE}:{loc_id}"', self.startup)
+                if loc_id == 31:
+                    self.assertIn('"New Build Order"', self.startup)
+                else:
+                    self.assertIn(f'"${MOD_NAMESPACE}:{loc_id}"', self.startup)
 
 
 class BuildOrderGameOverBehaviorTests(unittest.TestCase):
