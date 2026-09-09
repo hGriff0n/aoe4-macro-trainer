@@ -198,8 +198,14 @@ class BuildOrderEditorUIContractTests(unittest.TestCase):
         removals = []
         updates = []
         trace_messages = []
+        command_creations = []
         runtime.globals["print"] = trace_messages.append
-        runtime.globals["UI_CreateCommand"] = lambda name: f"command:{name}"
+
+        def create_command(name):
+            command_creations.append(name)
+            return f"command:{len(command_creations)}:{name}"
+
+        runtime.globals["UI_CreateCommand"] = create_command
         runtime.globals["UI_CreateDataContext"] = lambda value: value
         runtime.globals["UI_AddChild"] = (
             lambda parent, kind, name, properties: additions.append(
@@ -252,10 +258,28 @@ class BuildOrderEditorUIContractTests(unittest.TestCase):
         self.assertTrue(selector_context["selector_visible"])
         self.assertFalse(selector_context["editor_visible"])
         self.assertEqual(
-            selector_context["commands"]["action"], "command:ActionCallback"
+            selector_context["commands"]["action"],
+            "command:2:BuildOrderEditorUI_DispatchAction",
+        )
+        self.assertEqual(
+            command_creations,
+            [
+                "BuildOrderEditorUI_DispatchSelect",
+                "BuildOrderEditorUI_DispatchAction",
+                "BuildOrderEditorUI_DispatchCreate",
+                "BuildOrderEditorUI_DispatchEdit",
+                "BuildOrderEditorUI_DispatchCancel",
+                "BuildOrderEditorUI_DispatchUnpause",
+            ],
         )
 
         trace_messages.clear()
+        cancelled = []
+        globals_table = runtime.table({})
+        globals_table["CancelCallback"] = (
+            lambda parameter=None, *_unused: cancelled.append(parameter)
+        )
+        runtime.globals["_G"] = globals_table
         runtime.call("BuildOrderEditorUI_SetCallbacks", {"cancel": "CancelCallback"})
         self.assertTrue(runtime.call("BuildOrderEditorUI_ShowEditor", {}))
         self.assertEqual([addition[2] for addition in additions], ["BuildOrderEditorUI"])
@@ -265,8 +289,12 @@ class BuildOrderEditorUIContractTests(unittest.TestCase):
         self.assertFalse(updates[-1][1]["selector_visible"])
         self.assertTrue(updates[-1][1]["editor_visible"])
         self.assertEqual(
-            updates[-1][1]["commands"]["cancel"], "command:CancelCallback"
+            updates[-1][1]["commands"]["cancel"],
+            "command:5:BuildOrderEditorUI_DispatchCancel",
         )
+        self.assertEqual(len(command_creations), 6)
+        self.assertTrue(runtime.call("BuildOrderEditorUI_DispatchCancel", "editor"))
+        self.assertEqual(cancelled, ["editor"])
         self.assertEqual(
             trace_messages,
             [

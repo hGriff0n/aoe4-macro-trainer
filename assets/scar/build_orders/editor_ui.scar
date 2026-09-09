@@ -1406,6 +1406,30 @@ function BuildOrderEditorUI_InvokeCallback(key, first, second, third)
 	return true
 end
 
+function BuildOrderEditorUI_DispatchSelect(parameter)
+	return BuildOrderEditorUI_InvokeCallback("select", parameter)
+end
+
+function BuildOrderEditorUI_DispatchAction(parameter)
+	return BuildOrderEditorUI_InvokeCallback("action", parameter)
+end
+
+function BuildOrderEditorUI_DispatchCreate(parameter)
+	return BuildOrderEditorUI_InvokeCallback("create", parameter)
+end
+
+function BuildOrderEditorUI_DispatchEdit(parameter)
+	return BuildOrderEditorUI_InvokeCallback("edit", parameter)
+end
+
+function BuildOrderEditorUI_DispatchCancel(parameter)
+	return BuildOrderEditorUI_InvokeCallback("cancel", parameter)
+end
+
+function BuildOrderEditorUI_DispatchUnpause(parameter)
+	return BuildOrderEditorUI_InvokeCallback("unpause", parameter)
+end
+
 function BuildOrderEditorUI_CommitDrag(parameter)
 	local sourcePath = BUILD_ORDER_EDITOR_UI_STATE.drag_source_path
 	local targetPath = BUILD_ORDER_EDITOR_UI_STATE.drag_target_path
@@ -1494,12 +1518,12 @@ end
 
 function BuildOrderEditorUI_CreateProbeCommands()
 	return {
-		select = UI_CreateCommand(BuildOrderEditorUI_CommandName("select")),
-		action = UI_CreateCommand(BuildOrderEditorUI_CommandName("action")),
-		create = UI_CreateCommand(BuildOrderEditorUI_CommandName("create")),
-		edit = UI_CreateCommand(BuildOrderEditorUI_CommandName("edit")),
-		cancel = UI_CreateCommand(BuildOrderEditorUI_CommandName("cancel")),
-		unpause = UI_CreateCommand(BuildOrderEditorUI_CommandName("unpause")),
+		select = UI_CreateCommand("BuildOrderEditorUI_DispatchSelect"),
+		action = UI_CreateCommand("BuildOrderEditorUI_DispatchAction"),
+		create = UI_CreateCommand("BuildOrderEditorUI_DispatchCreate"),
+		edit = UI_CreateCommand("BuildOrderEditorUI_DispatchEdit"),
+		cancel = UI_CreateCommand("BuildOrderEditorUI_DispatchCancel"),
+		unpause = UI_CreateCommand("BuildOrderEditorUI_DispatchUnpause"),
 	}
 end
 
@@ -1775,7 +1799,6 @@ function BuildOrderEditorUI_ShowSelector(model)
 	if not BuildOrderEditorUI_EnsureCreated() then
 		return false
 	end
-	BUILD_ORDER_EDITOR_UI_STATE.commands = BuildOrderEditorUI_CreateProbeCommands()
 	BuildOrderEditorUI_RefreshProbe()
 	return true
 end
@@ -1789,7 +1812,6 @@ function BuildOrderEditorUI_ShowEditor(model)
 	end
 	BUILD_ORDER_EDITOR_UI_STATE.screen = "editor"
 	BUILD_ORDER_EDITOR_UI_STATE.model = type(model) == "table" and model or {}
-	BUILD_ORDER_EDITOR_UI_STATE.commands = BuildOrderEditorUI_CreateProbeCommands()
 	BuildOrderEditorUI_RefreshProbe()
 	print("BuildOrderTrace: ui show-editor result=true")
 	return true
@@ -1804,7 +1826,6 @@ function BuildOrderEditorUI_Hide()
 		and BUILD_ORDER_EDITOR_UI_STATE.screen == "editor" then
 		BUILD_ORDER_EDITOR_UI_STATE.screen = "selector"
 		BUILD_ORDER_EDITOR_UI_STATE.model = {}
-		BUILD_ORDER_EDITOR_UI_STATE.commands = BuildOrderEditorUI_CreateProbeCommands()
 		BuildOrderEditorUI_RefreshProbe()
 		return true
 	end
