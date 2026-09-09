@@ -47,10 +47,16 @@ ZULU = BuildOrder(
 
 
 class BuildOrderDatastoreCodecTests(unittest.TestCase):
-    def test_render_uses_versioned_lua_root_and_sorted_ids(self) -> None:
+    def test_render_nests_versioned_catalog_under_datastore_id(self) -> None:
         text = render_datastore(Catalog((ZULU, ORDER)))
 
-        self.assertTrue(text.startswith("LuaDataStore = {\n    schema_version = 1,"))
+        self.assertTrue(
+            text.startswith(
+                "LuaDataStore = {\n"
+                "    macroTrainerBuildOrders = {\n"
+                "        schema_version = 1,"
+            )
+        )
         self.assertLess(
             text.index('["english-opening"]'), text.index('["zulu-opening"]')
         )
@@ -71,10 +77,25 @@ class BuildOrderDatastoreCodecTests(unittest.TestCase):
     def test_parser_rejects_unsupported_or_executable_lua(self) -> None:
         invalid = {
             "wrong assignment": "Other = {}",
-            "unsupported version": "LuaDataStore = { schema_version = 2, build_orders = {} }",
-            "duplicate key": "LuaDataStore = { schema_version = 1, schema_version = 1, build_orders = {} }",
-            "trailing code": "LuaDataStore = { schema_version = 1, build_orders = {} }\nprint('x')",
-            "function": "LuaDataStore = { schema_version = 1, build_orders = function() end }",
+            "missing datastore wrapper": (
+                "LuaDataStore = { schema_version = 1, build_orders = {} }"
+            ),
+            "unsupported version": (
+                "LuaDataStore = { macroTrainerBuildOrders = { "
+                "schema_version = 2, build_orders = {} } }"
+            ),
+            "duplicate key": (
+                "LuaDataStore = { macroTrainerBuildOrders = { "
+                "schema_version = 1, schema_version = 1, build_orders = {} } }"
+            ),
+            "trailing code": (
+                "LuaDataStore = { macroTrainerBuildOrders = { "
+                "schema_version = 1, build_orders = {} } }\nprint('x')"
+            ),
+            "function": (
+                "LuaDataStore = { macroTrainerBuildOrders = { "
+                "schema_version = 1, build_orders = function() end } }"
+            ),
         }
         for label, text in invalid.items():
             with self.subTest(label=label):

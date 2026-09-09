@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 
 from tests.scar_runtime import LuaResults, LuaTable, ScarRuntime
-from tools.build_orders.datastore import _render_value, parse_datastore
+from tools.build_orders.datastore import DATASTORE_ID, _render_value, parse_datastore
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -79,7 +79,8 @@ def parse_saved_editor_order(order) -> object:
         "schema_version": 1,
         "build_orders": {saved["id"]: saved},
     }
-    return parse_datastore("LuaDataStore = " + _render_value(datastore, 0) + "\n")
+    wrapped = {DATASTORE_ID: datastore}
+    return parse_datastore("LuaDataStore = " + _render_value(wrapped, 0) + "\n")
 
 
 def valid_order(
