@@ -8,70 +8,160 @@ BUILD_ORDER_EDITOR_UI_PROBE_XAML = [[
       xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       xmlns:esActions="clr-namespace:WPFGUI.Shared.Actions;assembly=EngineUI"
-      Width="960"
-      Height="560"
+      Width="545"
+      Height="300"
       HorizontalAlignment="Center"
       VerticalAlignment="Center"
-      Background="#F2181818">
-	<Grid.ColumnDefinitions>
-		<ColumnDefinition Width="*" />
-		<ColumnDefinition Width="2" />
-		<ColumnDefinition Width="*" />
-	</Grid.ColumnDefinitions>
-	<Grid x:Name="BuildOrderSelectorPane" Grid.Column="0" Margin="28">
+      Background="#F21B2638">
+	<Grid.Resources>
+		<DataTemplate x:Key="BuildOrderCardTemplate">
+			<TextBlock Foreground="#FFF4F1E8"
+			           FontSize="16"
+			           Text="{Binding [label]}" />
+		</DataTemplate>
+	</Grid.Resources>
+	<Border x:Name="BuildOrderSelectorFrame"
+	        Background="#F21B2638"
+	        BorderBrush="#FFC39A5A"
+	        BorderThickness="2">
+	<Border x:Name="BuildOrderSelectorInnerFrame"
+	        BorderBrush="#FF5E4A2A"
+	        BorderThickness="1">
+	<Grid x:Name="BuildOrderSelectorPane" Margin="28">
 		<Grid.RowDefinitions>
 			<RowDefinition Height="Auto" />
 			<RowDefinition Height="*" />
 			<RowDefinition Height="Auto" />
 		</Grid.RowDefinitions>
-		<TextBlock Grid.Row="0"
+		<TextBlock x:Name="BuildOrderSelectorTitle"
+		           Grid.Row="0"
 		           Margin="0,0,0,24"
 		           FontSize="24"
 		           FontWeight="Bold"
-		           Foreground="#FFFFFFFF"
+		           Foreground="#FFF2E2B6"
 		           Text="Choose a Build Order" />
 		<StackPanel Grid.Row="1">
-			<TextBlock Margin="0,0,0,8"
-			           Foreground="#FFD0D0D0"
-			           Text="Build Order" />
-			<ComboBox x:Name="BuildOrderSelectorDropdown"
-			          MinWidth="360"
-			          DisplayMemberPath="[label]"
-			          ItemsSource="{Binding [selector_options]}"
-			          SelectedIndex="{Binding [selected_index], Mode=OneWay}">
-				<ComboBox.Triggers>
-					<esActions:CallCommandTrigger RoutedEvent="ComboBox.SelectionChanged"
-					                              Command="{Binding [commands][select]}"
-					                              CommandParameter="{Binding SelectedItem, RelativeSource={RelativeSource Self}}" />
-				</ComboBox.Triggers>
-			</ComboBox>
+			<Grid>
+				<ListBox x:Name="BuildOrderSelectorList"
+				         Background="Transparent"
+				         Foreground="#FFF4F1E8"
+				         BorderThickness="0"
+				         OverridesDefaultStyle="True"
+				         ItemTemplate="{StaticResource BuildOrderCardTemplate}"
+				         ItemsSource="{Binding [selector_options]}"
+				         SelectedIndex="{Binding [selected_index], Mode=OneWay}"
+				         ScrollViewer.VerticalScrollBarVisibility="Auto">
+					<ListBox.Template>
+						<ControlTemplate TargetType="{x:Type ListBox}">
+							<Border x:Name="BuildOrderListChrome"
+							        Background="Transparent"
+							        BorderThickness="0">
+								<ScrollViewer VerticalScrollBarVisibility="Auto">
+									<ItemsPresenter />
+								</ScrollViewer>
+							</Border>
+						</ControlTemplate>
+					</ListBox.Template>
+					<ListBox.ItemContainerStyle>
+						<Style TargetType="{x:Type ListBoxItem}">
+							<Setter Property="OverridesDefaultStyle" Value="True" />
+							<Setter Property="Template">
+								<Setter.Value>
+									<ControlTemplate TargetType="{x:Type ListBoxItem}">
+										<Border x:Name="BuildOrderCardChrome"
+										        Margin="0,0,0,4"
+										        Padding="12,10"
+										        Background="#FF182235"
+										        BorderBrush="#FF5E4A2A"
+										        BorderThickness="1">
+											<ContentPresenter Content="{TemplateBinding Content}"
+											                  ContentTemplate="{TemplateBinding ContentTemplate}" />
+										</Border>
+										<ControlTemplate.Triggers>
+											<Trigger Property="IsMouseOver" Value="True">
+												<Setter TargetName="BuildOrderCardChrome"
+												        Property="BorderBrush"
+												        Value="#FFC39A5A" />
+											</Trigger>
+											<Trigger Property="IsSelected" Value="True">
+												<Setter TargetName="BuildOrderCardChrome"
+												        Property="Background"
+												        Value="#FF176B8A" />
+												<Setter TargetName="BuildOrderCardChrome"
+												        Property="BorderBrush"
+												        Value="#FFF0D08A" />
+											</Trigger>
+										</ControlTemplate.Triggers>
+									</ControlTemplate>
+								</Setter.Value>
+							</Setter>
+						</Style>
+					</ListBox.ItemContainerStyle>
+				</ListBox>
+				<TextBlock x:Name="BuildOrderSelectorEmptyMessage"
+				           Foreground="#FFF4F1E8"
+				           IsHitTestVisible="False"
+				           Text="{Binding [empty_message]}"
+				           TextWrapping="Wrap" />
+			</Grid>
 		</StackPanel>
-		<Button x:Name="BuildOrderSelectorUnpause"
-		        Grid.Row="2"
+		<StackPanel Grid.Row="2" Orientation="Horizontal">
+		<Button x:Name="BuildOrderSelectorStartGame"
 		        MinWidth="110"
 		        Padding="12,7"
 		        HorizontalAlignment="Left"
-		        Command="{Binding [commands][unpause]}"
-		        Content="Unpause" />
-	</Grid>
-	<Border x:Name="BuildOrderWorkspaceDivider"
-	        Grid.Column="1"
-	        Background="#FF686868" />
-	<Grid x:Name="BuildOrderDetailPane" Grid.Column="2" Margin="28">
-		<StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-			<TextBlock Margin="0,0,0,20"
-			           HorizontalAlignment="Center"
-			           FontSize="24"
-			           FontWeight="Bold"
-			           Foreground="#FFFFFFFF"
-			           Text="New Build Order" />
-			<Button x:Name="BuildOrderCreatePlaceholder"
-			        MinWidth="120"
-			        Padding="14,8"
-			        HorizontalAlignment="Center"
-			        Content="Create" />
+		        Background="#FFD7A84A"
+		        Foreground="#FF172033"
+		        BorderBrush="#FFF0D08A"
+		        BorderThickness="1"
+		        FontWeight="Bold"
+		        OverridesDefaultStyle="True"
+		        Command="{Binding [commands][start_game]}"
+		        CommandParameter="{Binding SelectedItem[id], ElementName=BuildOrderSelectorList}"
+		        Content="Start Game">
+			<Button.Template>
+				<ControlTemplate TargetType="{x:Type Button}">
+					<Border x:Name="BuildOrderStartGameChrome"
+					        Padding="{TemplateBinding Padding}"
+					        Background="{TemplateBinding Background}"
+					        BorderBrush="{TemplateBinding BorderBrush}"
+					        BorderThickness="{TemplateBinding BorderThickness}">
+						<ContentPresenter Content="{TemplateBinding Content}"
+						                  HorizontalAlignment="Center"
+						                  VerticalAlignment="Center" />
+					</Border>
+				</ControlTemplate>
+			</Button.Template>
+		</Button>
+		<Button x:Name="BuildOrderSelectorContinueWithout"
+		        MinWidth="180"
+		        Margin="12,0,0,0"
+		        Padding="12,7"
+		        Background="#FF182235"
+		        Foreground="#FFF2E2B6"
+		        BorderBrush="#FFC39A5A"
+		        BorderThickness="1"
+		        FontWeight="Bold"
+		        OverridesDefaultStyle="True"
+		        Command="{Binding [commands][continue_without]}"
+		        Content="Continue Without Build Order">
+			<Button.Template>
+				<ControlTemplate TargetType="{x:Type Button}">
+					<Border Padding="{TemplateBinding Padding}"
+					        Background="{TemplateBinding Background}"
+					        BorderBrush="{TemplateBinding BorderBrush}"
+					        BorderThickness="{TemplateBinding BorderThickness}">
+						<ContentPresenter Content="{TemplateBinding Content}"
+						                  HorizontalAlignment="Center"
+						                  VerticalAlignment="Center" />
+					</Border>
+				</ControlTemplate>
+			</Button.Template>
+		</Button>
 		</StackPanel>
 	</Grid>
+	</Border>
+	</Border>
 </Grid>
 ]]
 
@@ -1400,28 +1490,12 @@ function BuildOrderEditorUI_InvokeCallback(key, first, second, third)
 	return true
 end
 
-function BuildOrderEditorUI_DispatchSelect(parameter)
-	return BuildOrderEditorUI_InvokeCallback("select", parameter)
+function BuildOrderEditorUI_DispatchStartGame(parameter)
+	return BuildOrderEditorUI_InvokeCallback("start_game", parameter)
 end
 
-function BuildOrderEditorUI_DispatchAction(parameter)
-	return BuildOrderEditorUI_InvokeCallback("action", parameter)
-end
-
-function BuildOrderEditorUI_DispatchCreate(parameter)
-	return BuildOrderEditorUI_InvokeCallback("create", parameter)
-end
-
-function BuildOrderEditorUI_DispatchEdit(parameter)
-	return BuildOrderEditorUI_InvokeCallback("edit", parameter)
-end
-
-function BuildOrderEditorUI_DispatchCancel(parameter)
-	return BuildOrderEditorUI_InvokeCallback("cancel", parameter)
-end
-
-function BuildOrderEditorUI_DispatchUnpause(parameter)
-	return BuildOrderEditorUI_InvokeCallback("unpause", parameter)
+function BuildOrderEditorUI_DispatchContinueWithout(parameter)
+	return BuildOrderEditorUI_InvokeCallback("continue_without", parameter)
 end
 
 function BuildOrderEditorUI_CommitDrag(parameter)
@@ -1512,12 +1586,8 @@ end
 
 function BuildOrderEditorUI_CreateProbeCommands()
 	return {
-		select = UI_CreateCommand("BuildOrderEditorUI_DispatchSelect"),
-		action = UI_CreateCommand("BuildOrderEditorUI_DispatchAction"),
-		create = UI_CreateCommand("BuildOrderEditorUI_DispatchCreate"),
-		edit = UI_CreateCommand("BuildOrderEditorUI_DispatchEdit"),
-		cancel = UI_CreateCommand("BuildOrderEditorUI_DispatchCancel"),
-		unpause = UI_CreateCommand("BuildOrderEditorUI_DispatchUnpause"),
+		start_game = UI_CreateCommand("BuildOrderEditorUI_DispatchStartGame"),
+		continue_without = UI_CreateCommand("BuildOrderEditorUI_DispatchContinueWithout"),
 	}
 end
 
@@ -1528,20 +1598,11 @@ function BuildOrderEditorUI_SelectorOptions(model, commands)
 		if type(order) == "table" then
 			local id = order.id or ""
 			local label = order.label or order.title or id
-			local idFallback = order.id_fallback
-			if type(idFallback) ~= "string" then
-				idFallback = id
-			end
 			table.insert(options, {
 				id = id,
 				value = id,
 				label = label,
-				id_fallback = idFallback,
 				selected = order.selected == true,
-				selected_visibility = BuildOrderEditorUI_Visibility(order.selected == true),
-				edit_enabled = order.editable ~= false,
-				select_command = commands.select,
-				edit_command = commands.edit,
 			})
 		end
 	end
@@ -1696,29 +1757,12 @@ function BuildOrderEditorUI_BuildProbeViewModel(screen, model)
 	model = type(model) == "table" and model or {}
 	local commands = BUILD_ORDER_EDITOR_UI_STATE.commands or {}
 	local options = BuildOrderEditorUI_SelectorOptions(model, commands)
-	local selectedOption = nil
-	local selectedIndex = 0
-	for index, option in ipairs(options) do
-		if option.selected then
-			selectedOption = option
-			selectedIndex = index - 1
-			break
-		end
-	end
-	if selectedOption == nil then
-		selectedOption = options[1]
-	end
-	local canEdit = selectedOption ~= nil and selectedOption.edit_enabled == true
 	return {
-		screen = screen,
 		selector_visible = screen == "selector",
-		editor_visible = screen == "editor",
 		selector_options = options,
-		selected_option = selectedOption,
-		selected_index = selectedIndex,
-		action_label = canEdit and "Edit" or "Create",
+		selected_index = -1,
+		empty_message = #options == 0 and "No build orders for this civilization" or "",
 		commands = commands,
-		save_enabled = false,
 	}
 end
 
@@ -1816,13 +1860,6 @@ function BuildOrderEditorUI_ShowNoSelectionConfirmation(model)
 end
 
 function BuildOrderEditorUI_Hide()
-	if BUILD_ORDER_EDITOR_UI_STATE.created
-		and BUILD_ORDER_EDITOR_UI_STATE.screen == "editor" then
-		BUILD_ORDER_EDITOR_UI_STATE.screen = "selector"
-		BUILD_ORDER_EDITOR_UI_STATE.model = {}
-		BuildOrderEditorUI_RefreshProbe()
-		return true
-	end
 	if BUILD_ORDER_EDITOR_UI_STATE.created then
 		UI_Remove(BUILD_ORDER_EDITOR_UI_NAME)
 		BUILD_ORDER_EDITOR_UI_STATE.created = false

@@ -1,11 +1,15 @@
+import csv
 import re
 import unittest
 from pathlib import Path
+
+from tests.scar_runtime import ScarRuntime
 
 
 ROOT = Path(__file__).resolve().parents[1]
 ENGINE_PATH = ROOT / "assets" / "scar" / "build_orders" / "objective_engine.scar"
 MAIN_PATH = ROOT / "assets" / "scar" / "winconditions" / "Macro Trainer.scar"
+LOCDB_PATH = ROOT / "assets" / "locdb" / "Macro Trainer_en.csv"
 IMPORT_PATTERN = re.compile(r'^\s*import\("([^"]+)"\)', re.MULTILINE)
 
 FAKE_HANDLER_FIXTURE = '''local fakeHandler = {
@@ -189,11 +193,11 @@ class BuildOrderObjectiveContractTests(unittest.TestCase):
         self.assertIn("local faction = Player_GetRaceName(player)", activate)
         self.assertRegex(
             activate,
-            r"Obj_Create\(\s*player,\s*step\.title,\s*Loc_Empty\(\),\s*\"\",\s*DT_PRIMARY_DEFAULT,\s*faction,\s*OT_Primary,\s*0,\s*\"buildOrderStep\"\s*\)",
+            r"Obj_Create\(\s*player,\s*BuildOrder_ObjectiveTitle\(step\.title\),\s*Loc_Empty\(\),\s*\"\",\s*DT_PRIMARY_DEFAULT,\s*faction,\s*OT_Primary,\s*0,\s*\"buildOrderStep\"\s*\)",
         )
         self.assertRegex(
             activate,
-            r"Obj_Create\(\s*player,\s*check\.title,\s*Loc_Empty\(\),\s*\"\",\s*DT_SECONDARY_DEFAULT,\s*faction,\s*OT_Secondary,\s*primaryID,\s*\"buildOrderCheck\"\s*\)",
+            r"Obj_Create\(\s*player,\s*BuildOrder_ObjectiveTitle\(check\.title\),\s*Loc_Empty\(\),\s*\"\",\s*DT_SECONDARY_DEFAULT,\s*faction,\s*OT_Secondary,\s*primaryID,\s*\"buildOrderCheck\"\s*\)",
         )
         self.assertNotIn("Player_GetID", activate)
         self.assertNotIn("player.id", activate)
@@ -215,6 +219,111 @@ class BuildOrderObjectiveContractTests(unittest.TestCase):
         self.assertNotIn("DT_PRIMARY_WARNING", self.engine)
         self.assertNotIn("DT_SECONDARY_WARNING", self.engine)
         self.assertNotIn("OT_Warning", self.engine)
+
+    def objective_runtime(self):
+        runtime = ScarRuntime(self.engine)
+        runtime.globals["LOC"] = lambda value: f"LOC: {value}"
+        runtime.globals["print"] = lambda *_arguments: None
+        runtime.globals["tostring"] = str
+        return runtime
+
+    def test_activation_uses_static_localization_keys_for_known_3tc_titles(self) -> None:
+        runtime = self.objective_runtime()
+        objectives = []
+
+        def create_objective(*arguments):
+            objectives.append(arguments)
+            return len(objectives)
+
+        runtime.globals["Loc_Empty"] = lambda: ""
+        runtime.globals["Player_GetRaceName"] = lambda _player: "abbasid"
+        runtime.globals["Obj_Create"] = create_objective
+        runtime.globals["Obj_SetState"] = lambda *_arguments: None
+        runtime.globals["Obj_SetVisible"] = lambda *_arguments: None
+        runtime.globals["Obj_Delete"] = lambda *_arguments: None
+        for name in (
+            "DT_PRIMARY_DEFAULT",
+            "DT_SECONDARY_DEFAULT",
+            "OT_Primary",
+            "OT_Secondary",
+            "OS_Incomplete",
+            "OS_Complete",
+        ):
+            runtime.globals[name] = name
+
+        runtime.call(
+            "BuildOrder_Start",
+            {
+                "civ": "abbasid",
+                "steps": [
+                    {
+                        "title": "Step 1",
+                        "checks": [
+                            {
+                                "id": "abbasid-3tc:1:1",
+                                "kind": "missing",
+                                "title": "Assign 6 food | 3 gold",
+                                "optional": False,
+                                "payload": {},
+                            }
+                        ],
+                    }
+                ],
+            },
+            "local-player",
+        )
+
+        self.assertEqual(
+            [arguments[1] for arguments in objectives],
+            [
+                "$dfb5645698a84afb91cf7a2dfb0f4a4e:143",
+                "$dfb5645698a84afb91cf7a2dfb0f4a4e:150",
+            ],
+        )
+
+    def test_unknown_objective_title_uses_nonfatal_loc_fallback(self) -> None:
+        runtime = self.objective_runtime()
+
+        self.assertEqual(
+            runtime.call("BuildOrder_ObjectiveTitle", "Future build-order title"),
+            "LOC: Future build-order title",
+        )
+
+    def test_objective_title_lookup_does_not_emit_diagnostics(self) -> None:
+        runtime = self.objective_runtime()
+        messages = []
+        runtime.globals["print"] = messages.append
+
+        runtime.call("BuildOrder_ObjectiveTitle", "Step 1")
+        runtime.call("BuildOrder_ObjectiveTitle", "Step 2")
+
+        self.assertEqual(messages, [])
+
+    def test_static_3tc_objective_keys_resolve_to_the_original_text(self) -> None:
+        runtime = self.objective_runtime()
+        with LOCDB_PATH.open(encoding="utf-8-sig", newline="") as source:
+            entries = {row["ID"]: row["Text"] for row in csv.DictReader(source)}
+
+        expected = [
+            "Step 1", "Step 2", "Step 3", "Step 4", "Step 5", "Step 6", "Step 7",
+            "Assign 6 food | 3 gold", "[HINT] Starting vils to berries",
+            "Build mining camp", "Build house", "Assign 9 food | 3 gold",
+            "[HINT] Rallied food vils to sheep under TC", "Build house of wisdom",
+            "Age Up: economic wing", "Assign 4 food | 7 wood | 6 stone",
+            "Rally to stone", "Collect at least 150 gold",
+            "[HINT] Move gold vils to stone after collecting 150",
+            "Queue fresh foodstuffs for research", "Queue fertile crescent for research",
+            "Assign 4 food | 7 wood | 7 stone", "Rally to wood",
+            "[HINT] Build TC with stone vils", "Build town center",
+            "Assign 4 food | 11 wood | 7 stone", "Rally to food",
+            "Assign 6 food | 11 wood | 9 stone", "Build archery range",
+            "[HINT] Remacro for production/upgrades after starting construction of final TC",
+        ]
+        for text in expected:
+            with self.subTest(text=text):
+                key = runtime.call("BuildOrder_ObjectiveTitle", text)
+                identifier = key.rsplit(":", 1)[1]
+                self.assertEqual(entries.get(identifier), text)
 
     def test_handlers_receive_stable_ids_after_all_child_objectives_exist(self) -> None:
         activate = function_body(self.engine, "BuildOrder_ActivateStep")

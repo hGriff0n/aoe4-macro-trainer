@@ -470,22 +470,11 @@ class BuildOrderEditorBehaviorTests(unittest.TestCase):
         self.assertEqual(state["draft"]["original_id"], order["id"])
         self.assertGreaterEqual(self.discovery_clears, 2)
 
-        callbacks = self.callback_tables[-1]
-        for command in (
-            "copy",
-            "save",
-            "cancel",
-            "field_change",
-            "add",
-            "add_check",
-            "delete",
-            "expand",
-            "collapse",
-            "reorder",
-        ):
-            with self.subTest(command=command):
-                self.assertIsInstance(callbacks[command], str)
-                self.assertTrue(callbacks[command].startswith("BuildOrderEditor_"))
+        self.assertEqual(self.callback_tables, [])
+        open_draft = function_body(
+            EDITOR_SCAR.read_text(encoding="utf-8"), "BuildOrderEditor_OpenDraft"
+        )
+        self.assertNotIn("BuildOrderEditorUI_SetCallbacks", open_draft)
 
     def test_open_create_logs_each_editor_boundary(self) -> None:
         self.runtime.globals["tostring"] = lambda value: str(value).lower()

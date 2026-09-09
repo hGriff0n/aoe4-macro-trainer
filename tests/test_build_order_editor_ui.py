@@ -123,58 +123,98 @@ class BuildOrderEditorUIContractTests(unittest.TestCase):
         self.assertIn("BUILD_ORDER_EDITOR_UI_STATE.callbacks = {}", stop)
         self.assertIn("BUILD_ORDER_EDITOR_UI_STATE.commands = nil", stop)
 
-    def test_probe_renders_one_persistent_split_pane_workspace(self) -> None:
+    def test_probe_renders_one_selector_only_window(self) -> None:
         probe_xaml = extract_long_string(
             self.source, "BUILD_ORDER_EDITOR_UI_PROBE_XAML"
         )
         root = ET.fromstring(probe_xaml)
         selector = named(root, "BuildOrderSelectorPane")
-        detail = named(root, "BuildOrderDetailPane")
-        divider = named(root, "BuildOrderWorkspaceDivider")
 
         self.assertEqual(root.tag, f"{{{PRESENTATION_NS}}}Grid")
         self.assertEqual(root.get(f"{{{XAML_NS}}}Name"), "BuildOrderWorkspaceProbe")
-        self.assertEqual(root.get("Width"), "960")
-        self.assertEqual(root.get("Height"), "560")
-        column_widths = [
-            column.get("Width")
-            for column in root.findall("./p:Grid.ColumnDefinitions/p:ColumnDefinition", NS)
-        ]
-        self.assertEqual(column_widths, ["*", "2", "*"])
-        self.assertEqual(selector.get("Grid.Column"), "0")
-        self.assertEqual(divider.get("Grid.Column"), "1")
-        self.assertEqual(detail.get("Grid.Column"), "2")
-        self.assertNotIn("Visibility=", probe_xaml)
+        self.assertEqual(root.get("Width"), "545")
+        self.assertEqual(root.get("Height"), "300")
+        self.assertEqual(root.findall("./p:Grid.ColumnDefinitions", NS), [])
+        with self.assertRaisesRegex(AssertionError, "BuildOrderDetailPane"):
+            named(root, "BuildOrderDetailPane")
+        with self.assertRaisesRegex(AssertionError, "BuildOrderWorkspaceDivider"):
+            named(root, "BuildOrderWorkspaceDivider")
+        self.assertNotRegex(probe_xaml, r"\sVisibility=")
         self.assertNotIn(f"${MOD_NAMESPACE}:", probe_xaml)
 
-        dropdown = named(root, "BuildOrderSelectorDropdown")
-        self.assertEqual(dropdown.get("ItemsSource"), "{Binding [selector_options]}")
+        order_list = named(root, "BuildOrderSelectorList")
+        self.assertEqual(order_list.tag, f"{{{PRESENTATION_NS}}}ListBox")
+        self.assertEqual(order_list.get("ItemsSource"), "{Binding [selector_options]}")
         self.assertEqual(
-            dropdown.get("SelectedIndex"),
+            order_list.get("SelectedIndex"),
             "{Binding [selected_index], Mode=OneWay}",
         )
-        self.assertIsNone(dropdown.get("SelectedItem"))
-        self.assertEqual(dropdown.get("DisplayMemberPath"), "[label]")
-        dropdown_xml = ET.tostring(dropdown, encoding="unicode")
-        self.assertIn("CallCommandTrigger", dropdown_xml)
-        self.assertIn("{Binding [commands][select]}", dropdown_xml)
+        self.assertEqual(order_list.get("OverridesDefaultStyle"), "True")
+        list_template = order_list.find(
+            "./p:ListBox.Template/p:ControlTemplate", NS
+        )
+        self.assertIsNotNone(list_template)
+        list_chrome = named(list_template, "BuildOrderListChrome")
+        self.assertEqual(list_chrome.get("Background"), "Transparent")
+        self.assertIsNotNone(list_template.find(".//p:ScrollViewer", NS))
+        self.assertIsNotNone(list_template.find(".//p:ItemsPresenter", NS))
+        with self.assertRaisesRegex(AssertionError, "BuildOrderSelectorDropdown"):
+            named(root, "BuildOrderSelectorDropdown")
+        with self.assertRaisesRegex(AssertionError, "BuildOrderSelectorLabel"):
+            named(root, "BuildOrderSelectorLabel")
 
-        unpause = named(root, "BuildOrderSelectorUnpause")
-        self.assertEqual(unpause.get("Command"), "{Binding [commands][unpause]}")
-        create = named(root, "BuildOrderCreatePlaceholder")
-        self.assertEqual(create.get("Content"), "Create")
-        self.assertIsNone(create.get("Command"))
+        card_template = named(root, "BuildOrderCardTemplate")
+        card_label = card_template.find(".//p:TextBlock", NS)
+        self.assertIsNotNone(card_label)
+        self.assertEqual(card_label.get("Text"), "{Binding [label]}")
+
+        item_style = order_list.find("./p:ListBox.ItemContainerStyle/p:Style", NS)
+        self.assertIsNotNone(item_style)
+        item_template = item_style.find(".//p:ControlTemplate", NS)
+        self.assertIsNotNone(item_template)
+        card_chrome = named(item_template, "BuildOrderCardChrome")
+        self.assertEqual(card_chrome.get("Background"), "#FF182235")
+        triggers = item_template.findall(
+            "./p:ControlTemplate.Triggers/p:Trigger", NS
+        )
+        trigger_setters = {
+            trigger.get("Property"): {
+                setter.get("Property"): setter.get("Value")
+                for setter in trigger.findall("./p:Setter", NS)
+            }
+            for trigger in triggers
+            if trigger.get("Value") == "True"
+        }
+        self.assertNotIn("Background", trigger_setters["IsMouseOver"])
+        self.assertEqual(
+            trigger_setters["IsMouseOver"]["BorderBrush"], "#FFC39A5A"
+        )
+        self.assertEqual(trigger_setters["IsSelected"]["Background"], "#FF176B8A")
+        self.assertEqual(triggers[-1].get("Property"), "IsSelected")
+
+        empty_message = named(root, "BuildOrderSelectorEmptyMessage")
+        self.assertEqual(empty_message.get("Text"), "{Binding [empty_message]}")
+
+        start_game = named(root, "BuildOrderSelectorStartGame")
+        self.assertEqual(start_game.get("Content"), "Start Game")
+        self.assertEqual(start_game.get("Command"), "{Binding [commands][start_game]}")
+        self.assertEqual(
+            start_game.get("CommandParameter"),
+            "{Binding SelectedItem[id], ElementName=BuildOrderSelectorList}",
+        )
+        self.assertIsNone(start_game.get("IsEnabled"))
+        continue_without = named(root, "BuildOrderSelectorContinueWithout")
+        self.assertEqual(continue_without.get("Content"), "Continue Without Build Order")
+        self.assertEqual(
+            continue_without.get("Command"),
+            "{Binding [commands][continue_without]}",
+        )
         self.assertEqual(
             [button.get(f"{{{XAML_NS}}}Name") for button in selector.findall(".//p:Button", NS)],
-            ["BuildOrderSelectorUnpause"],
+            ["BuildOrderSelectorStartGame", "BuildOrderSelectorContinueWithout"],
         )
-        self.assertEqual(
-            [button.get(f"{{{XAML_NS}}}Name") for button in detail.findall(".//p:Button", NS)],
-            ["BuildOrderCreatePlaceholder"],
-        )
-        self.assertNotIn("DataTemplate", probe_xaml)
 
-    def test_probe_creates_one_presenter_for_both_regions(self) -> None:
+    def test_probe_creates_one_selector_presenter(self) -> None:
         self.assertEqual(self.source.count("UI_AddChild("), 1)
         create = function_body(self.source, "BuildOrderEditorUI_CreatePresenter")
         self.assertIn(
@@ -190,7 +230,47 @@ class BuildOrderEditorUIContractTests(unittest.TestCase):
         self.assertRegex(ensure, r"if not success then[\s\S]*?return false")
         self.assertIn("return true", ensure)
 
-    def test_probe_lifecycle_toggles_regions_in_the_original_presenter(self) -> None:
+    def test_probe_uses_aoe4_modal_colors_without_changing_geometry(self) -> None:
+        root = ET.fromstring(
+            extract_long_string(self.source, "BUILD_ORDER_EDITOR_UI_PROBE_XAML")
+        )
+        self.assertEqual(root.get("Width"), "545")
+        self.assertEqual(root.get("Height"), "300")
+        self.assertEqual(root.get("HorizontalAlignment"), "Center")
+        self.assertEqual(root.get("VerticalAlignment"), "Center")
+        self.assertEqual(root.get("Background"), "#F21B2638")
+
+        frame = named(root, "BuildOrderSelectorFrame")
+        self.assertEqual(frame.get("BorderBrush"), "#FFC39A5A")
+        self.assertEqual(frame.get("BorderThickness"), "2")
+        inner_frame = named(root, "BuildOrderSelectorInnerFrame")
+        self.assertEqual(inner_frame.get("BorderBrush"), "#FF5E4A2A")
+        self.assertEqual(inner_frame.get("BorderThickness"), "1")
+
+        title = named(root, "BuildOrderSelectorTitle")
+        self.assertEqual(title.get("Foreground"), "#FFF2E2B6")
+
+        order_list = named(root, "BuildOrderSelectorList")
+        self.assertEqual(order_list.get("Background"), "Transparent")
+        self.assertEqual(order_list.get("Foreground"), "#FFF4F1E8")
+        self.assertEqual(order_list.get("BorderThickness"), "0")
+
+        start_game = named(root, "BuildOrderSelectorStartGame")
+        self.assertEqual(start_game.get("Background"), "#FFD7A84A")
+        self.assertEqual(start_game.get("Foreground"), "#FF172033")
+        self.assertEqual(start_game.get("BorderBrush"), "#FFF0D08A")
+        self.assertEqual(start_game.get("OverridesDefaultStyle"), "True")
+        template = start_game.find("./p:Button.Template/p:ControlTemplate", NS)
+        self.assertIsNotNone(template)
+        chrome = named(template, "BuildOrderStartGameChrome")
+        self.assertEqual(chrome.get("Background"), "{TemplateBinding Background}")
+        self.assertEqual(chrome.get("BorderBrush"), "{TemplateBinding BorderBrush}")
+        self.assertEqual(chrome.get("BorderThickness"), "{TemplateBinding BorderThickness}")
+        content = template.find("./p:Border/p:ContentPresenter", NS)
+        self.assertIsNotNone(content)
+        self.assertEqual(content.get("Content"), "{TemplateBinding Content}")
+
+    def test_probe_lifecycle_uses_one_selector_presenter(self) -> None:
         runtime = ScarRuntime(strip_xaml(self.source))
         runtime.globals["tostring"] = lambda value: str(value).lower()
         additions = []
@@ -227,11 +307,8 @@ class BuildOrderEditorUIContractTests(unittest.TestCase):
         runtime.call(
             "BuildOrderEditorUI_SetCallbacks",
             {
-                "select": "SelectCallback",
-                "create": "CreateCallback",
-                "edit": "EditCallback",
-                "action": "ActionCallback",
-                "unpause": "UnpauseCallback",
+                "start_game": "StartGameCallback",
+                "continue_without": "ContinueWithoutCallback",
             },
         )
         self.assertTrue(
@@ -240,9 +317,8 @@ class BuildOrderEditorUIContractTests(unittest.TestCase):
                 {
                     "orders": [
                         {
-                            "id": "__new_build_order__",
-                            "label": "New Build Order",
-                            "editable": False,
+                            "id": "english-opening",
+                            "label": "English Opening",
                             "selected": True,
                         }
                     ]
@@ -251,69 +327,44 @@ class BuildOrderEditorUIContractTests(unittest.TestCase):
         )
         self.assertEqual([addition[2] for addition in additions], ["BuildOrderEditorUI"])
         selector_context = additions[0][3]["DataContext"]
-        self.assertEqual(selector_context["selected_option"]["label"], "New Build Order")
-        self.assertEqual(selector_context["selected_index"], 0)
-        self.assertEqual(selector_context["action_label"], "Create")
+        self.assertIsNone(selector_context["selected_option"])
+        self.assertEqual(selector_context["selected_index"], -1)
+        self.assertIsNone(selector_context["start_enabled"])
+        self.assertEqual(selector_context["empty_message"], "")
         self.assertTrue(selector_context["selector_visible"])
         self.assertFalse(selector_context["editor_visible"])
         self.assertEqual(
-            selector_context["commands"]["action"],
-            "command:2:BuildOrderEditorUI_DispatchAction",
+            selector_context["commands"]["start_game"],
+            "command:1:BuildOrderEditorUI_DispatchStartGame",
+        )
+        self.assertEqual(
+            selector_context["commands"]["continue_without"],
+            "command:2:BuildOrderEditorUI_DispatchContinueWithout",
         )
         self.assertEqual(
             command_creations,
             [
-                "BuildOrderEditorUI_DispatchSelect",
-                "BuildOrderEditorUI_DispatchAction",
-                "BuildOrderEditorUI_DispatchCreate",
-                "BuildOrderEditorUI_DispatchEdit",
-                "BuildOrderEditorUI_DispatchCancel",
-                "BuildOrderEditorUI_DispatchUnpause",
+                "BuildOrderEditorUI_DispatchStartGame",
+                "BuildOrderEditorUI_DispatchContinueWithout",
             ],
         )
 
-        trace_messages.clear()
-        cancelled = []
+        started = []
         globals_table = runtime.table({})
-        globals_table["CancelCallback"] = (
-            lambda parameter=None, *_unused: cancelled.append(parameter)
+        globals_table["StartGameCallback"] = (
+            lambda parameter=None, *_unused: started.append(parameter)
+        )
+        continued = []
+        globals_table["ContinueWithoutCallback"] = (
+            lambda *_unused: continued.append(True)
         )
         runtime.globals["_G"] = globals_table
-        runtime.call("BuildOrderEditorUI_SetCallbacks", {"cancel": "CancelCallback"})
-        self.assertTrue(runtime.call("BuildOrderEditorUI_ShowEditor", {}))
-        self.assertEqual([addition[2] for addition in additions], ["BuildOrderEditorUI"])
-        self.assertEqual(removals, [])
-        self.assertEqual(updates[-1][0], "BuildOrderEditorUI")
-        self.assertIs(updates[-1][1], selector_context)
-        self.assertFalse(updates[-1][1]["selector_visible"])
-        self.assertTrue(updates[-1][1]["editor_visible"])
-        self.assertEqual(
-            updates[-1][1]["commands"]["cancel"],
-            "command:5:BuildOrderEditorUI_DispatchCancel",
+        self.assertTrue(
+            runtime.call("BuildOrderEditorUI_DispatchStartGame", "english-opening")
         )
-        self.assertEqual(len(command_creations), 6)
-        self.assertTrue(runtime.call("BuildOrderEditorUI_DispatchCancel", "editor"))
-        self.assertEqual(cancelled, ["editor"])
-        self.assertEqual(
-            trace_messages,
-            [
-                "BuildOrderTrace: ui show-editor enter created=true screen=selector",
-                "BuildOrderTrace: ui refresh screen=editor selector=false editor=true created=true",
-                "BuildOrderTrace: ui set-context begin name=BuildOrderEditorUI",
-                "BuildOrderTrace: ui set-context end",
-                "BuildOrderTrace: ui show-editor result=true",
-            ],
-        )
-
-        self.assertTrue(runtime.call("BuildOrderEditorUI_Hide"))
-        self.assertEqual(removals, [])
-        self.assertEqual(updates[-1][0], "BuildOrderEditorUI")
-        self.assertIs(updates[-1][1], selector_context)
-        self.assertTrue(updates[-1][1]["selector_visible"])
-        self.assertFalse(updates[-1][1]["editor_visible"])
-        self.assertEqual(
-            runtime.globals["BUILD_ORDER_EDITOR_UI_STATE"]["screen"], "selector"
-        )
+        self.assertEqual(started, ["english-opening"])
+        self.assertTrue(runtime.call("BuildOrderEditorUI_DispatchContinueWithout"))
+        self.assertEqual(continued, [True])
 
         self.assertTrue(runtime.call("BuildOrderEditorUI_Hide"))
         self.assertEqual(removals, ["BuildOrderEditorUI"])
@@ -321,51 +372,65 @@ class BuildOrderEditorUIContractTests(unittest.TestCase):
             runtime.globals["BUILD_ORDER_EDITOR_UI_STATE"]["screen"], "hidden"
         )
 
-    def test_probe_view_model_switches_create_and_edit_for_selected_option(self) -> None:
+    def test_probe_view_model_contains_only_selector_data(self) -> None:
         runtime = ScarRuntime(strip_xaml(self.source))
-        state = runtime.globals["BUILD_ORDER_EDITOR_UI_STATE"]
-        state["commands"] = runtime.table(
+        runtime.globals["BUILD_ORDER_EDITOR_UI_STATE"]["commands"] = runtime.table(
             {
-                "select": "select-command",
-                "create": "create-command",
-                "edit": "edit-command",
-                "unpause": "unpause-command",
-                "cancel": "cancel-command",
+                "start_game": "start-game-command",
+                "continue_without": "continue-command",
             }
         )
         model = {
             "orders": [
                 {
-                    "id": "__new_build_order__",
-                    "label": "New Build Order",
-                    "editable": False,
-                    "selected": True,
-                },
-                {
                     "id": "english-opening",
                     "label": "English Opening",
-                    "editable": True,
-                    "selected": False,
+                    "selected": True,
                 },
             ]
         }
 
         view = runtime.call("BuildOrderEditorUI_BuildProbeViewModel", "selector", model)
-        self.assertEqual(view["selected_option"]["id"], "__new_build_order__")
-        self.assertEqual(view["selected_index"], 0)
-        self.assertEqual(view["action_label"], "Create")
+        self.assertIsNone(view["selected_option"])
+        self.assertEqual(view["selected_index"], -1)
+        self.assertIsNone(view["start_enabled"])
+        self.assertEqual(view["empty_message"], "")
+        self.assertEqual(view["commands"]["start_game"], "start-game-command")
+        for key in ("action_label", "detail_action_label", "steps", "editor_visible"):
+            self.assertIsNone(view[key])
 
-        model["orders"][0]["selected"] = False
-        model["orders"][1]["selected"] = True
-        view = runtime.call("BuildOrderEditorUI_BuildProbeViewModel", "selector", model)
-        self.assertEqual(view["selected_option"]["id"], "english-opening")
-        self.assertEqual(view["selected_index"], 1)
-        self.assertEqual(view["action_label"], "Edit")
+        empty = runtime.call(
+            "BuildOrderEditorUI_BuildProbeViewModel", "selector", {"orders": []}
+        )
+        self.assertIsNone(empty["selected_option"])
+        self.assertEqual(empty["selected_index"], -1)
+        self.assertIsNone(empty["start_enabled"])
+        self.assertEqual(
+            empty["empty_message"], "No build orders for this civilization"
+        )
 
-        editor = runtime.call("BuildOrderEditorUI_BuildProbeViewModel", "editor", {})
-        self.assertFalse(editor["selector_visible"])
-        self.assertTrue(editor["editor_visible"])
-        self.assertFalse(editor["save_enabled"])
+    def test_probe_routes_start_and_continue_commands(self) -> None:
+        runtime = ScarRuntime(strip_xaml(self.source))
+        calls = []
+        globals_table = runtime.table({})
+        globals_table["StartGameCallback"] = lambda value=None, *_unused: calls.append(("start", value))
+        globals_table["ContinueWithoutCallback"] = lambda *_unused: calls.append(("continue", None))
+        runtime.globals["_G"] = globals_table
+        runtime.call(
+            "BuildOrderEditorUI_SetCallbacks",
+            {
+                "start_game": "StartGameCallback",
+                "continue_without": "ContinueWithoutCallback",
+            },
+        )
+
+        self.assertTrue(
+            runtime.call(
+                "BuildOrderEditorUI_DispatchStartGame", "english-opening"
+            )
+        )
+        self.assertTrue(runtime.call("BuildOrderEditorUI_DispatchContinueWithout"))
+        self.assertEqual(calls, [("start", "english-opening"), ("continue", None)])
 
     def test_callbacks_are_commands_but_ui_does_not_mutate_the_draft(self) -> None:
         create = function_body(self.source, "BuildOrderEditorUI_CreateCommands")
@@ -392,6 +457,7 @@ class BuildOrderEditorUIContractTests(unittest.TestCase):
         self.assertNotIn("BuildOrderEditor_Move(", self.source)
 
         set_callbacks = function_body(self.source, "BuildOrderEditorUI_SetCallbacks")
+        self.assertNotIn("pairs(callbacks)", set_callbacks)
         self.assertNotIn("BuildOrderEditorUI_RefreshProbe", set_callbacks)
 
     def test_editor_is_one_scrollable_column_with_a_sticky_action_header(self) -> None:

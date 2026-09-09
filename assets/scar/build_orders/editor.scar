@@ -74,7 +74,6 @@ function BuildOrderEditor_OpenDraft(draft, originalID, discovery, onComplete)
 	BUILD_ORDER_EDITOR_STATE.errors = {}
 	BUILD_ORDER_EDITOR_STATE.on_complete = onComplete
 	BUILD_ORDER_EDITOR_STATE.expanded = {}
-	BuildOrderEditorUI_SetCallbacks(BuildOrderEditor_Callbacks())
 	local opened = BuildOrderEditor_Refresh()
 	print("BuildOrderTrace: editor open-draft result=" .. tostring(opened))
 	return opened
