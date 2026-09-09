@@ -1794,8 +1794,10 @@ function BuildOrderEditorUI_ShowEditor(model)
 	end
 	BUILD_ORDER_EDITOR_UI_STATE.screen = "editor"
 	BUILD_ORDER_EDITOR_UI_STATE.model = type(model) == "table" and model or {}
-	local success = pcall(BuildOrderEditorUI_CreateEditorPresenter)
+	print("BuildOrderEditorUI: creating editor presenter")
+	local success, errorMessage = pcall(BuildOrderEditorUI_CreateEditorPresenter)
 	if not success then
+		print("BuildOrderEditorUI: editor presenter failed: " .. errorMessage)
 		BUILD_ORDER_EDITOR_UI_STATE.screen = "selector"
 		return false
 	end

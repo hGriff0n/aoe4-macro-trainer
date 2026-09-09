@@ -205,6 +205,7 @@ class BuildOrderEditorUIContractTests(unittest.TestCase):
         additions = []
         removals = []
         updates = []
+        runtime.globals["print"] = lambda _message: None
         runtime.globals["UI_CreateCommand"] = lambda name: f"command:{name}"
         runtime.globals["UI_CreateDataContext"] = lambda value: value
         runtime.globals["UI_AddChild"] = (
@@ -271,6 +272,37 @@ class BuildOrderEditorUIContractTests(unittest.TestCase):
         self.assertEqual(removals, ["BuildOrderEditorUI"])
         self.assertEqual(
             runtime.globals["BUILD_ORDER_EDITOR_UI_STATE"]["screen"], "selector"
+        )
+
+    def test_editor_presenter_failure_logs_the_underlying_error(self) -> None:
+        runtime = ScarRuntime(strip_xaml(self.source))
+        messages = []
+        runtime.globals["print"] = messages.append
+        runtime.globals["UI_CreateCommand"] = lambda name: f"command:{name}"
+        runtime.globals["UI_CreateDataContext"] = lambda value: value
+
+        def reject_presenter(_parent, _kind, _name, _properties):
+            raise RuntimeError("editor XAML rejected")
+
+        runtime.globals["UI_AddChild"] = reject_presenter
+
+        def lua_pcall(function, *arguments):
+            try:
+                result = function(*arguments)
+            except Exception as error:
+                return LuaResults((False, str(error)))
+            return LuaResults((True, result))
+
+        runtime.globals["pcall"] = lua_pcall
+        runtime.globals["BUILD_ORDER_EDITOR_UI_STATE"]["created"] = True
+
+        self.assertFalse(runtime.call("BuildOrderEditorUI_ShowEditor", {}))
+        self.assertEqual(
+            messages,
+            [
+                "BuildOrderEditorUI: creating editor presenter",
+                "BuildOrderEditorUI: editor presenter failed: editor XAML rejected",
+            ],
         )
 
     def test_probe_view_model_switches_create_and_edit_for_selected_option(self) -> None:
