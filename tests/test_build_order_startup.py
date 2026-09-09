@@ -273,6 +273,23 @@ class BuildOrderStartupBehaviorTests(unittest.TestCase):
         )
         self.assertTrue(saved_option["selected"])
 
+    def test_contextual_action_creates_new_and_edits_stored_orders(self) -> None:
+        self.start()
+
+        self.assertTrue(
+            self.call(
+                "BuildOrderStartup_Action",
+                {"id": self.runtime.globals["BUILD_ORDER_STARTUP_NEW_ORDER_ID"]},
+            )
+        )
+        self.assertEqual(len(self.create_callbacks), 1)
+        self.invoke(self.create_callbacks[-1], None)
+
+        self.assertTrue(
+            self.call("BuildOrderStartup_Action", {"id": "english-alpha-a"})
+        )
+        self.assertEqual(self.edit_calls[-1][0], "english-alpha-a")
+
     def test_selected_order_unpauses_once_and_is_the_only_objective_start(self) -> None:
         self.start()
         self.call("BuildOrderStartup_Select", {"id": "english-alpha-a"})

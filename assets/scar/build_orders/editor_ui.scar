@@ -32,7 +32,7 @@ BUILD_ORDER_EDITOR_UI_PROBE_XAML = [[
 			          Margin="0,0,0,14"
 			          DisplayMemberPath="[label]"
 			          ItemsSource="{Binding [selector_options]}"
-			          SelectedItem="{Binding [selected_option], Mode=TwoWay}">
+			          SelectedIndex="{Binding [selected_index], Mode=OneWay}">
 				<ComboBox.Triggers>
 					<esActions:CallCommandTrigger RoutedEvent="ComboBox.SelectionChanged"
 					                              Command="{Binding [commands][select]}"
@@ -42,7 +42,7 @@ BUILD_ORDER_EDITOR_UI_PROBE_XAML = [[
 			<StackPanel HorizontalAlignment="Center" Orientation="Horizontal">
 				<Button x:Name="BuildOrderSelectorAction"
 				        MinWidth="90" Margin="4" Padding="10,6"
-				        Command="{Binding [action_command]}"
+				        Command="{Binding [commands][action]}"
 				        CommandParameter="{Binding [selected_option]}"
 				        Content="{Binding [action_label]}" />
 				<Button x:Name="BuildOrderSelectorUnpause"
@@ -1504,6 +1504,7 @@ end
 function BuildOrderEditorUI_CreateProbeCommands()
 	return {
 		select = UI_CreateCommand(BuildOrderEditorUI_CommandName("select")),
+		action = UI_CreateCommand(BuildOrderEditorUI_CommandName("action")),
 		create = UI_CreateCommand(BuildOrderEditorUI_CommandName("create")),
 		edit = UI_CreateCommand(BuildOrderEditorUI_CommandName("edit")),
 		cancel = UI_CreateCommand(BuildOrderEditorUI_CommandName("cancel")),
@@ -1687,9 +1688,11 @@ function BuildOrderEditorUI_BuildProbeViewModel(screen, model)
 	local commands = BUILD_ORDER_EDITOR_UI_STATE.commands or {}
 	local options = BuildOrderEditorUI_SelectorOptions(model, commands)
 	local selectedOption = nil
-	for _, option in ipairs(options) do
+	local selectedIndex = 0
+	for index, option in ipairs(options) do
 		if option.selected then
 			selectedOption = option
+			selectedIndex = index - 1
 			break
 		end
 	end
@@ -1703,8 +1706,8 @@ function BuildOrderEditorUI_BuildProbeViewModel(screen, model)
 		editor_visibility = BuildOrderEditorUI_Visibility(screen == "editor"),
 		selector_options = options,
 		selected_option = selectedOption,
+		selected_index = selectedIndex,
 		action_label = canEdit and "Edit" or "Create",
-		action_command = canEdit and commands.edit or commands.create,
 		commands = commands,
 		save_enabled = false,
 	}

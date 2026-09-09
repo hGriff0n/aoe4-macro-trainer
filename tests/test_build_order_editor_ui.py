@@ -144,7 +144,11 @@ class BuildOrderEditorUIContractTests(unittest.TestCase):
 
         dropdown = named(root, "BuildOrderSelectorDropdown")
         self.assertEqual(dropdown.get("ItemsSource"), "{Binding [selector_options]}")
-        self.assertEqual(dropdown.get("SelectedItem"), "{Binding [selected_option], Mode=TwoWay}")
+        self.assertEqual(
+            dropdown.get("SelectedIndex"),
+            "{Binding [selected_index], Mode=OneWay}",
+        )
+        self.assertIsNone(dropdown.get("SelectedItem"))
         self.assertEqual(dropdown.get("DisplayMemberPath"), "[label]")
         dropdown_xml = ET.tostring(dropdown, encoding="unicode")
         self.assertIn("CallCommandTrigger", dropdown_xml)
@@ -152,7 +156,7 @@ class BuildOrderEditorUIContractTests(unittest.TestCase):
 
         action = named(root, "BuildOrderSelectorAction")
         self.assertEqual(action.get("Content"), "{Binding [action_label]}")
-        self.assertEqual(action.get("Command"), "{Binding [action_command]}")
+        self.assertEqual(action.get("Command"), "{Binding [commands][action]}")
         self.assertEqual(action.get("CommandParameter"), "{Binding [selected_option]}")
         unpause = named(root, "BuildOrderSelectorUnpause")
         self.assertEqual(unpause.get("Command"), "{Binding [commands][unpause]}")
@@ -227,6 +231,7 @@ class BuildOrderEditorUIContractTests(unittest.TestCase):
                 "select": "SelectCallback",
                 "create": "CreateCallback",
                 "edit": "EditCallback",
+                "action": "ActionCallback",
                 "unpause": "UnpauseCallback",
             },
         )
@@ -248,7 +253,11 @@ class BuildOrderEditorUIContractTests(unittest.TestCase):
         self.assertEqual([addition[2] for addition in additions], ["BuildOrderSelectorUI"])
         selector_context = additions[0][3]["DataContext"]
         self.assertEqual(selector_context["selected_option"]["label"], "New Build Order")
+        self.assertEqual(selector_context["selected_index"], 0)
         self.assertEqual(selector_context["action_label"], "Create")
+        self.assertEqual(
+            selector_context["commands"]["action"], "command:ActionCallback"
+        )
 
         runtime.call("BuildOrderEditorUI_SetCallbacks", {"cancel": "CancelCallback"})
         self.assertTrue(runtime.call("BuildOrderEditorUI_ShowEditor", {}))
@@ -295,15 +304,15 @@ class BuildOrderEditorUIContractTests(unittest.TestCase):
 
         view = runtime.call("BuildOrderEditorUI_BuildProbeViewModel", "selector", model)
         self.assertEqual(view["selected_option"]["id"], "__new_build_order__")
+        self.assertEqual(view["selected_index"], 0)
         self.assertEqual(view["action_label"], "Create")
-        self.assertEqual(view["action_command"], "create-command")
 
         model["orders"][0]["selected"] = False
         model["orders"][1]["selected"] = True
         view = runtime.call("BuildOrderEditorUI_BuildProbeViewModel", "selector", model)
         self.assertEqual(view["selected_option"]["id"], "english-opening")
+        self.assertEqual(view["selected_index"], 1)
         self.assertEqual(view["action_label"], "Edit")
-        self.assertEqual(view["action_command"], "edit-command")
 
         editor = runtime.call("BuildOrderEditorUI_BuildProbeViewModel", "editor", {})
         self.assertEqual(editor["selector_visibility"], "Collapsed")

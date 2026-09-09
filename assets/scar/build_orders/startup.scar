@@ -13,6 +13,7 @@ BUILD_ORDER_STARTUP_INVALID_SELECTION = "$dfb5645698a84afb91cf7a2dfb0f4a4e:52"
 function BuildOrderStartup_Callbacks()
 	return {
 		select = "BuildOrderStartup_Select",
+		action = "BuildOrderStartup_Action",
 		edit = "BuildOrderStartup_Edit",
 		create = "BuildOrderStartup_Create",
 		unpause = "BuildOrderStartup_Unpause",
@@ -220,6 +221,17 @@ function BuildOrderStartup_Select(parameter)
 	_mod.selectedBuildOrderID = id
 	BuildOrderStartup_ShowSelector(nil)
 	return true
+end
+
+function BuildOrderStartup_Action(parameter)
+	if not _mod.startupActive or _mod.startupScreen ~= "selector" then
+		return false
+	end
+	local id = BuildOrderStartup_ParameterID(parameter)
+	if id == BUILD_ORDER_STARTUP_NEW_ORDER_ID then
+		return BuildOrderStartup_Create()
+	end
+	return BuildOrderStartup_Edit(parameter)
 end
 
 function BuildOrderStartup_OnEditorComplete(savedID)
