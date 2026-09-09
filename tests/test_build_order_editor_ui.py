@@ -193,9 +193,12 @@ class BuildOrderEditorUIContractTests(unittest.TestCase):
 
     def test_probe_lifecycle_toggles_regions_in_the_original_presenter(self) -> None:
         runtime = ScarRuntime(strip_xaml(self.source))
+        runtime.globals["tostring"] = lambda value: str(value).lower()
         additions = []
         removals = []
         updates = []
+        trace_messages = []
+        runtime.globals["print"] = trace_messages.append
         runtime.globals["UI_CreateCommand"] = lambda name: f"command:{name}"
         runtime.globals["UI_CreateDataContext"] = lambda value: value
         runtime.globals["UI_AddChild"] = (
@@ -252,6 +255,7 @@ class BuildOrderEditorUIContractTests(unittest.TestCase):
             selector_context["commands"]["action"], "command:ActionCallback"
         )
 
+        trace_messages.clear()
         runtime.call("BuildOrderEditorUI_SetCallbacks", {"cancel": "CancelCallback"})
         self.assertTrue(runtime.call("BuildOrderEditorUI_ShowEditor", {}))
         self.assertEqual([addition[2] for addition in additions], ["BuildOrderEditorUI"])
@@ -262,6 +266,16 @@ class BuildOrderEditorUIContractTests(unittest.TestCase):
         self.assertTrue(updates[-1][1]["editor_visible"])
         self.assertEqual(
             updates[-1][1]["commands"]["cancel"], "command:CancelCallback"
+        )
+        self.assertEqual(
+            trace_messages,
+            [
+                "BuildOrderTrace: ui show-editor enter created=true screen=selector",
+                "BuildOrderTrace: ui refresh screen=editor selector=false editor=true created=true",
+                "BuildOrderTrace: ui set-context begin name=BuildOrderEditorUI",
+                "BuildOrderTrace: ui set-context end",
+                "BuildOrderTrace: ui show-editor result=true",
+            ],
         )
 
         self.assertTrue(runtime.call("BuildOrderEditorUI_Hide"))

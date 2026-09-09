@@ -224,12 +224,17 @@ function BuildOrderStartup_Select(parameter)
 end
 
 function BuildOrderStartup_Action()
+	print("BuildOrderTrace: action enter active=" .. tostring(_mod.startupActive)
+		.. " screen=" .. tostring(_mod.startupScreen)
+		.. " selected=" .. tostring(_mod.selectedBuildOrderID))
 	if not _mod.startupActive or _mod.startupScreen ~= "selector" then
 		return false
 	end
 	if _mod.selectedBuildOrderID == nil then
+		print("BuildOrderTrace: action route=create")
 		return BuildOrderStartup_Create()
 	end
+	print("BuildOrderTrace: action route=edit")
 	return BuildOrderStartup_Edit(_mod.selectedBuildOrderID)
 end
 
@@ -251,12 +256,16 @@ function BuildOrderStartup_OnEditorComplete(savedID)
 end
 
 function BuildOrderStartup_Create()
+	print("BuildOrderTrace: create enter active=" .. tostring(_mod.startupActive)
+		.. " screen=" .. tostring(_mod.startupScreen))
 	if not _mod.startupActive or _mod.startupScreen ~= "selector" then
 		return false
 	end
 	_mod.startupPriorSelectionID = _mod.selectedBuildOrderID
 	_mod.startupScreen = "editor"
 	local opened = BuildOrderEditor_OpenCreate(BuildOrderStartup_OnEditorComplete)
+	print("BuildOrderTrace: create open result=" .. tostring(opened)
+		.. " screen=" .. tostring(_mod.startupScreen))
 	if not opened then
 		_mod.startupScreen = "selector"
 		BuildOrderStartup_ShowSelector(nil)

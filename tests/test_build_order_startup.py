@@ -47,6 +47,9 @@ class BuildOrderStartupBehaviorTests(unittest.TestCase):
     def setUp(self) -> None:
         self.source = STARTUP_PATH.read_text(encoding="utf-8")
         self.runtime = ScarRuntime(self.source)
+        self.runtime.globals["tostring"] = lambda value: (
+            "nil" if value is None else str(value).lower()
+        )
         self.runtime.globals["NORMAL_SIM_RATE"] = 8
         self.runtime.globals["DB_Button1"] = "button-1"
         self.runtime.globals["DB_Button2"] = "button-2"
@@ -96,7 +99,9 @@ class BuildOrderStartupBehaviorTests(unittest.TestCase):
         self.message_box_text = []
         self.message_box_buttons = []
         self.message_box_callbacks = []
+        self.trace_messages = []
 
+        self.runtime.globals["print"] = self.trace_messages.append
         self.runtime.globals["Game_GetLocalPlayer"] = lambda: "local-player"
         self.runtime.globals["Player_GetRaceName"] = (
             lambda player: "english" if player == "local-player" else "french"
@@ -289,6 +294,21 @@ class BuildOrderStartupBehaviorTests(unittest.TestCase):
             self.call("BuildOrderStartup_Action")
         )
         self.assertEqual(self.edit_calls[-1][0], "english-alpha-a")
+
+    def test_create_path_logs_each_startup_boundary(self) -> None:
+        self.start()
+
+        self.assertTrue(self.call("BuildOrderStartup_Action"))
+
+        self.assertEqual(
+            self.trace_messages,
+            [
+                "BuildOrderTrace: action enter active=true screen=selector selected=nil",
+                "BuildOrderTrace: action route=create",
+                "BuildOrderTrace: create enter active=true screen=selector",
+                "BuildOrderTrace: create open result=true screen=editor",
+            ],
+        )
 
     def test_selected_order_unpauses_once_and_is_the_only_objective_start(self) -> None:
         self.start()

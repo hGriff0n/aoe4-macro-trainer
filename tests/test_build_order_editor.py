@@ -266,7 +266,9 @@ class BuildOrderEditorBehaviorTests(unittest.TestCase):
         self.apply_calls = []
         self.apply_result = (True, "")
         self.apply_exception = None
+        self.trace_messages = []
 
+        self.runtime.globals["print"] = self.trace_messages.append
         self.runtime.globals["Game_GetLocalPlayer"] = lambda: "local-player"
         self.real_discovery_collect = self.runtime.globals[
             "BuildOrderDiscovery_Collect"
@@ -483,6 +485,25 @@ class BuildOrderEditorBehaviorTests(unittest.TestCase):
             with self.subTest(command=command):
                 self.assertIsInstance(callbacks[command], str)
                 self.assertTrue(callbacks[command].startswith("BuildOrderEditor_"))
+
+    def test_open_create_logs_each_editor_boundary(self) -> None:
+        self.runtime.globals["tostring"] = lambda value: str(value).lower()
+        self.assertTrue(self.runtime.call("BuildOrderEditor_OpenCreate", None))
+
+        self.assertEqual(
+            self.trace_messages,
+            [
+                "BuildOrderTrace: editor open-create enter",
+                "BuildOrderTrace: editor discovery complete",
+                "BuildOrderTrace: editor open-draft enter",
+                "BuildOrderTrace: editor refresh enter",
+                "BuildOrderTrace: editor present enter",
+                "BuildOrderTrace: editor present result=true",
+                "BuildOrderTrace: editor refresh result=true",
+                "BuildOrderTrace: editor open-draft result=true",
+                "BuildOrderTrace: editor open-create result=true",
+            ],
+        )
 
     def test_copy_deep_copies_current_draft_and_chooses_free_numbered_title(self) -> None:
         original = valid_order()

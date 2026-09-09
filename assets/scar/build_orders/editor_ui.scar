@@ -1716,8 +1716,14 @@ function BuildOrderEditorUI_RefreshProbe()
 			BUILD_ORDER_EDITOR_UI_STATE.view_model[key] = value
 		end
 	end
+	print("BuildOrderTrace: ui refresh screen=" .. tostring(BUILD_ORDER_EDITOR_UI_STATE.screen)
+		.. " selector=" .. tostring(BUILD_ORDER_EDITOR_UI_STATE.view_model.selector_visible)
+		.. " editor=" .. tostring(BUILD_ORDER_EDITOR_UI_STATE.view_model.editor_visible)
+		.. " created=" .. tostring(BUILD_ORDER_EDITOR_UI_STATE.created))
 	if BUILD_ORDER_EDITOR_UI_STATE.created then
+		print("BuildOrderTrace: ui set-context begin name=" .. BUILD_ORDER_EDITOR_UI_NAME)
 		UI_SetDataContext(BUILD_ORDER_EDITOR_UI_NAME, BUILD_ORDER_EDITOR_UI_STATE.view_model)
+		print("BuildOrderTrace: ui set-context end")
 	end
 	return BUILD_ORDER_EDITOR_UI_STATE.view_model
 end
@@ -1775,6 +1781,9 @@ function BuildOrderEditorUI_ShowSelector(model)
 end
 
 function BuildOrderEditorUI_ShowEditor(model)
+	print("BuildOrderTrace: ui show-editor enter created="
+		.. tostring(BUILD_ORDER_EDITOR_UI_STATE.created)
+		.. " screen=" .. tostring(BUILD_ORDER_EDITOR_UI_STATE.screen))
 	if not BUILD_ORDER_EDITOR_UI_STATE.created then
 		return false
 	end
@@ -1782,6 +1791,7 @@ function BuildOrderEditorUI_ShowEditor(model)
 	BUILD_ORDER_EDITOR_UI_STATE.model = type(model) == "table" and model or {}
 	BUILD_ORDER_EDITOR_UI_STATE.commands = BuildOrderEditorUI_CreateProbeCommands()
 	BuildOrderEditorUI_RefreshProbe()
+	print("BuildOrderTrace: ui show-editor result=true")
 	return true
 end
 
