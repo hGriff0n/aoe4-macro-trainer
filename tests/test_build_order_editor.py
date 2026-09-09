@@ -365,6 +365,9 @@ class BuildOrderEditorBehaviorTests(unittest.TestCase):
         self.runtime.globals["BP_GetPropertyBagGroupPathName"] = (
             lambda group, index: property_groups[group][index]
         )
+        self.runtime.globals["BP_GetUpgradesMatchingTypes"] = (
+            lambda _type_groups: self.runtime.table([])
+        )
         self.runtime.globals["BP_GetEntityTypeExtRaceCount"] = lambda _path: 1
         self.runtime.globals["BP_GetEntityTypeExtRaceBlueprintAtIndex"] = (
             lambda _path, _index: race_handle
