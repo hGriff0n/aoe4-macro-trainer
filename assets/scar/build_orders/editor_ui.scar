@@ -1,26 +1,23 @@
 BUILD_ORDER_EDITOR_UI_SELECTOR_NAME = "BuildOrderSelectorUI"
-BUILD_ORDER_EDITOR_UI_EDITOR_NAME = "BuildOrderEditorUI"
 BUILD_ORDER_EDITOR_UI_NAME = BUILD_ORDER_EDITOR_UI_SELECTOR_NAME
 
 -- Diagnostic spike: keep the known-failing editor XAML below for comparison.
 -- This presenter grows the proven empty shell by one engine-sensitive feature
 -- at a time and deliberately avoids the original templates and editor fields.
 BUILD_ORDER_EDITOR_UI_PROBE_XAML = [[
-<Border x:Name="BuildOrderEditorProbe"
-        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:esActions="clr-namespace:WPFGUI.Shared.Actions;assembly=EngineUI"
-        Width="420"
-        Height="220"
-        HorizontalAlignment="Center"
-        VerticalAlignment="Center"
-        Background="#F2181818"
-        BorderBrush="#FFD0D0D0"
-        BorderThickness="2">
-	<Grid>
-		<StackPanel x:Name="BuildOrderSelectorProbe"
-		            Margin="24"
-		            VerticalAlignment="Center">
+<Grid x:Name="BuildOrderEditorProbe"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:esActions="clr-namespace:WPFGUI.Shared.Actions;assembly=EngineUI"
+      Width="420"
+      Height="220"
+      HorizontalAlignment="Center"
+      VerticalAlignment="Center">
+	<Border x:Name="BuildOrderSelectorProbe"
+	        Background="#F2181818"
+	        BorderBrush="#FFD0D0D0"
+	        BorderThickness="2">
+		<StackPanel Margin="24" VerticalAlignment="Center">
 			<TextBlock Margin="0,0,0,18"
 			           HorizontalAlignment="Center"
 			           FontSize="22"
@@ -50,42 +47,41 @@ BUILD_ORDER_EDITOR_UI_PROBE_XAML = [[
 				        Content="Unpause" />
 			</StackPanel>
 		</StackPanel>
-	</Grid>
-</Border>
-]]
-
-BUILD_ORDER_EDITOR_UI_EDITOR_PROBE_XAML = [[
-<Border x:Name="BuildOrderEditorShellProbe"
-        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Width="320"
-        Height="160"
-        HorizontalAlignment="Center"
-        VerticalAlignment="Center"
-        Background="#F2181818"
-        BorderBrush="#FFD0D0D0"
-        BorderThickness="2">
-		<StackPanel Margin="24"
-		            HorizontalAlignment="Center"
-		            VerticalAlignment="Center">
-			<TextBlock Margin="0,0,0,18"
-			           HorizontalAlignment="Center"
-			           FontSize="22"
-			           FontWeight="Bold"
-			           Foreground="#FFFFFFFF"
-			           Text="Build Order" />
-			<StackPanel HorizontalAlignment="Center" Orientation="Horizontal">
-				<Button x:Name="BuildOrderEditorSave"
-				        MinWidth="90" Margin="4" Padding="10,6"
-				        IsEnabled="False"
-				        Content="Save" />
-				<Button x:Name="BuildOrderEditorCancel"
-				        MinWidth="90" Margin="4" Padding="10,6"
-				        Command="{Binding [commands][cancel]}"
-				        Content="Cancel" />
+	</Border>
+	<Grid x:Name="BuildOrderEditorOverlayProbe"
+	      Background="#80000000"
+	      Visibility="{Binding [editor_visibility]}">
+		<Border x:Name="BuildOrderEditorShellProbe"
+		        Width="320"
+		        Height="160"
+		        HorizontalAlignment="Center"
+		        VerticalAlignment="Center"
+		        Background="#F2181818"
+		        BorderBrush="#FFD0D0D0"
+		        BorderThickness="2">
+			<StackPanel Margin="24"
+			            HorizontalAlignment="Center"
+			            VerticalAlignment="Center">
+				<TextBlock Margin="0,0,0,18"
+				           HorizontalAlignment="Center"
+				           FontSize="22"
+				           FontWeight="Bold"
+				           Foreground="#FFFFFFFF"
+				           Text="Build Order" />
+				<StackPanel HorizontalAlignment="Center" Orientation="Horizontal">
+					<Button x:Name="BuildOrderEditorSave"
+					        MinWidth="90" Margin="4" Padding="10,6"
+					        IsEnabled="False"
+					        Content="Save" />
+					<Button x:Name="BuildOrderEditorCancel"
+					        MinWidth="90" Margin="4" Padding="10,6"
+					        Command="{Binding [commands][cancel]}"
+					        Content="Cancel" />
+				</StackPanel>
 			</StackPanel>
-		</StackPanel>
-</Border>
+		</Border>
+	</Grid>
+</Grid>
 ]]
 
 BUILD_ORDER_EDITOR_UI_RESOURCES = { "food", "wood", "gold", "stone" }
@@ -142,7 +138,6 @@ BUILD_ORDER_EDITOR_ERROR_FIELD_LABEL_KEYS = {
 
 BUILD_ORDER_EDITOR_UI_STATE = {
 	created = false,
-	editor_created = false,
 	screen = "hidden",
 	model = {},
 	view_model = nil,
@@ -1701,7 +1696,7 @@ function BuildOrderEditorUI_BuildProbeViewModel(screen, model)
 	local canEdit = selectedOption ~= nil and selectedOption.edit_enabled == true
 	return {
 		screen = screen,
-		selector_visibility = BuildOrderEditorUI_Visibility(screen == "selector"),
+		selector_visibility = BuildOrderEditorUI_Visibility(screen ~= "hidden"),
 		editor_visibility = BuildOrderEditorUI_Visibility(screen == "editor"),
 		selector_options = options,
 		selected_option = selectedOption,
@@ -1723,7 +1718,7 @@ function BuildOrderEditorUI_RefreshProbe()
 	return BUILD_ORDER_EDITOR_UI_STATE.view_model
 end
 
-function BuildOrderEditorUI_CreateSelectorPresenter()
+function BuildOrderEditorUI_CreatePresenter()
 	BUILD_ORDER_EDITOR_UI_STATE.commands = BuildOrderEditorUI_CreateProbeCommands()
 	BUILD_ORDER_EDITOR_UI_STATE.view_model = BuildOrderEditorUI_BuildProbeViewModel(
 		"selector",
@@ -1736,20 +1731,11 @@ function BuildOrderEditorUI_CreateSelectorPresenter()
 	})
 end
 
-function BuildOrderEditorUI_CreateEditorPresenter()
-	local commands = BuildOrderEditorUI_CreateProbeCommands()
-	UI_AddChild("ScarDefault", "XamlPresenter", BUILD_ORDER_EDITOR_UI_EDITOR_NAME, {
-		IsHitTestVisible = true,
-		Xaml = BUILD_ORDER_EDITOR_UI_EDITOR_PROBE_XAML,
-		DataContext = UI_CreateDataContext({ commands = commands }),
-	})
-end
-
 function BuildOrderEditorUI_EnsureCreated()
 	if BUILD_ORDER_EDITOR_UI_STATE.created then
 		return true
 	end
-	local success = pcall(BuildOrderEditorUI_CreateSelectorPresenter)
+	local success = pcall(BuildOrderEditorUI_CreatePresenter)
 	if not success then
 		BUILD_ORDER_EDITOR_UI_STATE.created = false
 		BUILD_ORDER_EDITOR_UI_STATE.view_model = nil
@@ -1788,20 +1774,10 @@ function BuildOrderEditorUI_ShowEditor(model)
 	if not BUILD_ORDER_EDITOR_UI_STATE.created then
 		return false
 	end
-	if BUILD_ORDER_EDITOR_UI_STATE.editor_created then
-		UI_Remove(BUILD_ORDER_EDITOR_UI_EDITOR_NAME)
-		BUILD_ORDER_EDITOR_UI_STATE.editor_created = false
-	end
 	BUILD_ORDER_EDITOR_UI_STATE.screen = "editor"
 	BUILD_ORDER_EDITOR_UI_STATE.model = type(model) == "table" and model or {}
-	print("BuildOrderEditorUI: creating editor presenter")
-	local success, errorMessage = pcall(BuildOrderEditorUI_CreateEditorPresenter)
-	if not success then
-		print("BuildOrderEditorUI: editor presenter failed: " .. errorMessage)
-		BUILD_ORDER_EDITOR_UI_STATE.screen = "selector"
-		return false
-	end
-	BUILD_ORDER_EDITOR_UI_STATE.editor_created = true
+	BUILD_ORDER_EDITOR_UI_STATE.commands = BuildOrderEditorUI_CreateProbeCommands()
+	BuildOrderEditorUI_RefreshProbe()
 	return true
 end
 
@@ -1810,10 +1786,12 @@ function BuildOrderEditorUI_ShowNoSelectionConfirmation(model)
 end
 
 function BuildOrderEditorUI_Hide()
-	if BUILD_ORDER_EDITOR_UI_STATE.editor_created then
-		UI_Remove(BUILD_ORDER_EDITOR_UI_EDITOR_NAME)
-		BUILD_ORDER_EDITOR_UI_STATE.editor_created = false
+	if BUILD_ORDER_EDITOR_UI_STATE.created
+		and BUILD_ORDER_EDITOR_UI_STATE.screen == "editor" then
 		BUILD_ORDER_EDITOR_UI_STATE.screen = "selector"
+		BUILD_ORDER_EDITOR_UI_STATE.model = {}
+		BUILD_ORDER_EDITOR_UI_STATE.commands = BuildOrderEditorUI_CreateProbeCommands()
+		BuildOrderEditorUI_RefreshProbe()
 		return true
 	end
 	if BUILD_ORDER_EDITOR_UI_STATE.created then
@@ -1831,15 +1809,11 @@ function BuildOrderEditorUI_SetCallbacks(callbacks)
 end
 
 function BuildOrderEditorUI_Stop()
-	if BUILD_ORDER_EDITOR_UI_STATE.editor_created then
-		UI_Remove(BUILD_ORDER_EDITOR_UI_EDITOR_NAME)
-	end
 	if BUILD_ORDER_EDITOR_UI_STATE.created then
 		UI_Remove(BUILD_ORDER_EDITOR_UI_SELECTOR_NAME)
 	end
 	BuildOrderEditorUI_ClearDrag()
 	BUILD_ORDER_EDITOR_UI_STATE.created = false
-	BUILD_ORDER_EDITOR_UI_STATE.editor_created = false
 	BUILD_ORDER_EDITOR_UI_STATE.screen = "hidden"
 	BUILD_ORDER_EDITOR_UI_STATE.callbacks = {}
 	BUILD_ORDER_EDITOR_UI_STATE.commands = nil
