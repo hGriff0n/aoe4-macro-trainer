@@ -204,7 +204,7 @@ class BuildOrderEditorUIContractTests(unittest.TestCase):
         self.assertRegex(ensure, r"if not success then[\s\S]*?return false")
         self.assertIn("return true", ensure)
 
-    def test_probe_lifecycle_keeps_selector_mounted_behind_editor(self) -> None:
+    def test_probe_lifecycle_reuses_selector_context_during_editor_transition(self) -> None:
         runtime = ScarRuntime(strip_xaml(self.source))
         additions = []
         removals = []
@@ -285,11 +285,13 @@ class BuildOrderEditorUIContractTests(unittest.TestCase):
             ],
         )
         self.assertEqual(updates[-1][0], "BuildOrderSelectorUI")
+        self.assertIs(updates[-1][1], selector_context)
         self.assertFalse(updates[-1][1]["is_ui_visible"])
 
         self.assertTrue(runtime.call("BuildOrderEditorUI_Hide"))
         self.assertEqual(removals, ["BuildOrderEditorUI"])
         self.assertEqual(updates[-1][0], "BuildOrderSelectorUI")
+        self.assertIs(updates[-1][1], selector_context)
         self.assertTrue(updates[-1][1]["is_ui_visible"])
         self.assertEqual(
             runtime.globals["BUILD_ORDER_EDITOR_UI_STATE"]["screen"], "selector"

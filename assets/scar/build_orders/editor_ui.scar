@@ -1716,10 +1716,17 @@ function BuildOrderEditorUI_BuildProbeViewModel(screen, model)
 end
 
 function BuildOrderEditorUI_RefreshProbe()
-	BUILD_ORDER_EDITOR_UI_STATE.view_model = BuildOrderEditorUI_BuildProbeViewModel(
+	local nextViewModel = BuildOrderEditorUI_BuildProbeViewModel(
 		BUILD_ORDER_EDITOR_UI_STATE.screen,
 		BUILD_ORDER_EDITOR_UI_STATE.model
 	)
+	if type(BUILD_ORDER_EDITOR_UI_STATE.view_model) ~= "table" then
+		BUILD_ORDER_EDITOR_UI_STATE.view_model = nextViewModel
+	else
+		for key, value in pairs(nextViewModel) do
+			BUILD_ORDER_EDITOR_UI_STATE.view_model[key] = value
+		end
+	end
 	if BUILD_ORDER_EDITOR_UI_STATE.created then
 		UI_SetDataContext(BUILD_ORDER_EDITOR_UI_NAME, BUILD_ORDER_EDITOR_UI_STATE.view_model)
 	end
