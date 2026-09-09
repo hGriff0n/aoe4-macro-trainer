@@ -1,6 +1,6 @@
 BUILD_ORDER_STARTUP_SELECTOR_TITLE = "$dfb5645698a84afb91cf7a2dfb0f4a4e:29"
-BUILD_ORDER_STARTUP_NO_ORDER_ID = "__no_build_order__"
-BUILD_ORDER_STARTUP_NO_ORDER_LABEL = "$dfb5645698a84afb91cf7a2dfb0f4a4e:31"
+BUILD_ORDER_STARTUP_NEW_ORDER_ID = "__new_build_order__"
+BUILD_ORDER_STARTUP_NEW_ORDER_LABEL = "$dfb5645698a84afb91cf7a2dfb0f4a4e:31"
 BUILD_ORDER_STARTUP_CONFIRMATION_TITLE = "$dfb5645698a84afb91cf7a2dfb0f4a4e:44"
 BUILD_ORDER_STARTUP_CONFIRMATION_MESSAGE = "$dfb5645698a84afb91cf7a2dfb0f4a4e:45"
 BUILD_ORDER_STARTUP_FALLBACK_TITLE = "$dfb5645698a84afb91cf7a2dfb0f4a4e:47"
@@ -81,9 +81,9 @@ end
 function BuildOrderStartup_BuildSelectorOrders()
 	local orders = {
 		{
-			id = BUILD_ORDER_STARTUP_NO_ORDER_ID,
-			label = BUILD_ORDER_STARTUP_NO_ORDER_LABEL,
-			title = BUILD_ORDER_STARTUP_NO_ORDER_LABEL,
+			id = BUILD_ORDER_STARTUP_NEW_ORDER_ID,
+			label = BUILD_ORDER_STARTUP_NEW_ORDER_LABEL,
+			title = BUILD_ORDER_STARTUP_NEW_ORDER_LABEL,
 			source = "",
 			id_fallback = "",
 			editable = false,
@@ -209,7 +209,7 @@ function BuildOrderStartup_Select(parameter)
 		return false
 	end
 	local id = BuildOrderStartup_ParameterID(parameter)
-	if id == BUILD_ORDER_STARTUP_NO_ORDER_ID then
+	if id == BUILD_ORDER_STARTUP_NEW_ORDER_ID then
 		_mod.selectedBuildOrderID = nil
 		BuildOrderStartup_ShowSelector(nil)
 		return true
@@ -312,14 +312,7 @@ function BuildOrderStartup_Unpause()
 		return false
 	end
 	if _mod.selectedBuildOrderID == nil then
-		_mod.startupScreen = "confirmation"
-		local shown = BuildOrderEditorUI_ShowNoSelectionConfirmation({
-			message = BUILD_ORDER_STARTUP_CONFIRMATION_MESSAGE,
-		})
-		if not shown then
-			BuildOrderStartup_ShowFallback()
-		end
-		return true
+		return BuildOrderStartup_ContinueWithoutBuildOrder(true)
 	end
 	local buildOrder = BUILD_ORDER_CATALOG[_mod.selectedBuildOrderID]
 	if type(buildOrder) ~= "table" then

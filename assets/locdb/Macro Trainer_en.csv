@@ -26,7 +26,7 @@
 28,,,Startup missing-build value.,,,Selected build order is unavailable.
 29,,,Startup build-order chooser title.,,,Choose a Build Order
 30,,,Startup no-selection message.,,,Choose a build order loaded from the player datastore.
-31,,,Startup no-order option.,,,No build order
+31,,,Startup new-build-order option.,,,New Build Order
 32,,,Build-order selector action.,,,Select
 33,,,Build-order selected marker.,,,Selected
 34,,,Build-order selector action.,,,Edit

@@ -188,7 +188,7 @@ class BuildOrderStartupBehaviorTests(unittest.TestCase):
         self.assertEqual(
             [option["id"] for option in self.selector_orders()],
             [
-                self.runtime.globals["BUILD_ORDER_STARTUP_NO_ORDER_ID"],
+                self.runtime.globals["BUILD_ORDER_STARTUP_NEW_ORDER_ID"],
                 "english-alpha-a",
                 "english-alpha-b",
                 "english-zulu",
@@ -296,24 +296,15 @@ class BuildOrderStartupBehaviorTests(unittest.TestCase):
         self.assertIn("BuildOrder_Start(buildOrder, localPlayer)", start_selected)
         self.assertEqual(self.source.count("BuildOrder_Start("), 1)
 
-    def test_no_order_requires_confirmation_and_starts_only_enabled_cycle(self) -> None:
+    def test_new_build_order_unpauses_without_objectives_or_confirmation(self) -> None:
         self.start()
 
         self.assertTrue(self.call("BuildOrderStartup_Unpause"))
-        self.assertEqual(len(self.confirmation_models), 1)
-        self.assertEqual(self.sim_rates, [])
-        self.assertEqual(self.objective_starts, [])
-
-        self.assertTrue(self.call("BuildOrderStartup_Cancel"))
-        self.assertEqual(len(self.selector_models), 2)
-        self.assertEqual(self.sim_rates, [])
-
-        self.call("BuildOrderStartup_Unpause")
-        self.assertTrue(self.call("BuildOrderStartup_ConfirmNoOrder"))
+        self.assertEqual(self.confirmation_models, [])
         self.assertEqual(self.sim_rates, [8])
         self.assertEqual(self.cycle_starts, 1)
         self.assertEqual(self.objective_starts, [])
-        self.assertFalse(self.call("BuildOrderStartup_ConfirmNoOrder"))
+        self.assertFalse(self.call("BuildOrderStartup_Unpause"))
         self.assertEqual(self.sim_rates, [8])
         self.assertEqual(self.cycle_starts, 1)
 
@@ -456,7 +447,7 @@ class BuildOrderStartupContractTests(unittest.TestCase):
         rows = csv_rows(LOCDB_PATH)
         expected = {
             29: "Choose a Build Order",
-            31: "No build order",
+            31: "New Build Order",
             44: "Continue without a build order?",
             45: "No build-order objectives will be started.",
             47: "Build Order UI Unavailable",

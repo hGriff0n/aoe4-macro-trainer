@@ -118,26 +118,48 @@ class BuildOrderEditorUIContractTests(unittest.TestCase):
         self.assertIn("BUILD_ORDER_EDITOR_UI_STATE.callbacks = {}", stop)
         self.assertIn("BUILD_ORDER_EDITOR_UI_STATE.commands = nil", stop)
 
-    def test_probe_is_a_static_inert_button_shell(self) -> None:
+    def test_probe_has_bound_selector_actions_and_empty_editor_shell(self) -> None:
         probe = extract_long_string(self.source, "BUILD_ORDER_EDITOR_UI_PROBE_XAML")
         root = ET.fromstring(probe)
 
         self.assertEqual(root.tag, f"{{{PRESENTATION_NS}}}Border")
         self.assertEqual(root.get(f"{{{XAML_NS}}}Name"), "BuildOrderEditorProbe")
-        self.assertEqual(len(root), 1)
-        self.assertEqual(root[0].tag, f"{{{PRESENTATION_NS}}}Grid")
-        headings = root.findall(".//p:TextBlock", NS)
-        self.assertEqual([heading.get("Text") for heading in headings], ["Select Build Order"])
+        selector = named(root, "BuildOrderSelectorProbe")
+        editor = named(root, "BuildOrderEditorShellProbe")
+        self.assertEqual(selector.get("Visibility"), "{Binding [selector_visibility]}")
+        self.assertEqual(editor.get("Visibility"), "{Binding [editor_visibility]}")
+
+        dropdown = named(root, "BuildOrderSelectorDropdown")
+        self.assertEqual(dropdown.get("ItemsSource"), "{Binding [selector_options]}")
+        self.assertEqual(dropdown.get("SelectedItem"), "{Binding [selected_option], Mode=TwoWay}")
+        self.assertEqual(dropdown.get("DisplayMemberPath"), "[label]")
+        dropdown_xml = ET.tostring(dropdown, encoding="unicode")
+        self.assertIn("CallCommandTrigger", dropdown_xml)
+        self.assertIn("{Binding [commands][select]}", dropdown_xml)
+
         buttons = root.findall(".//p:Button", NS)
+        action = named(root, "BuildOrderSelectorAction")
+        self.assertEqual(action.get("Content"), "{Binding [action_label]}")
+        self.assertEqual(action.get("Command"), "{Binding [action_command]}")
+        self.assertEqual(action.get("CommandParameter"), "{Binding [selected_option]}")
+        unpause = named(root, "BuildOrderSelectorUnpause")
+        self.assertEqual(unpause.get("Command"), "{Binding [commands][unpause]}")
+        save = named(root, "BuildOrderEditorSave")
+        self.assertEqual(save.get("IsEnabled"), "False")
+        cancel = named(root, "BuildOrderEditorCancel")
+        self.assertEqual(cancel.get("Command"), "{Binding [commands][cancel]}")
         self.assertEqual(
-            [button.get("Content") for button in buttons],
-            ["Create", "Edit", "Unpause"],
+            [button.get(f"{{{XAML_NS}}}Name") for button in buttons],
+            [
+                "BuildOrderSelectorAction",
+                "BuildOrderSelectorUnpause",
+                "BuildOrderEditorSave",
+                "BuildOrderEditorCancel",
+            ],
         )
-        self.assertTrue(all(button.get("Command") is None for button in buttons))
-        self.assertNotIn("{Binding", probe)
         self.assertNotIn("DataTemplate", probe)
 
-    def test_probe_presenter_excludes_commands_and_data_context(self) -> None:
+    def test_probe_presenter_creates_minimal_commands_and_data_context(self) -> None:
         self.assertEqual(self.source.count("UI_AddChild("), 1)
         create = function_body(self.source, "BuildOrderEditorUI_CreatePresenter")
         self.assertIn(
@@ -146,9 +168,9 @@ class BuildOrderEditorUIContractTests(unittest.TestCase):
         )
         self.assertIn("IsHitTestVisible = true", create)
         self.assertIn("Xaml = BUILD_ORDER_EDITOR_UI_PROBE_XAML", create)
-        self.assertNotIn("BuildOrderEditorUI_CreateCommands", create)
-        self.assertNotIn("BuildOrderEditorUI_BuildViewModel", create)
-        self.assertNotIn("DataContext", create)
+        self.assertIn("BuildOrderEditorUI_CreateProbeCommands", create)
+        self.assertIn("BuildOrderEditorUI_BuildProbeViewModel", create)
+        self.assertIn("DataContext", create)
 
         ensure = function_body(self.source, "BuildOrderEditorUI_EnsureCreated")
         self.assertIn("if BUILD_ORDER_EDITOR_UI_STATE.created then", ensure)
@@ -156,7 +178,7 @@ class BuildOrderEditorUIContractTests(unittest.TestCase):
         self.assertRegex(ensure, r"if not success then[\s\S]*?return false")
         self.assertIn("return true", ensure)
 
-    def test_probe_screen_selection_does_not_refresh_data_context(self) -> None:
+    def test_probe_screen_selection_refreshes_data_context(self) -> None:
         for name, screen in (
             ("BuildOrderEditorUI_ShowSelector", "selector"),
             ("BuildOrderEditorUI_ShowEditor", "editor"),
@@ -167,8 +189,53 @@ class BuildOrderEditorUIContractTests(unittest.TestCase):
                 body = function_body(self.source, name)
                 self.assertIn(f'BuildOrderEditorUI_SetScreen("{screen}"', body)
         set_screen = function_body(self.source, "BuildOrderEditorUI_SetScreen")
-        self.assertNotIn("BuildOrderEditorUI_Refresh", set_screen)
-        self.assertNotIn("UI_SetDataContext", set_screen)
+        self.assertIn("BuildOrderEditorUI_RefreshProbe", set_screen)
+
+    def test_probe_view_model_switches_create_and_edit_for_selected_option(self) -> None:
+        runtime = ScarRuntime(strip_xaml(self.source))
+        state = runtime.globals["BUILD_ORDER_EDITOR_UI_STATE"]
+        state["commands"] = runtime.table(
+            {
+                "select": "select-command",
+                "create": "create-command",
+                "edit": "edit-command",
+                "unpause": "unpause-command",
+                "cancel": "cancel-command",
+            }
+        )
+        model = {
+            "orders": [
+                {
+                    "id": "__new_build_order__",
+                    "label": "New Build Order",
+                    "editable": False,
+                    "selected": True,
+                },
+                {
+                    "id": "english-opening",
+                    "label": "English Opening",
+                    "editable": True,
+                    "selected": False,
+                },
+            ]
+        }
+
+        view = runtime.call("BuildOrderEditorUI_BuildProbeViewModel", "selector", model)
+        self.assertEqual(view["selected_option"]["id"], "__new_build_order__")
+        self.assertEqual(view["action_label"], f"${MOD_NAMESPACE}:35")
+        self.assertEqual(view["action_command"], "create-command")
+
+        model["orders"][0]["selected"] = False
+        model["orders"][1]["selected"] = True
+        view = runtime.call("BuildOrderEditorUI_BuildProbeViewModel", "selector", model)
+        self.assertEqual(view["selected_option"]["id"], "english-opening")
+        self.assertEqual(view["action_label"], f"${MOD_NAMESPACE}:34")
+        self.assertEqual(view["action_command"], "edit-command")
+
+        editor = runtime.call("BuildOrderEditorUI_BuildProbeViewModel", "editor", {})
+        self.assertEqual(editor["selector_visibility"], "Collapsed")
+        self.assertEqual(editor["editor_visibility"], "Visible")
+        self.assertFalse(editor["save_enabled"])
 
     def test_callbacks_are_commands_but_ui_does_not_mutate_the_draft(self) -> None:
         create = function_body(self.source, "BuildOrderEditorUI_CreateCommands")
