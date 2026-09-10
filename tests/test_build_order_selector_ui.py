@@ -8,6 +8,7 @@ from tests.scar_runtime import LuaResults, ScarRuntime
 
 ROOT = Path(__file__).resolve().parents[1]
 UI_SCAR = ROOT / "assets" / "scar" / "build_orders" / "selector_ui.scar"
+PRESENTATION_NS = "http://schemas.microsoft.com/winfx/2006/xaml/presentation"
 XAML_NS = "http://schemas.microsoft.com/winfx/2006/xaml"
 
 
@@ -59,6 +60,35 @@ class BuildOrderSelectorUITests(unittest.TestCase):
         self.assertNotIn("Editor", xaml)
         self.assertNotIn("Save", xaml)
         self.assertNotIn("Create", xaml)
+
+    def test_buttons_use_explicit_templates_when_default_style_is_overridden(self) -> None:
+        root = ET.fromstring(extract_xaml(self.source))
+
+        for name in (
+            "BuildOrderSelectorStartGame",
+            "BuildOrderSelectorContinueWithout",
+        ):
+            with self.subTest(name=name):
+                button = named(root, name)
+                self.assertEqual(button.get("OverridesDefaultStyle"), "True")
+                border = button.find(
+                    f"./{{{PRESENTATION_NS}}}Button.Template/"
+                    f"{{{PRESENTATION_NS}}}ControlTemplate/"
+                    f"{{{PRESENTATION_NS}}}Border"
+                )
+                self.assertIsNotNone(border)
+                self.assertEqual(border.get("Background"), "{TemplateBinding Background}")
+                self.assertEqual(border.get("BorderBrush"), "{TemplateBinding BorderBrush}")
+                self.assertEqual(
+                    border.get("BorderThickness"),
+                    "{TemplateBinding BorderThickness}",
+                )
+                content = border.find(f"./{{{PRESENTATION_NS}}}ContentPresenter")
+                self.assertIsNotNone(content)
+                self.assertEqual(content.get("Content"), "{TemplateBinding Content}")
+
+        start_button = named(root, "BuildOrderSelectorStartGame")
+        self.assertEqual(start_button.get("HorizontalAlignment"), "Left")
 
     def test_show_projects_orders_and_creates_one_presenter(self) -> None:
         runtime = self.runtime()

@@ -91,14 +91,30 @@ BUILD_ORDER_SELECTOR_UI_XAML = [[
 					<Button x:Name="BuildOrderSelectorStartGame"
 					        MinWidth="110"
 					        Padding="12,7"
+					        HorizontalAlignment="Left"
 					        Background="#FFD7A84A"
 					        Foreground="#FF172033"
 					        BorderBrush="#FFF0D08A"
 					        BorderThickness="1"
 					        FontWeight="Bold"
+					        OverridesDefaultStyle="True"
 					        Command="{Binding [commands][start_game]}"
 					        CommandParameter="{Binding SelectedItem[id], ElementName=BuildOrderSelectorList}"
-					        Content="Start Game" />
+					        Content="Start Game">
+						<Button.Template>
+							<ControlTemplate TargetType="{x:Type Button}">
+								<Border x:Name="BuildOrderStartGameChrome"
+								        Padding="{TemplateBinding Padding}"
+								        Background="{TemplateBinding Background}"
+								        BorderBrush="{TemplateBinding BorderBrush}"
+								        BorderThickness="{TemplateBinding BorderThickness}">
+									<ContentPresenter Content="{TemplateBinding Content}"
+									                  HorizontalAlignment="Center"
+									                  VerticalAlignment="Center" />
+								</Border>
+							</ControlTemplate>
+						</Button.Template>
+					</Button>
 					<Button x:Name="BuildOrderSelectorContinueWithout"
 					        MinWidth="180"
 					        Margin="12,0,0,0"
@@ -108,8 +124,22 @@ BUILD_ORDER_SELECTOR_UI_XAML = [[
 					        BorderBrush="#FFC39A5A"
 					        BorderThickness="1"
 					        FontWeight="Bold"
+					        OverridesDefaultStyle="True"
 					        Command="{Binding [commands][continue_without]}"
-					        Content="Continue Without Build Order" />
+					        Content="Continue Without Build Order">
+						<Button.Template>
+							<ControlTemplate TargetType="{x:Type Button}">
+								<Border Padding="{TemplateBinding Padding}"
+								        Background="{TemplateBinding Background}"
+								        BorderBrush="{TemplateBinding BorderBrush}"
+								        BorderThickness="{TemplateBinding BorderThickness}">
+									<ContentPresenter Content="{TemplateBinding Content}"
+									                  HorizontalAlignment="Center"
+									                  VerticalAlignment="Center" />
+								</Border>
+							</ControlTemplate>
+						</Button.Template>
+					</Button>
 				</StackPanel>
 			</Grid>
 		</Border>
