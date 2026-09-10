@@ -22,7 +22,7 @@ def function_body(source: str, name: str) -> str:
 
 
 class BuildOrderResourcesCompilerTests(unittest.TestCase):
-    def test_resources_descriptors_preserve_yaml_order_and_render_collection_titles(self) -> None:
+    def test_resources_descriptors_preserve_yaml_order_and_semantic_payloads(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             source = Path(temp) / "resources.yaml"
             source.write_text(
@@ -38,12 +38,13 @@ steps:
             checks = compile_directory(Path(temp)).build_orders[0].steps[0].checks
 
         self.assertEqual(
-            [(check.title, check.optional, check.payload) for check in checks],
+            [(check.kind, check.optional, check.payload) for check in checks],
             [
-                ("Collect at least 400 wood", False, {"resource": "wood", "count": 400}),
-                ("Collect at least 200 gold", False, {"resource": "gold", "count": 200}),
+                ("resources", False, {"resource": "wood", "count": 400}),
+                ("resources", False, {"resource": "gold", "count": 200}),
             ],
         )
+        self.assertFalse(hasattr(checks[0], "title"))
 
 
 class BuildOrderResourcesContractTests(unittest.TestCase):

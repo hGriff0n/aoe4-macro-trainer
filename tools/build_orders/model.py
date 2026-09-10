@@ -6,7 +6,6 @@ import unicodedata
 @dataclass(frozen=True)
 class CheckDescriptor:
     kind: str
-    title: str
     optional: bool
     payload: dict[str, object]
 

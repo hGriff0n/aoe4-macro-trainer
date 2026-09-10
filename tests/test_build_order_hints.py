@@ -7,8 +7,8 @@ from tools.build_orders.model import CheckDescriptor
 
 
 class BuildOrderHintsTests(unittest.TestCase):
-    def test_compiles_hints_as_ordered_optional_presentation_descriptors(self) -> None:
-        """Fails if hint titles, payloads, ordering, or optionality regress."""
+    def test_compiles_hints_as_ordered_optional_semantic_descriptors(self) -> None:
+        """Fails if hint payloads, ordering, or optionality regress."""
         with tempfile.TemporaryDirectory() as temp:
             directory = Path(temp)
             (directory / "order.yaml").write_text(
@@ -29,18 +29,17 @@ steps:
             (
                 CheckDescriptor(
                     "hints",
-                    "[HINT] Keep producing villagers",
                     True,
                     {"text": "Keep producing villagers"},
                 ),
                 CheckDescriptor(
                     "hints",
-                    "[HINT] Scout the opponent",
                     True,
                     {"text": "Scout the opponent"},
                 ),
             ),
         )
+        self.assertFalse(hasattr(catalog.build_orders[0].steps[0].checks[0], "title"))
 
 
 if __name__ == "__main__":

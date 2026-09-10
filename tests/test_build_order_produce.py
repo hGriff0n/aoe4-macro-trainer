@@ -2,7 +2,7 @@ import re
 import unittest
 from pathlib import Path
 
-from tools.build_orders.compiler import _pluralize_unit, compile_directory
+from tools.build_orders.compiler import compile_directory
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -146,9 +146,9 @@ class ProduceCompilerTests(unittest.TestCase):
         )
         return compile_directory(directory).build_orders[0].steps[0].checks
 
-    def test_renders_normal_production_with_canonical_family_payload(self) -> None:
+    def test_compiles_normal_production_with_canonical_family_payload(self) -> None:
         check = self.compile_checks("[{id: spearman_2, count: 3}]")[0]
-        self.assertEqual(check.title, "Produce 3 spearmen")
+        self.assertEqual(check.kind, "produce")
         self.assertFalse(check.optional)
         self.assertEqual(
             check.payload,
@@ -158,21 +158,18 @@ class ProduceCompilerTests(unittest.TestCase):
             },
         )
 
-    def test_renders_constant_production_as_a_non_blocking_author_hint(self) -> None:
+    def test_compiles_constant_production_as_a_non_blocking_author_hint(self) -> None:
         check = self.compile_checks("[{id: villager, constant: true}]")[0]
-        self.assertEqual(
-            check.title,
-            "Constantly produce villager",
-        )
+        self.assertEqual(check.kind, "produce")
         self.assertTrue(check.optional)
         self.assertEqual(
             check.payload,
             {"ids": ["unit_villager_1_nomad_eng"], "count": 1, "constant": True},
         )
 
-    def test_renders_single_queued_unit(self) -> None:
+    def test_compiles_single_queued_unit(self) -> None:
         check = self.compile_checks("[{id: longbowman_2, queued: true}]")[0]
-        self.assertEqual(check.title, "Queue 1 longbowman")
+        self.assertEqual(check.kind, "produce")
         self.assertFalse(check.optional)
         self.assertEqual(
             check.payload,
@@ -183,11 +180,11 @@ class ProduceCompilerTests(unittest.TestCase):
             },
         )
 
-    def test_renders_requested_queued_count(self) -> None:
+    def test_compiles_requested_queued_count(self) -> None:
         check = self.compile_checks(
             "[{id: archer_2, count: 2, queued: true}]", civ="Abbasid"
         )[0]
-        self.assertEqual(check.title, "Queue 2 archers")
+        self.assertEqual(check.kind, "produce")
         self.assertFalse(check.optional)
         self.assertEqual(
             check.payload,
@@ -198,51 +195,45 @@ class ProduceCompilerTests(unittest.TestCase):
             },
         )
 
-    def test_queue_title_uses_catalog_safe_plural_display_names(self) -> None:
+    def test_queued_family_payloads_preserve_catalog_canonical_ids(self) -> None:
         cases = (
-            ("Ottomans", "janissary_3", "Queue 2 janissaries"),
-            ("Golden Horde", "shaman", "Queue 2 shamans"),
-            ("English", "man_at_arms_2", "Queue 2 men at arms"),
+            (
+                "Ottomans",
+                "janissary_3",
+                ["unit_handcannon_3_ott", "unit_handcannon_4_ott"],
+            ),
+            ("Golden Horde", "shaman", ["unit_monk_3_mon_ha_gol"]),
+            (
+                "English",
+                "man_at_arms_2",
+                [
+                    "unit_manatarms_1_eng",
+                    "unit_manatarms_2_eng",
+                    "unit_manatarms_3_eng",
+                    "unit_manatarms_4_eng",
+                ],
+            ),
         )
 
-        for civilization, unit, expected_title in cases:
+        for civilization, unit, expected_ids in cases:
             with self.subTest(unit=unit):
                 check = self.compile_checks(
                     f"[{{id: {unit}, count: 2, queued: true}}]", civ=civilization
                 )[0]
-                self.assertEqual(check.title, expected_title)
-
-    def test_safe_pluralization_does_not_corrupt_family_labels(self) -> None:
-        expected_plurals = {
-            "archer": "archers",
-            "spearman": "spearmen",
-            "gilded man at arms": "gilded men at arms",
-            "janissary": "janissaries",
-            "shaman": "shamans",
-            "wynguard footmen": "wynguard footmen",
-            "wynguard raiders": "wynguard raiders",
-            "landsknecht mercenaries": "landsknecht mercenaries",
-            "nest of bees": "nest of bees",
-            "clocktower nest of bees": "clocktower nest of bees",
-            "samurai": "samurai",
-            "streltsy": "streltsy",
-        }
-
-        for unit, expected_plural in expected_plurals.items():
-            with self.subTest(unit=unit):
-                self.assertEqual(_pluralize_unit(unit), expected_plural)
+                self.assertEqual(
+                    check.payload,
+                    {"ids": expected_ids, "count": 2, "queued": True},
+                )
 
     def test_constant_precedes_queued_when_both_flags_are_set(self) -> None:
         check = self.compile_checks("[{id: villager, count: 2, constant: true, queued: true}]")[0]
-        self.assertEqual(
-            check.title,
-            "Constantly produce villager",
-        )
+        self.assertEqual(check.kind, "produce")
         self.assertTrue(check.optional)
         self.assertEqual(
             check.payload,
             {"ids": ["unit_villager_1_nomad_eng"], "count": 2, "constant": True, "queued": True},
         )
+        self.assertFalse(hasattr(check, "title"))
 
     def test_produce_defaults_do_not_leak_into_other_counted_check_payloads(self) -> None:
         directory = ROOT / "tests" / "fixtures" / "build_orders" / "produce_payload_isolation"

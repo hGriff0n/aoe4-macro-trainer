@@ -27,7 +27,7 @@ class BuildOrderUpgradeCompilerTests(unittest.TestCase):
             path.write_text(yaml, encoding="utf-8")
             return compile_directory(path.parent).build_orders[0].steps[0].checks
 
-    def test_presents_completed_optional_and_queued_upgrade_checks(self) -> None:
+    def test_compiles_completed_optional_and_queued_upgrade_semantics(self) -> None:
         checks = self.compile("""civ: English
 title: Upgrade presentation
 steps:
@@ -40,13 +40,14 @@ steps:
 """)
 
         self.assertEqual(
-            [(check.title, check.optional, check.payload) for check in checks],
+            [(check.kind, check.optional, check.payload) for check in checks],
             [
-                ("Research wheelbarrow", False, {"id": "upgrade_unit_town_center_wheelbarrow_1", "queued": False}),
-                ("[Optional] Research horticulture", True, {"id": "upgrade_econ_resource_food_harvest_rate_2", "queued": False}),
-                ("Queue fitted leatherwork for research", False, {"id": "upgrade_melee_armor_i", "queued": True}),
+                ("upgrades", False, {"id": "upgrade_unit_town_center_wheelbarrow_1", "queued": False}),
+                ("upgrades", True, {"id": "upgrade_econ_resource_food_harvest_rate_2", "queued": False}),
+                ("upgrades", False, {"id": "upgrade_melee_armor_i", "queued": True}),
             ],
         )
+        self.assertFalse(hasattr(checks[0], "title"))
 
 
 class BuildOrderUpgradeHandlerContractTests(unittest.TestCase):

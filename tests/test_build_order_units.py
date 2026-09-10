@@ -106,15 +106,16 @@ class UnitsCompilerTests(unittest.TestCase):
             )
             return compile_directory(path.parent).build_orders[0].steps[0].checks
 
-    def test_renders_each_active_unit_threshold_with_its_exact_payload(self) -> None:
+    def test_compiles_each_active_unit_threshold_with_its_exact_payload(self) -> None:
         checks = self.compile("[{id: spearman_2, count: 3}, {id: longbowman_2}]")
         self.assertEqual(
-            [(check.title, check.optional, check.payload) for check in checks],
+            [(check.kind, check.optional, check.payload) for check in checks],
             [
-                ("Have 3 active spearman", False, {"ids": ["unit_spearman_2_eng", "unit_spearman_3_eng", "unit_spearman_4_eng"], "count": 3}),
-                ("Have 1 active longbowman", False, {"ids": ["unit_archer_2_eng", "unit_archer_3_eng", "unit_archer_4_eng"], "count": 1}),
+                ("units", False, {"ids": ["unit_spearman_2_eng", "unit_spearman_3_eng", "unit_spearman_4_eng"], "count": 3}),
+                ("units", False, {"ids": ["unit_archer_2_eng", "unit_archer_3_eng", "unit_archer_4_eng"], "count": 1}),
             ],
         )
+        self.assertFalse(hasattr(checks[0], "title"))
 
 
 class UnitsHandlerContractTests(unittest.TestCase):

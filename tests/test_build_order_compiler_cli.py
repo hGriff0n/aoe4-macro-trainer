@@ -30,7 +30,7 @@ def compiled_order(identifier: str, civ: str, title: str, hint: str) -> BuildOrd
         identifier,
         civ,
         title,
-        (Step("Step 1", (CheckDescriptor("hints", f"[HINT] {hint}", True, {"text": hint}),)),),
+        (Step("Step 1", (CheckDescriptor("hints", True, {"text": hint}),)),),
     )
 
 
