@@ -8,7 +8,6 @@ from tests.scar_runtime import LuaResults, ScarRuntime
 
 ROOT = Path(__file__).resolve().parents[1]
 STARTUP_PATH = ROOT / "assets" / "scar" / "build_orders" / "startup.scar"
-EDITOR_PATH = ROOT / "assets" / "scar" / "build_orders" / "editor.scar"
 MAIN_PATH = ROOT / "assets" / "scar" / "winconditions" / "Macro Trainer.scar"
 LOCDB_PATH = ROOT / "assets" / "locdb" / "Macro Trainer_en.csv"
 MOD_NAMESPACE = "dfb5645698a84afb91cf7a2dfb0f4a4e"
@@ -114,18 +113,13 @@ class BuildOrderStartupBehaviorTests(unittest.TestCase):
             lambda order, player: self.objective_starts.append((order, player))
         )
         self.runtime.globals["Mod_StartSimspeedCycle"] = self.start_cycle
-        self.runtime.globals["BuildOrderEditorUI_SetCallbacks"] = (
+        self.runtime.globals["BuildOrderSelectorUI_SetCallbacks"] = (
             self.callback_tables.append
         )
-        self.runtime.globals["BuildOrderEditorUI_ShowSelector"] = (
+        self.runtime.globals["BuildOrderSelectorUI_Show"] = (
             self.show_selector
         )
-        self.runtime.globals["BuildOrderEditorUI_ShowNoSelectionConfirmation"] = (
-            self.show_confirmation
-        )
-        self.runtime.globals["BuildOrderEditorUI_Hide"] = self.hide_ui
-        self.runtime.globals["BuildOrderEditor_OpenCreate"] = self.open_create
-        self.runtime.globals["BuildOrderEditor_OpenEdit"] = self.open_edit
+        self.runtime.globals["BuildOrderSelectorUI_Hide"] = self.hide_ui
         self.runtime.globals["UI_MessageBoxSetText"] = (
             lambda title, message: self.message_box_text.append((title, message))
         )
@@ -219,7 +213,7 @@ class BuildOrderStartupBehaviorTests(unittest.TestCase):
         self.assertEqual(self.rule_remove_me, 1)
         self.assertEqual(self.sim_rates, [0])
 
-    def test_startup_uses_the_discovery_canonical_civilization_conversion(self) -> None:
+    def test_startup_canonicalizes_civilization_aliases_without_editor_discovery(self) -> None:
         self.runtime.globals["BUILD_ORDER_CATALOG"] = self.runtime.table(
             {
                 "ayyubids-feudal": build_order(
@@ -228,12 +222,6 @@ class BuildOrderStartupBehaviorTests(unittest.TestCase):
             }
         )
         self.runtime.globals["Player_GetRaceName"] = lambda _player: "ayyubid_cmp"
-        self.runtime.globals["BuildOrderDiscovery_CanonicalCivID"] = (
-            lambda race_name: "ayyubids"
-            if race_name == "ayyubid_cmp"
-            else race_name.lower()
-        )
-
         compatible = self.call("BuildOrderStartup_CollectCompatible")
 
         self.assertEqual(compatible.array(), ["ayyubids-feudal"])
@@ -403,7 +391,7 @@ class BuildOrderStartupContractTests(unittest.TestCase):
         callbacks = function_body(self.startup, "BuildOrderStartup_Callbacks")
         self.assertIn("BuildOrderStartup_StartGame", callbacks)
         self.assertIn("BuildOrderStartup_ContinueWithoutSelection", callbacks)
-        self.assertNotIn("BuildOrderEditor_Callbacks()", callbacks)
+        self.assertNotIn("BuildOrderEditor", callbacks)
         for name in ("BuildOrderStartup_Edit", "BuildOrderStartup_Create"):
             self.assertNotIn(name, self.startup)
         self.assertIn("Game_GetLocalPlayer()", self.startup)
@@ -420,7 +408,7 @@ class BuildOrderStartupContractTests(unittest.TestCase):
         for call in (
             "BuildOrderDatastore_Stop()",
             "BuildOrderStartup_Stop()",
-            "BuildOrderEditor_Stop()",
+            "BuildOrderSelectorUI_Stop()",
             "BuildOrder_Stop()",
             "Mod_StopSimspeedCycle()",
         ):
@@ -448,17 +436,15 @@ class BuildOrderStartupContractTests(unittest.TestCase):
 
 
 class BuildOrderGameOverBehaviorTests(unittest.TestCase):
-    def test_game_over_runs_ui_teardown_once_through_editor_stop(self) -> None:
-        editor = EDITOR_PATH.read_text(encoding="utf-8")
+    def test_game_over_runs_selector_teardown_once(self) -> None:
         main = MAIN_PATH.read_text(encoding="utf-8")
         game_over = "function Mod_OnGameOver()\n" + function_body(
             main, "Mod_OnGameOver"
         )
-        runtime = ScarRuntime(editor + "\n" + game_over)
+        runtime = ScarRuntime(game_over)
         calls = {
             "datastore": 0,
             "startup": 0,
-            "discovery": 0,
             "ui": 0,
             "objectives": 0,
             "simspeed": 0,
@@ -472,13 +458,9 @@ class BuildOrderGameOverBehaviorTests(unittest.TestCase):
 
         runtime.globals["BuildOrderDatastore_Stop"] = record("datastore")
         runtime.globals["BuildOrderStartup_Stop"] = record("startup")
-        runtime.globals["BuildOrderDiscovery_Clear"] = record("discovery")
-        runtime.globals["BuildOrderEditorUI_Stop"] = record("ui")
+        runtime.globals["BuildOrderSelectorUI_Stop"] = record("ui")
         runtime.globals["BuildOrder_Stop"] = record("objectives")
         runtime.globals["Mod_StopSimspeedCycle"] = record("simspeed")
-        runtime.globals["BUILD_ORDER_EDITOR_STATE"]["draft"] = runtime.table(
-            {"title": "Open draft"}
-        )
 
         runtime.call("Mod_OnGameOver")
 
@@ -487,13 +469,11 @@ class BuildOrderGameOverBehaviorTests(unittest.TestCase):
             {
                 "datastore": 1,
                 "startup": 1,
-                "discovery": 1,
                 "ui": 1,
                 "objectives": 1,
                 "simspeed": 1,
             },
         )
-        self.assertIsNone(runtime.globals["BUILD_ORDER_EDITOR_STATE"]["draft"])
 
 
 if __name__ == "__main__":

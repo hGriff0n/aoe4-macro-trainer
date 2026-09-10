@@ -25,119 +25,14 @@
 27,,,Startup invalid-build title.,,,Build Order Disabled
 28,,,Startup missing-build value.,,,Selected build order is unavailable.
 29,,,Startup build-order chooser title.,,,Choose a Build Order
-30,,,Startup no-selection message.,,,Choose a build order loaded from the player datastore.
-31,,,Startup no-build-order option.,,,No Build Order
-32,,,Build-order selector action.,,,Select
-33,,,Build-order selected marker.,,,Selected
-34,,,Build-order selector action.,,,Edit
-35,,,Build-order selector action.,,,Create
-36,,,Build-order selector action.,,,Unpause
-37,,,Build-order editor label.,,,Current civilization
-38,,,Build-order editor action.,,,Save
-39,,,Build-order editor action.,,,Cancel
-40,,,Build-order editor action.,,,Create copy
-41,,,Build-order editor action.,,,Add step
-42,,,Build-order editor action.,,,Add check
-43,,,Build-order editor label.,,,Check type
 44,,,No-order confirmation title.,,,Continue without a build order?
 45,,,No-order confirmation message.,,,No build-order objectives will be started.
-46,,,No-order confirmation action.,,,Continue without one
 47,,,Build-order UI fallback title.,,,Build Order UI Unavailable
 48,,,Build-order UI fallback message.,,,The build-order screen could not be opened. Continue without build-order objectives?
 49,,,Build-order UI fallback action.,,,Continue Without Build Order
 50,,,Build-order UI fallback action.,,,Stay Paused
 51,,,Missing startup selection message.,,,The selected build order is no longer available. Choose another option.
 52,,,Invalid startup selection message.,,,The selected build order is not compatible with the current civilization.
-53,,,Build-order editor action.,,,Collapse
-54,,,Build-order editor action.,,,Expand
-55,,,Build-order editor action.,,,Delete item
-56,,,Build-order editor action.,,,Add
-57,,,Build-order editor boolean label.,,,Enabled
-58,,,Build-order editor empty-state message.,,,No compatible options discovered.
-59,,,Build-order editor action.,,,Add item
-60,,,Build-order editor optional-field label.,,,Optional
-61,,,Build-order editor resource help.,,,Each amount is a positive integer (optional).
-62,,,Build-order editor resource label.,,,Food
-63,,,Build-order editor resource label.,,,Wood
-64,,,Build-order editor resource label.,,,Gold
-65,,,Build-order editor resource label.,,,Stone
-66,,,Build-order editor resource label.,,,Do not collect
-67,,,Build-order editor drag label.,,,Drag check
-68,,,Build-order editor action.,,,Delete check
-69,,,Build-order editor action.,,,Move down
-70,,,Build-order editor action.,,,Move up
-71,,,Build-order editor drag label.,,,Drag step
-72,,,Build-order editor action.,,,Delete step
-73,,,Build-order check-kind label.,,,Villagers
-74,,,Build-order check-kind label.,,,Rally point
-75,,,Build-order check-kind label.,,,Build
-76,,,Build-order check-kind label.,,,Age up
-77,,,Build-order check-kind label.,,,Technology
-78,,,Build-order check-kind label.,,,Produce
-79,,,Build-order check-kind label.,,,Resources
-80,,,Build-order check-kind label.,,,Existing buildings
-81,,,Build-order check-kind label.,,,Existing units
-82,,,Build-order check-kind label.,,,Hint
-83,,,Build-order editor field label.,,,Optional
-84,,,Build-order editor schema label.,,,Build order
-85,,,Build-order editor schema label.,,,Civilization
-86,,,Build-order editor schema label.,,,Title
-87,,,Build-order editor schema label.,,,Steps
-88,,,Build-order editor schema label.,,,Step
-89,,,Build-order editor schema label.,,,Checks
-90,,,Build-order editor schema label.,,,Assignments
-91,,,Build-order editor schema label.,,,Resource
-92,,,Build-order editor schema label.,,,Building
-93,,,Build-order editor schema label.,,,Buildings
-94,,,Build-order editor schema label.,,,Count
-95,,,Build-order editor schema label.,,,Builders
-96,,,Build-order editor schema label.,,,Location
-97,,,Build-order editor schema label.,,,Age-up choice
-98,,,Build-order editor schema label.,,,Choices
-99,,,Build-order editor schema label.,,,Choice
-100,,,Build-order editor schema label.,,,Technology
-101,,,Build-order editor schema label.,,,Complete when queued
-102,,,Build-order editor schema label.,,,Unit family
-103,,,Build-order editor schema label.,,,Constant production
-104,,,Build-order editor schema label.,,,Stockpile
-105,,,Build-order editor schema label.,,,Hint
-106,,,Build-order editor schema label.,,,Text
-107,,,Build-order editor schema label.,,,Check kind
-108,,,Build-order editor fallback label.,,,Unknown check
-109,,,Build-order editor fallback label.,,,Unknown field
-110,,,Build-order editor age label.,,,Entering age
-111,,,Build-order editor validation error.,,,"Enter a positive whole number, or leave this field unselected."
-112,,,Build-order editor validation error.,,,Select a value.
-113,,,Build-order editor validation error.,,,Select a valid game-data value.
-114,,,Build-order editor validation error.,,,The selection is not the required game-data type.
-115,,,Build-order editor validation error.,,,Select a unit family.
-116,,,Build-order editor validation error.,,,Use a canonical unit identifier.
-117,,,Build-order editor validation error.,,,Do not repeat a canonical unit identifier.
-118,,,Build-order editor validation error.,,,The selection does not match a discovered unit family.
-119,,,Build-order editor validation error.,,,Select at least one option.
-120,,,Build-order editor validation error.,,,Do not repeat a selection.
-121,,,Build-order editor validation error.,,,Select a resource list.
-122,,,Build-order editor validation error.,,,"Select food, wood, gold, or stone."
-123,,,Build-order editor validation error.,,,Do not repeat a resource.
-124,,,Build-order editor validation error.,,,Choose true or false.
-125,,,Build-order editor validation error.,,,Enter text or leave this field unselected.
-126,,,Build-order editor validation error.,,,Add a valid check.
-127,,,Build-order editor validation error.,,,Choose a supported check kind.
-128,,,Build-order editor validation error.,,,Enter an object value.
-129,,,Build-order editor validation error.,,,Select a resource threshold or a no-collect resource.
-130,,,Build-order editor validation error.,,,Select at least one resource.
-131,,,Build-order editor validation error.,,,Enter non-empty text.
-132,,,Build-order editor validation error.,,,Enter a valid build-order draft.
-133,,,Build-order editor validation error.,,,Enter a title that can form an ID.
-134,,,Build-order editor validation error.,,,Select a civilization.
-135,,,Build-order editor validation error.,,,Add at least one step.
-136,,,Build-order editor validation error.,,,Enter a valid step.
-137,,,Build-order editor validation error.,,,Add at least one check.
-138,,,Build-order editor validation error.,,,Only one age-up check is allowed per step.
-139,,,Build-order editor save error.,,,The build order could not be converted.
-140,,,Build-order editor save error.,,,Another build order already has that ID.
-141,,,Build-order editor save error.,,,The build order could not be saved.
-142,,,Build-order editor schema label.,,,Check details
 143,,,Abbasid 3TC objective title.,,,Step 1
 144,,,Abbasid 3TC objective title.,,,Step 2
 145,,,Abbasid 3TC objective title.,,,Step 3

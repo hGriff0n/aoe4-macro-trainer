@@ -8,6 +8,26 @@ BUILD_ORDER_STARTUP_FALLBACK_STAY = "$dfb5645698a84afb91cf7a2dfb0f4a4e:50"
 BUILD_ORDER_STARTUP_MISSING_SELECTION = "$dfb5645698a84afb91cf7a2dfb0f4a4e:51"
 BUILD_ORDER_STARTUP_INVALID_SELECTION = "$dfb5645698a84afb91cf7a2dfb0f4a4e:52"
 
+BUILD_ORDER_STARTUP_CIV_ALIASES = {
+	abbasid = "abbasid",
+	abbasid_ha_01 = "abbasid",
+	ayyubid = "ayyubids",
+	ayyubid_cmp = "ayyubids",
+	byzantine = "byzantines",
+	byzantine_ha_mac = "macedonian_dynasty",
+	chinese_ha_01 = "zhu_xi",
+	chinese_ha_jin = "jin_dynasty",
+	english_ha_01 = "house_of_lancaster",
+	french_ha_01 = "jeanne_darc",
+	hre_ha_01 = "order_of_the_dragon",
+	japanese_ha_01 = "sengoku_daimyo",
+	malian = "malians",
+	mongol = "mongols",
+	mongol_ha_gol = "golden_horde",
+	ottoman = "ottomans",
+	sultanate_ha_tug = "tughlaq_dynasty",
+}
+
 function BuildOrderStartup_Callbacks()
 	return {
 		start_game = "BuildOrderStartup_StartGame",
@@ -17,10 +37,8 @@ end
 
 function BuildOrderStartup_CanonicalCivID(player)
 	local raceName = Player_GetRaceName(player)
-	if type(BuildOrderDiscovery_CanonicalCivID) == "function" then
-		return BuildOrderDiscovery_CanonicalCivID(raceName)
-	end
-	return string.lower(raceName or "")
+	local normalized = string.lower(raceName or "")
+	return BUILD_ORDER_STARTUP_CIV_ALIASES[normalized] or normalized
 end
 
 function BuildOrderStartup_ChoiceComesBefore(leftID, rightID)
@@ -129,8 +147,8 @@ function BuildOrderStartup_ShowSelector(message)
 	_mod.startupMessage = message
 	_mod.startupScreen = "selector"
 	_mod.startupFallbackOpen = false
-	BuildOrderEditorUI_SetCallbacks(BuildOrderStartup_Callbacks())
-	local shown = BuildOrderEditorUI_ShowSelector({
+	BuildOrderSelectorUI_SetCallbacks(BuildOrderStartup_Callbacks())
+	local shown = BuildOrderSelectorUI_Show({
 		current_civ = BuildOrderStartup_CanonicalCivID(Game_GetLocalPlayer()),
 		orders = BuildOrderStartup_BuildSelectorOrders(),
 		message = message or "",
@@ -190,7 +208,7 @@ function BuildOrderStartup_FinishStartGame()
 	_mod.startupFallbackOpen = false
 	_mod.startupScreen = "hidden"
 	Rule_Remove(BuildOrderStartup_PauseNextTick)
-	BuildOrderEditorUI_Hide()
+	BuildOrderSelectorUI_Hide()
 	Misc_SetSimRate(NORMAL_SIM_RATE)
 end
 
@@ -289,6 +307,6 @@ function BuildOrderStartup_Stop()
 	_mod.compatibleBuildOrderIDs = {}
 	_mod.buildOrderStarted = false
 	Rule_Remove(BuildOrderStartup_PauseNextTick)
-	BuildOrderEditorUI_Hide()
+	BuildOrderSelectorUI_Hide()
 	return true
 end

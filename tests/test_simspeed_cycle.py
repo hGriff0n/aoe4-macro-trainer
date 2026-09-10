@@ -99,22 +99,15 @@ class SimspeedCycleContractTests(unittest.TestCase):
     def test_build_order_sources_load_before_startup_coordinator(self) -> None:
         datastore = 'import("build_orders/datastore.scar")'
         engine = 'import("build_orders/objective_engine.scar")'
-        editor_modules = [
-            'import("build_orders/editor_discovery.scar")',
-            'import("build_orders/editor_model.scar")',
-            'import("build_orders/editor_schema.scar")',
-            'import("build_orders/editor_ui.scar")',
-            'import("build_orders/editor.scar")',
-        ]
+        selector = 'import("build_orders/selector_ui.scar")'
         startup = 'import("build_orders/startup.scar")'
         self.assertNotIn('import("generated/build_orders.scar")', self.source)
         self.assertIn(datastore, self.source)
         self.assertIn(engine, self.source)
-        for module in editor_modules:
-            self.assertIn(module, self.source)
+        self.assertIn(selector, self.source)
         self.assertIn(startup, self.source)
         self.assertLess(self.source.index(datastore), self.source.index(engine))
-        ordered = [engine, *editor_modules, startup]
+        ordered = [engine, selector, startup]
         for first, second in zip(ordered, ordered[1:]):
             self.assertLess(self.source.index(first), self.source.index(second))
         self.assertLess(
@@ -275,7 +268,7 @@ class SimspeedCycleContractTests(unittest.TestCase):
         game_over = function_body(self.source, "Mod_OnGameOver")
         self.assertEqual(game_over.count("BuildOrderDatastore_Stop()"), 1)
         self.assertEqual(game_over.count("BuildOrderStartup_Stop()"), 1)
-        self.assertEqual(game_over.count("BuildOrderEditor_Stop()"), 1)
+        self.assertEqual(game_over.count("BuildOrderSelectorUI_Stop()"), 1)
         self.assertEqual(game_over.count("BuildOrder_Stop()"), 1)
         self.assertEqual(game_over.count("Mod_StopSimspeedCycle()"), 1)
 

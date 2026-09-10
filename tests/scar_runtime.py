@@ -1,7 +1,7 @@
 """Small Lua 5.1 subset runtime for executing data-model SCAR in tests.
 
-This intentionally supports only language/library features used by the pure-data
-editor model. Engine APIs are outside its scope.
+This intentionally supports only language/library features used by the runtime
+SCAR behavior tests. Engine APIs are outside its scope.
 """
 
 from __future__ import annotations

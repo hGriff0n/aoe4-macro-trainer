@@ -123,7 +123,7 @@ class BuildingsHandlerContractTests(unittest.TestCase):
             with self.subTest(kind=kind):
                 path = SCAR_ROOT / "build_orders" / "checks" / f"{kind}.scar"
                 source = path.read_text(encoding="utf-8") if path.exists() else ""
-                self.assertTrue(path.exists(), f"{kind} is advertised by the editor but has no handler")
+                self.assertTrue(path.exists(), f"{kind} is compiled but has no handler")
                 self.assertIn(
                     f'BuildOrder_RegisterHandler("{kind}", {{',
                     source,
