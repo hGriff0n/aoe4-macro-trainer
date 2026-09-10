@@ -8,6 +8,7 @@ import("ScarUtil.scar")							-- Contains game helper functions
 import("build_orders/datastore.scar")
 import("build_orders/localization.scar")
 import("build_orders/objective_engine.scar")
+import("build_orders/checks/hints.scar")
 import("build_orders/check_support.scar")
 import("build_orders/checks/rallypoint.scar")
 import("build_orders/checks/resources.scar")

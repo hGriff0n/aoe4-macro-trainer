@@ -1,0 +1,7 @@
+function Hints_FormatTitle(check, context)
+	return Loc_FormatText(BUILD_ORDER_LOC_KEYS.hint, check.payload.text)
+end
+
+BuildOrder_RegisterHandler("hints", {
+	formatTitle = Hints_FormatTitle,
+})

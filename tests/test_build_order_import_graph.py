@@ -35,6 +35,15 @@ def walk_import_edges(root: str, sources: dict[str, str]) -> list[tuple[str, str
 
 
 class BuildOrderImportGraphTests(unittest.TestCase):
+    def test_packaged_root_imports_hints_handler_once_after_engine_before_startup(self) -> None:
+        edges = walk_import_edges(MAIN_SCRIPT, packaged_scar_sources())
+        root_edges = [target for source, target in edges if source == MAIN_SCRIPT]
+        hints = "build_orders/checks/hints.scar"
+
+        self.assertEqual(root_edges.count(hints), 1)
+        self.assertLess(root_edges.index("build_orders/objective_engine.scar"), root_edges.index(hints))
+        self.assertLess(root_edges.index(hints), root_edges.index("build_orders/startup.scar"))
+
     def test_packaged_root_imports_localization_between_datastore_and_engine(self) -> None:
         edges = walk_import_edges(MAIN_SCRIPT, packaged_scar_sources())
         root_edges = [target for source, target in edges if source == MAIN_SCRIPT]
