@@ -8,7 +8,7 @@ from typing import Any
 from .model import BuildOrder, Catalog, CheckDescriptor, Step
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 DATASTORE_ID = "macroTrainerBuildOrders"
 DATASTORE_FILENAME = "macroTrainerBuildOrders.rlt"
 _IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
@@ -257,12 +257,12 @@ def _catalog_data(catalog: Catalog) -> dict[str, object]:
                         "kind": check.kind,
                         "optional": check.optional,
                         "payload": check.payload,
-                        "title": check.title,
                     }
                 )
-            steps.append(
-                {"checks": checks, "title": step.title or f"Step {step_index}"}
-            )
+            step_record: dict[str, object] = {"checks": checks}
+            if step.title is not None:
+                step_record["title"] = step.title
+            steps.append(step_record)
         record: dict[str, object] = {
             "civ": order.civ,
             "id": order.id,
@@ -479,8 +479,10 @@ def parse_datastore(text: str) -> Catalog:
         ):
             step_path = f"{path}.steps[{step_index - 1}]"
             step = _require_mapping(raw_step, step_path)
-            _require_exact_keys(step, {"title", "checks"}, set(), step_path)
-            step_title = _require_string(step["title"], f"{step_path}.title")
+            _require_exact_keys(step, {"checks"}, {"title"}, step_path)
+            step_title = None
+            if "title" in step:
+                step_title = _require_string(step["title"], f"{step_path}.title")
             checks: list[CheckDescriptor] = []
             for check_index, raw_check in enumerate(
                 _require_array(step["checks"], f"{step_path}.checks", nonempty=True),
@@ -490,7 +492,7 @@ def parse_datastore(text: str) -> Catalog:
                 check = _require_mapping(raw_check, check_path)
                 _require_exact_keys(
                     check,
-                    {"id", "kind", "title", "optional", "payload"},
+                    {"id", "kind", "optional", "payload"},
                     set(),
                     check_path,
                 )
@@ -512,7 +514,6 @@ def parse_datastore(text: str) -> Catalog:
                 checks.append(
                     CheckDescriptor(
                         kind,
-                        _require_string(check["title"], f"{check_path}.title"),
                         optional,
                         payload,
                     )

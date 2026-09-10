@@ -19,30 +19,29 @@ ORDER = BuildOrder(
     (
         Step(
             "Economy",
-            (
-                CheckDescriptor(
-                    "vils",
-                    "Assign 7 food",
-                    False,
-                    {"food": 7},
-                ),
-                CheckDescriptor(
-                    "hints",
-                    'Say "hello"',
-                    True,
-                    {"text": "line one\nline two"},
-                ),
-            ),
+            (CheckDescriptor("vils", False, {"food": 7}),),
         ),
+        Step(None, (CheckDescriptor("hints", True, {"text": "Scout"}),)),
     ),
-    "https://example.com/opening",
 )
 
 ZULU = BuildOrder(
     "zulu-opening",
     "zulu",
     "Zulu Opening",
-    (Step("Step 1", (CheckDescriptor("hints", "Scout", True, {"text": "Scout"}),)),),
+    (
+        Step(
+            "Step 1",
+            (
+                CheckDescriptor(
+                    "hints",
+                    True,
+                    {"text": 'Say "hello"\nline two'},
+                ),
+            ),
+        ),
+    ),
+    "https://example.com/opening",
 )
 
 AGE_UP_ORDER = BuildOrder(
@@ -55,7 +54,6 @@ AGE_UP_ORDER = BuildOrder(
             (
                 CheckDescriptor(
                     "age_up",
-                    "Age Up: council hall",
                     False,
                     {
                         "id": "building_landmark_age1_westminster_hall_eng",
@@ -76,20 +74,56 @@ class BuildOrderDatastoreCodecTests(unittest.TestCase):
             text.startswith(
                 "LuaDataStore = {\n"
                 "    macroTrainerBuildOrders = {\n"
-                "        schema_version = 1,"
+                "        schema_version = 2,"
             )
         )
         self.assertLess(
             text.index('["english-opening"]'), text.index('["zulu-opening"]')
         )
         self.assertIn('source = "https://example.com/opening"', text)
-        self.assertIn('title = "Say \\"hello\\""', text)
-        self.assertIn('text = "line one\\nline two"', text)
+        self.assertIn('text = "Say \\"hello\\"\\nline two"', text)
+        self.assertIn('title = "Economy"', text)
+        self.assertEqual(text.count('title = "Economy"'), 1)
+        self.assertNotIn('title = "Step 2"', text)
+        self.assertNotRegex(text, r'kind = "(?:vils|hints)",\s*title =')
 
     def test_parse_round_trips_the_compiled_model(self) -> None:
         text = render_datastore(Catalog((ORDER, ZULU)))
 
         self.assertEqual(parse_datastore(text), Catalog((ORDER, ZULU)))
+
+    def test_parser_uses_none_for_an_omitted_step_title(self) -> None:
+        parsed = parse_datastore(render_datastore(Catalog((ORDER,))))
+
+        self.assertIsNone(parsed.build_orders[0].steps[1].title)
+
+    def test_parser_rejects_schema_version_one(self) -> None:
+        text = render_datastore(Catalog((ORDER,))).replace(
+            "schema_version = 2", "schema_version = 1", 1
+        )
+
+        with self.assertRaisesRegex(DatastoreError, "schema version 1"):
+            parse_datastore(text)
+
+    def test_parser_rejects_check_title_as_an_unknown_key(self) -> None:
+        text = render_datastore(Catalog((ORDER,))).replace(
+            'kind = "vils",',
+            'kind = "vils",\n                        title = "Assign",',
+            1,
+        )
+
+        with self.assertRaisesRegex(DatastoreError, "unknown key 'title'"):
+            parse_datastore(text)
+
+    def test_parser_rejects_empty_authored_step_title(self) -> None:
+        text = render_datastore(Catalog((ORDER,))).replace(
+            'title = "Economy"', 'title = ""', 1
+        )
+
+        with self.assertRaisesRegex(
+            DatastoreError, "title must be a non-empty string"
+        ):
+            parse_datastore(text)
 
     def test_age_up_payload_accepts_runtime_trigger(self) -> None:
         text = render_datastore(Catalog((AGE_UP_ORDER,)))
@@ -113,23 +147,23 @@ class BuildOrderDatastoreCodecTests(unittest.TestCase):
         invalid = {
             "wrong assignment": "Other = {}",
             "missing datastore wrapper": (
-                "LuaDataStore = { schema_version = 1, build_orders = {} }"
+                "LuaDataStore = { schema_version = 2, build_orders = {} }"
             ),
             "unsupported version": (
                 "LuaDataStore = { macroTrainerBuildOrders = { "
-                "schema_version = 2, build_orders = {} } }"
+                "schema_version = 1, build_orders = {} } }"
             ),
             "duplicate key": (
                 "LuaDataStore = { macroTrainerBuildOrders = { "
-                "schema_version = 1, schema_version = 1, build_orders = {} } }"
+                "schema_version = 2, schema_version = 2, build_orders = {} } }"
             ),
             "trailing code": (
                 "LuaDataStore = { macroTrainerBuildOrders = { "
-                "schema_version = 1, build_orders = {} } }\nprint('x')"
+                "schema_version = 2, build_orders = {} } }\nprint('x')"
             ),
             "function": (
                 "LuaDataStore = { macroTrainerBuildOrders = { "
-                "schema_version = 1, build_orders = function() end } }"
+                "schema_version = 2, build_orders = function() end } }"
             ),
         }
         for label, text in invalid.items():
@@ -155,13 +189,13 @@ class BuildOrderDatastoreCodecTests(unittest.TestCase):
     def test_invalid_catalog_never_replaces_existing_file(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "macroTrainerBuildOrders.rlt"
-            original = "LuaDataStore = { schema_version = 1, build_orders = {} }\n"
+            original = "LuaDataStore = { schema_version = 2, build_orders = {} }\n"
             path.write_text(original, encoding="utf-8")
             invalid = BuildOrder(
                 ORDER.id,
                 ORDER.civ,
                 ORDER.title,
-                (Step("Bad", (CheckDescriptor("bad", "Bad", False, {"value": 1.5}),)),),
+                (Step("Bad", (CheckDescriptor("bad", False, {"value": 1.5}),)),),
             )
 
             with self.assertRaises(DatastoreError):

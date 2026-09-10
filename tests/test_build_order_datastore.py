@@ -102,7 +102,10 @@ class BuildOrderDatastoreContractTests(unittest.TestCase):
         )
 
         step = function_body(self.datastore, "BuildOrderDatastore_IsValidStep")
-        self.assertIn('type(step.title) ~= "string" or step.title == ""', step)
+        self.assertIn(
+            'step.title ~= nil and (type(step.title) ~= "string" or step.title == "")',
+            step,
+        )
         self.assertIn('type(step.checks) ~= "table" or #step.checks == 0', step)
         self.assertIn(
             "if not BuildOrderDatastore_IsValidCheck(check) then", step
@@ -111,7 +114,7 @@ class BuildOrderDatastoreContractTests(unittest.TestCase):
         check = function_body(self.datastore, "BuildOrderDatastore_IsValidCheck")
         self.assertIn('type(check.id) ~= "string" or check.id == ""', check)
         self.assertIn('type(check.kind) ~= "string" or check.kind == ""', check)
-        self.assertIn('type(check.title) ~= "string" or check.title == ""', check)
+        self.assertNotIn("check.title", check)
         self.assertIn('type(check.optional) ~= "boolean"', check)
         self.assertIn('type(check.payload) ~= "table"', check)
 
@@ -205,12 +208,10 @@ class BuildOrderDatastoreBehaviorTests(unittest.TestCase):
             "title": "Persistence",
             "steps": [
                 {
-                    "title": "Opening",
                     "checks": [
                         {
                             "id": f"{identifier}:1:1",
                             "kind": "hints",
-                            "title": "[HINT] Persist",
                             "optional": True,
                             "payload": {"text": "Persist"},
                         }
@@ -251,7 +252,7 @@ class BuildOrderDatastoreBehaviorTests(unittest.TestCase):
         loaded_order = self.runtime.table(self.valid_order("english-loaded"))
         loaded = self.runtime.table(
             {
-                "schema_version": 1,
+                "schema_version": 2,
                 "build_orders": {"english-loaded": loaded_order},
             }
         )
