@@ -33,33 +33,28 @@
 50,,,Build-order UI fallback action.,,,Stay Paused
 51,,,Missing startup selection message.,,,The selected build order is no longer available. Choose another option.
 52,,,Invalid startup selection message.,,,The selected build order is not compatible with the current civilization.
-143,,,Abbasid 3TC objective title.,,,Step 1
-144,,,Abbasid 3TC objective title.,,,Step 2
-145,,,Abbasid 3TC objective title.,,,Step 3
-146,,,Abbasid 3TC objective title.,,,Step 4
-147,,,Abbasid 3TC objective title.,,,Step 5
-148,,,Abbasid 3TC objective title.,,,Step 6
-149,,,Abbasid 3TC objective title.,,,Step 7
-150,,,Abbasid 3TC objective title.,,,Assign 6 food | 3 gold
-151,,,Abbasid 3TC objective title.,,,[HINT] Starting vils to berries
-152,,,Abbasid 3TC objective title.,,,Build mining camp
-153,,,Abbasid 3TC objective title.,,,Build house
-154,,,Abbasid 3TC objective title.,,,Assign 9 food | 3 gold
-155,,,Abbasid 3TC objective title.,,,[HINT] Rallied food vils to sheep under TC
-156,,,Abbasid 3TC objective title.,,,Build house of wisdom
-157,,,Abbasid 3TC objective title.,,,Age Up: economic wing
-158,,,Abbasid 3TC objective title.,,,Assign 4 food | 7 wood | 6 stone
-159,,,Abbasid 3TC objective title.,,,Rally to stone
-160,,,Abbasid 3TC objective title.,,,Collect at least 150 gold
-161,,,Abbasid 3TC objective title.,,,[HINT] Move gold vils to stone after collecting 150
-162,,,Abbasid 3TC objective title.,,,Queue fresh foodstuffs for research
-163,,,Abbasid 3TC objective title.,,,Queue fertile crescent for research
-164,,,Abbasid 3TC objective title.,,,Assign 4 food | 7 wood | 7 stone
-165,,,Abbasid 3TC objective title.,,,Rally to wood
-166,,,Abbasid 3TC objective title.,,,[HINT] Build TC with stone vils
-167,,,Abbasid 3TC objective title.,,,Build town center
-168,,,Abbasid 3TC objective title.,,,Assign 4 food | 11 wood | 7 stone
-169,,,Abbasid 3TC objective title.,,,Rally to food
-170,,,Abbasid 3TC objective title.,,,Assign 6 food | 11 wood | 9 stone
-171,,,Abbasid 3TC objective title.,,,Build archery range
-172,,,Abbasid 3TC objective title.,,,[HINT] Remacro for production/upgrades after starting construction of final TC
+143,,,Raw authored build-order text.,,,%1TEXT%
+144,,,Generated build-order step title.,,,Step #%1COUNT%
+145,,,Build-order hint title.,,,[HINT] %1TEXT%
+146,,,Optional check title wrapper.,,,[Optional] %1TEXT%
+147,,,Unavailable check title.,,,Build-order check unavailable
+148,,,Build-order resource name.,,,food
+149,,,Build-order resource name.,,,gold
+150,,,Build-order resource name.,,,wood
+151,,,Build-order resource name.,,,stone
+152,,,Resource allocation fragment.,,,%1COUNT% %2RESOURCE%
+153,,,Resource allocation separator.,,,%1TEXT% | %2TEXT%
+154,,,Alternative target separator.,,,%1TEXT% or %2TEXT%
+155,,,Resource collection check.,,,Collect at least %1COUNT% %2RESOURCE%
+156,,,Villager assignment check.,,,Assign %1ALLOCATIONS%
+157,,,No-collection villager check.,,,No %1RESOURCE% villagers
+158,,,Rally-point check.,,,Rally to %1RESOURCE%
+159,,,Single-building construction check.,,,Build %1TARGET%
+160,,,Counted-building construction check.,,,Build %1COUNT% %2TARGET%
+161,,,Age-up check.,,,Age Up: %1TARGET%
+162,,,Research check.,,,Research %1UPGRADE%
+163,,,Queued research check.,,,Queue %1UPGRADE% for research
+164,,,Production check.,,,Produce %1COUNT% %2UNIT%
+165,,,Queued production check.,,,Queue %1COUNT% %2UNIT%
+166,,,Constant production check.,,,Constantly produce %1UNIT%
+167,,,Active-unit count check.,,,Have %1COUNT% active %2UNIT%
