@@ -5,7 +5,7 @@
 -- Import Utility Scripts
 import("cardinal.scar")							-- Contains sfx references, UI templates, and Civ/Age helper functions
 import("ScarUtil.scar")							-- Contains game helper functions
-import("generated/build_orders.scar")
+import("build_orders/datastore.scar")
 import("build_orders/objective_engine.scar")
 import("build_orders/check_support.scar")
 import("build_orders/checks/rallypoint.scar")
@@ -15,6 +15,7 @@ import("build_orders/checks/units.scar")
 import("build_orders/checks/produce.scar")
 import("build_orders/checks/age_up.scar")
 import("build_orders/checks/built.scar")
+import("build_orders/checks/buildings.scar")
 import("build_orders/checks/vils.scar")
 
 -- Import Gameplay Systems
@@ -49,8 +50,15 @@ _mod = {
 	selectedBuildOrderID = nil,
 	simspeedEnabled = true,
 	simspeedStarted = false,
-	buildOrderDisabled = false,
-	startupAlertOpen = false,
+	startupStarted = false,
+	startupActive = false,
+	startupAwaitingChoice = false,
+	startupFallbackOpen = false,
+	startupScreen = "hidden",
+	startupPriorSelectionID = nil,
+	startupMessage = nil,
+	compatibleBuildOrderIDs = {},
+	buildOrderStarted = false,
 }
 
 NORMAL_SIM_RATE = 8
@@ -93,22 +101,6 @@ function Mod_GetOptionEnumKey(option)
 	return nil
 end
 
-function Mod_ReadSelectedBuildOrder(settings)
-	if type(settings) ~= "table" then
-		return nil
-	end
-
-	local enumKey = Mod_GetOptionEnumKey(settings.option_build_order)
-	if enumKey == nil or enumKey == "build_order_none" then
-		return nil
-	end
-	if type(enumKey) ~= "string" then
-		return nil
-	end
-
-	return string.gsub(enumKey, "^build_order_", "")
-end
-
 function Mod_SetupSettings(options)
 	if type(options) ~= "table" or type(options.section_macro_trainer_settings) ~= "table" then
 		return
@@ -128,7 +120,6 @@ function Mod_SetupSettings(options)
 	if settings.option_enable_simspeed_cycle ~= nil then
 		_mod.simspeedEnabled = settings.option_enable_simspeed_cycle
 	end
-	_mod.selectedBuildOrderID = Mod_ReadSelectedBuildOrder(settings)
 end
 
 -- Called before initialization, preceding other module OnInit functions
@@ -148,7 +139,7 @@ end
 
 -- Called after initialization is done when game is fading up from black
 function Mod_Start()
-	BuildOrderStartup_Start()
+	BuildOrderDatastore_Load(BuildOrderStartup_Start)
 end
 
 function Mod_StartSimspeedCycle()
@@ -213,6 +204,11 @@ function Mod_StartPhase(title, phaseDuration, simRate, nextRule)
 	Rule_AddOneShot(nextRule, phaseDuration)
 end
 
+import("build_orders/editor_discovery.scar")
+import("build_orders/editor_model.scar")
+import("build_orders/editor_schema.scar")
+import("build_orders/editor_ui.scar")
+import("build_orders/editor.scar")
 import("build_orders/startup.scar")
 
 -- Called when Core_SetPlayerDefeated() is invoked. Signals that a player has been eliminated from play due to defeat.
@@ -224,7 +220,9 @@ end
 
 -- When a victory condition is met, a module must call Core_OnGameOver() in order to invoke this delegate and notify all modules that the match is about to end. Generally used for clean up (removal of rules, objectives, and UI elements specific to the module).
 function Mod_OnGameOver()
+	BuildOrderDatastore_Stop()
 	BuildOrderStartup_Stop()
+	BuildOrderEditor_Stop()
 	BuildOrder_Stop()
 	Mod_StopSimspeedCycle()
 end

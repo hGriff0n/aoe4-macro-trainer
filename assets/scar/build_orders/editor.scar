@@ -1,0 +1,515 @@
+BUILD_ORDER_EDITOR_STATE = {
+	draft = nil,
+	original_id = nil,
+	discovery = nil,
+	errors = {},
+	on_complete = nil,
+	expanded = {},
+}
+
+function BuildOrderEditor_Clear()
+	BuildOrderDiscovery_Clear()
+	BUILD_ORDER_EDITOR_STATE.draft = nil
+	BUILD_ORDER_EDITOR_STATE.original_id = nil
+	BUILD_ORDER_EDITOR_STATE.discovery = nil
+	BUILD_ORDER_EDITOR_STATE.errors = {}
+	BUILD_ORDER_EDITOR_STATE.on_complete = nil
+	BUILD_ORDER_EDITOR_STATE.expanded = {}
+end
+
+function BuildOrderEditor_Callbacks()
+	return {
+		copy = "BuildOrderEditor_CreateCopy",
+		save = "BuildOrderEditor_Save",
+		cancel = "BuildOrderEditor_Cancel",
+		field_change = "BuildOrderEditor_FieldChange",
+		add = "BuildOrderEditor_Add",
+		add_check = "BuildOrderEditor_AddCheck",
+		delete = "BuildOrderEditor_Delete",
+		expand = "BuildOrderEditor_Expand",
+		collapse = "BuildOrderEditor_Collapse",
+		reorder = "BuildOrderEditor_Reorder",
+	}
+end
+
+function BuildOrderEditor_BuildViewData()
+	local draft = BUILD_ORDER_EDITOR_STATE.draft or {}
+	return {
+		draft = draft,
+		errors = BUILD_ORDER_EDITOR_STATE.errors,
+		discovery = BUILD_ORDER_EDITOR_STATE.discovery,
+		expanded = BUILD_ORDER_EDITOR_STATE.expanded,
+		current_civ = draft.civ or "",
+		save_enabled = #BUILD_ORDER_EDITOR_STATE.errors == 0,
+	}
+end
+
+function BuildOrderEditor_Present()
+	print("BuildOrderTrace: editor present enter")
+	local shown = BuildOrderEditorUI_ShowEditor(BuildOrderEditor_BuildViewData())
+	print("BuildOrderTrace: editor present result=" .. tostring(shown))
+	return shown
+end
+
+function BuildOrderEditor_Refresh()
+	print("BuildOrderTrace: editor refresh enter")
+	if type(BUILD_ORDER_EDITOR_STATE.draft) ~= "table" then
+		return false
+	end
+	BuildOrderEditor_InferAges(BUILD_ORDER_EDITOR_STATE.draft)
+	BUILD_ORDER_EDITOR_STATE.errors = BuildOrderEditor_Validate(
+		BUILD_ORDER_EDITOR_STATE.draft,
+		BUILD_ORDER_EDITOR_STATE.discovery
+	)
+	local refreshed = BuildOrderEditor_Present()
+	print("BuildOrderTrace: editor refresh result=" .. tostring(refreshed))
+	return refreshed
+end
+
+function BuildOrderEditor_OpenDraft(draft, originalID, discovery, onComplete)
+	print("BuildOrderTrace: editor open-draft enter")
+	BUILD_ORDER_EDITOR_STATE.draft = draft
+	BUILD_ORDER_EDITOR_STATE.original_id = originalID
+	BUILD_ORDER_EDITOR_STATE.discovery = discovery
+	BUILD_ORDER_EDITOR_STATE.errors = {}
+	BUILD_ORDER_EDITOR_STATE.on_complete = onComplete
+	BUILD_ORDER_EDITOR_STATE.expanded = {}
+	local opened = BuildOrderEditor_Refresh()
+	print("BuildOrderTrace: editor open-draft result=" .. tostring(opened))
+	return opened
+end
+
+function BuildOrderEditor_OpenCreate(onComplete)
+	print("BuildOrderTrace: editor open-create enter")
+	BuildOrderEditor_Clear()
+	local discovery = BuildOrderDiscovery_Collect(Game_GetLocalPlayer())
+	print("BuildOrderTrace: editor discovery complete")
+	local civ = ""
+	if type(discovery) == "table" and type(discovery.civ) == "string" then
+		civ = discovery.civ
+	end
+	local opened = BuildOrderEditor_OpenDraft(
+		BuildOrderEditor_NewDraft(civ),
+		nil,
+		discovery,
+		onComplete
+	)
+	print("BuildOrderTrace: editor open-create result=" .. tostring(opened))
+	return opened
+end
+
+function BuildOrderEditor_OpenEdit(originalID, onComplete)
+	BuildOrderEditor_Clear()
+	local discovery = BuildOrderDiscovery_Collect(Game_GetLocalPlayer())
+	local order = BUILD_ORDER_CATALOG[originalID]
+	if type(order) ~= "table" then
+		BuildOrderEditor_Clear()
+		return false
+	end
+	return BuildOrderEditor_OpenDraft(
+		BuildOrderEditor_EditDraft(order),
+		originalID,
+		discovery,
+		onComplete
+	)
+end
+
+function BuildOrderEditor_CopyTitle(draft)
+	local baseTitle = draft.title or ""
+	local copyNumber = 1
+	while true do
+		local suffix = " (copy)"
+		if copyNumber > 1 then
+			suffix = " (copy " .. copyNumber .. ")"
+		end
+		local candidate = baseTitle .. suffix
+		local candidateID = BuildOrderEditor_MakeID(draft.civ or "", candidate)
+		if BUILD_ORDER_CATALOG[candidateID] == nil then
+			return candidate
+		end
+		copyNumber = copyNumber + 1
+	end
+end
+
+function BuildOrderEditor_CreateCopy()
+	if type(BUILD_ORDER_EDITOR_STATE.draft) ~= "table" then
+		return false
+	end
+	local copy = BuildOrderEditor_DeepCopy(BUILD_ORDER_EDITOR_STATE.draft)
+	copy.title = BuildOrderEditor_CopyTitle(copy)
+	copy.original_id = nil
+	copy.original_civ = nil
+	copy.original_title = nil
+	BUILD_ORDER_EDITOR_STATE.draft = copy
+	BUILD_ORDER_EDITOR_STATE.original_id = nil
+	return BuildOrderEditor_Refresh()
+end
+
+function BuildOrderEditor_SplitPath(path)
+	local parts = {}
+	if type(path) ~= "string" or path == "" then
+		return parts
+	end
+	for part in string.gmatch(path, "[^%.]+") do
+		local key = tonumber(part)
+		if key == nil then
+			key = part
+		end
+		table.insert(parts, key)
+	end
+	return parts
+end
+
+function BuildOrderEditor_GetPath(root, path)
+	local current = root
+	for _, key in ipairs(BuildOrderEditor_SplitPath(path)) do
+		if type(current) ~= "table" then
+			return nil
+		end
+		current = current[key]
+	end
+	return current
+end
+
+function BuildOrderEditor_GetParent(root, path)
+	local parts = BuildOrderEditor_SplitPath(path)
+	if #parts == 0 then
+		return nil, nil
+	end
+	local parent = root
+	for index = 1, #parts - 1 do
+		if type(parent) ~= "table" then
+			return nil, nil
+		end
+		parent = parent[parts[index]]
+	end
+	if type(parent) ~= "table" then
+		return nil, nil
+	end
+	return parent, parts[#parts]
+end
+
+function BuildOrderEditor_SetPath(root, path, value)
+	local parent, key = BuildOrderEditor_GetParent(root, path)
+	if parent == nil or key == nil then
+		return false
+	end
+	parent[key] = BuildOrderEditor_DeepCopy(value)
+	return true
+end
+
+function BuildOrderEditor_NewCheck(kind)
+	kind = kind or "vils"
+	local check = {
+		kind = kind,
+		optional = false,
+		payload = {},
+	}
+	if kind == "vils" then
+		check.payload.no_collect = {}
+	elseif kind == "built" then
+		check.payload.alternatives = {}
+		check.payload.count = 1
+	elseif kind == "age_up" then
+		check.payload.alternatives = {}
+	elseif kind == "upgrades" then
+		check.payload.id = ""
+		check.payload.queued = false
+	elseif kind == "produce" then
+		check.payload.family = { ids = {} }
+		check.payload.count = 1
+		check.payload.constant = false
+		check.payload.queued = false
+	elseif kind == "buildings" then
+		check.payload.id = ""
+		check.payload.count = 1
+	elseif kind == "units" then
+		check.payload.family = { ids = {} }
+		check.payload.count = 1
+	elseif kind == "hints" then
+		check.optional = true
+		check.payload.text = ""
+	elseif kind == "rallypoint" then
+		check.payload.resource = ""
+	end
+	return check
+end
+
+function BuildOrderEditor_AddValue(path, value)
+	local target = BuildOrderEditor_GetPath(BUILD_ORDER_EDITOR_STATE.draft, path)
+	if type(target) ~= "table" then
+		if target == nil then
+			return BuildOrderEditor_SetPath(
+				BUILD_ORDER_EDITOR_STATE.draft,
+				path,
+				value or ""
+			)
+		end
+		return false
+	end
+
+	local parts = BuildOrderEditor_SplitPath(path)
+	local key = parts[#parts]
+	local item = value
+	if key == "steps" and type(item) ~= "table" then
+		item = { title = "New step", checks = {} }
+	elseif key == "checks" then
+		if type(item) == "string" then
+			item = BuildOrderEditor_NewCheck(item)
+		elseif type(item) ~= "table" then
+			item = BuildOrderEditor_NewCheck("vils")
+		end
+	elseif item == nil then
+		item = ""
+	end
+	table.insert(target, BuildOrderEditor_DeepCopy(item))
+	return true
+end
+
+function BuildOrderEditor_DeleteValue(path)
+	local parent, key = BuildOrderEditor_GetParent(
+		BUILD_ORDER_EDITOR_STATE.draft,
+		path
+	)
+	if parent == nil or parent[key] == nil then
+		return false
+	end
+	if type(key) == "number" then
+		table.remove(parent, key)
+	else
+		parent[key] = nil
+	end
+	return true
+end
+
+function BuildOrderEditor_ToggleValue(path, change)
+	if type(change) ~= "table" or type(change.id) ~= "string" then
+		return false
+	end
+	local values = BuildOrderEditor_GetPath(BUILD_ORDER_EDITOR_STATE.draft, path)
+	if values == nil and change.selected == true then
+		if not BuildOrderEditor_SetPath(BUILD_ORDER_EDITOR_STATE.draft, path, {}) then
+			return false
+		end
+		values = BuildOrderEditor_GetPath(BUILD_ORDER_EDITOR_STATE.draft, path)
+	end
+	if type(values) ~= "table" then
+		return false
+	end
+	local found = nil
+	for index, candidate in ipairs(values) do
+		if candidate == change.id then
+			found = index
+			break
+		end
+	end
+	if change.selected == true and found == nil then
+		table.insert(values, change.id)
+	elseif change.selected ~= true and found ~= nil then
+		table.remove(values, found)
+	end
+	return true
+end
+
+function BuildOrderEditor_HandleCommand(action, path, value)
+	if type(BUILD_ORDER_EDITOR_STATE.draft) ~= "table"
+		or type(action) ~= "string" or type(path) ~= "string" then
+		return false
+	end
+
+	local changed = false
+	if action == "field_change" or action == "set" then
+		changed = BuildOrderEditor_SetPath(
+			BUILD_ORDER_EDITOR_STATE.draft,
+			path,
+			value
+		)
+	elseif action == "add" then
+		changed = BuildOrderEditor_AddValue(path, value)
+	elseif action == "delete" then
+		changed = BuildOrderEditor_DeleteValue(path)
+	elseif action == "toggle" then
+		changed = BuildOrderEditor_ToggleValue(path, value)
+	elseif action == "reorder" and type(value) == "table" then
+		local list = BuildOrderEditor_GetPath(BUILD_ORDER_EDITOR_STATE.draft, path)
+		changed = BuildOrderEditor_Move(list, value.from_index, value.to_index)
+	elseif action == "expand" then
+		BUILD_ORDER_EDITOR_STATE.expanded[path] = true
+		changed = true
+	elseif action == "collapse" then
+		BUILD_ORDER_EDITOR_STATE.expanded[path] = false
+		changed = true
+	end
+
+	if not changed then
+		return false
+	end
+	return BuildOrderEditor_Refresh()
+end
+
+function BuildOrderEditor_ParameterPath(parameter)
+	if type(parameter) == "table" then
+		return parameter.path
+	end
+	if type(parameter) == "string" then
+		return parameter
+	end
+	return nil
+end
+
+function BuildOrderEditor_FieldChange(parameter)
+	if type(parameter) ~= "table" or type(parameter.path) ~= "string" then
+		return false
+	end
+	if type(parameter.id) == "string" and type(parameter.selected) == "boolean" then
+		return BuildOrderEditor_HandleCommand("toggle", parameter.path, {
+			id = parameter.id,
+			selected = parameter.selected,
+		})
+	end
+
+	local value = parameter.value
+	if type(parameter.selected_option) == "table" then
+		value = BuildOrderEditor_DeepCopy(parameter.selected_option.value)
+	elseif parameter.value_type == "positive_integer" then
+		value = tonumber(parameter.display_value)
+	elseif parameter.value_type == "string" then
+		value = parameter.display_value
+	end
+	return BuildOrderEditor_HandleCommand(
+		"field_change",
+		parameter.path,
+		value
+	)
+end
+
+function BuildOrderEditor_Add(parameter)
+	local path = BuildOrderEditor_ParameterPath(parameter)
+	if path == nil then
+		return false
+	end
+	local value = nil
+	if type(parameter) == "table" then
+		value = parameter.value
+		if value == nil and parameter.value_type == "positive_integer" then
+			value = 1
+		elseif value == nil and parameter.value_type == "boolean" then
+			value = false
+		end
+	end
+	return BuildOrderEditor_HandleCommand("add", path, value)
+end
+
+function BuildOrderEditor_AddCheck(parameter)
+	local path = BuildOrderEditor_ParameterPath(parameter)
+	if path == nil then
+		return false
+	end
+	local kind = nil
+	if type(parameter) == "table" then
+		if type(parameter.selected_option) == "table" then
+			kind = parameter.selected_option.value or parameter.selected_option.id
+		elseif type(parameter.value) == "string" then
+			kind = parameter.value
+		end
+	end
+	return BuildOrderEditor_HandleCommand("add", path, kind)
+end
+
+function BuildOrderEditor_Delete(parameter)
+	local path = BuildOrderEditor_ParameterPath(parameter)
+	if path == nil then
+		return false
+	end
+	return BuildOrderEditor_HandleCommand("delete", path, nil)
+end
+
+function BuildOrderEditor_Expand(parameter)
+	local path = BuildOrderEditor_ParameterPath(parameter)
+	if path == nil then
+		return false
+	end
+	return BuildOrderEditor_HandleCommand("expand", path, nil)
+end
+
+function BuildOrderEditor_Collapse(parameter)
+	local path = BuildOrderEditor_ParameterPath(parameter)
+	if path == nil then
+		return false
+	end
+	return BuildOrderEditor_HandleCommand("collapse", path, nil)
+end
+
+function BuildOrderEditor_Reorder(parentPath, fromIndex, toIndex)
+	return BuildOrderEditor_HandleCommand("reorder", parentPath, {
+		from_index = fromIndex,
+		to_index = toIndex,
+	})
+end
+
+function BuildOrderEditor_AddSaveError(message)
+	BUILD_ORDER_EDITOR_STATE.errors = {
+		{
+			path = "save",
+			message = BuildOrderEditor_LocalizeError(message or "persistence_error"),
+			localized = true,
+		},
+	}
+	BuildOrderEditor_Present()
+end
+
+function BuildOrderEditor_Finish(savedID)
+	local onComplete = BUILD_ORDER_EDITOR_STATE.on_complete
+	BuildOrderEditor_Clear()
+	BuildOrderEditorUI_Hide()
+	if type(onComplete) == "function" then
+		onComplete(savedID)
+	end
+end
+
+function BuildOrderEditor_Save()
+	if type(BUILD_ORDER_EDITOR_STATE.draft) ~= "table" then
+		return false
+	end
+	BuildOrderEditor_Refresh()
+	if #BUILD_ORDER_EDITOR_STATE.errors > 0 then
+		return false
+	end
+
+	local newID, order = BuildOrderEditor_ToRuntime(BUILD_ORDER_EDITOR_STATE.draft)
+	if newID == nil or type(order) ~= "table" then
+		BuildOrderEditor_AddSaveError("conversion_error")
+		return false
+	end
+
+	local callOK, applied, applyError = pcall(
+		BuildOrderDatastore_Apply,
+		BUILD_ORDER_EDITOR_STATE.original_id,
+		newID,
+		order
+	)
+	if not callOK then
+		BuildOrderEditor_AddSaveError(applied)
+		return false
+	end
+	if not applied then
+		BuildOrderEditor_AddSaveError(applyError)
+		return false
+	end
+
+	BuildOrderEditor_Finish(newID)
+	return true
+end
+
+function BuildOrderEditor_Cancel()
+	if type(BUILD_ORDER_EDITOR_STATE.draft) ~= "table" then
+		return false
+	end
+	BuildOrderEditor_Finish(nil)
+	return true
+end
+
+function BuildOrderEditor_Stop()
+	BuildOrderEditor_Clear()
+	BuildOrderEditorUI_Stop()
+end

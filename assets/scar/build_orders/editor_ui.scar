@@ -1,0 +1,1888 @@
+BUILD_ORDER_EDITOR_UI_NAME = "BuildOrderEditorUI"
+
+-- Diagnostic spike: keep the known-failing editor XAML below for comparison.
+-- This presenter grows the proven empty shell by one engine-sensitive feature
+-- at a time and deliberately avoids the original templates and editor fields.
+BUILD_ORDER_EDITOR_UI_PROBE_XAML = [[
+<Grid x:Name="BuildOrderWorkspaceProbe"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:esActions="clr-namespace:WPFGUI.Shared.Actions;assembly=EngineUI"
+      Width="545"
+      Height="300"
+      HorizontalAlignment="Center"
+      VerticalAlignment="Center"
+      Background="#F21B2638">
+	<Grid.Resources>
+		<DataTemplate x:Key="BuildOrderCardTemplate">
+			<TextBlock Foreground="#FFF4F1E8"
+			           FontSize="16"
+			           Text="{Binding [label]}" />
+		</DataTemplate>
+	</Grid.Resources>
+	<Border x:Name="BuildOrderSelectorFrame"
+	        Background="#F21B2638"
+	        BorderBrush="#FFC39A5A"
+	        BorderThickness="2">
+	<Border x:Name="BuildOrderSelectorInnerFrame"
+	        BorderBrush="#FF5E4A2A"
+	        BorderThickness="1">
+	<Grid x:Name="BuildOrderSelectorPane" Margin="28">
+		<Grid.RowDefinitions>
+			<RowDefinition Height="Auto" />
+			<RowDefinition Height="*" />
+			<RowDefinition Height="Auto" />
+		</Grid.RowDefinitions>
+		<TextBlock x:Name="BuildOrderSelectorTitle"
+		           Grid.Row="0"
+		           Margin="0,0,0,24"
+		           FontSize="24"
+		           FontWeight="Bold"
+		           Foreground="#FFF2E2B6"
+		           Text="Choose a Build Order" />
+		<StackPanel Grid.Row="1">
+			<Grid>
+				<ListBox x:Name="BuildOrderSelectorList"
+				         Background="Transparent"
+				         Foreground="#FFF4F1E8"
+				         BorderThickness="0"
+				         OverridesDefaultStyle="True"
+				         ItemTemplate="{StaticResource BuildOrderCardTemplate}"
+				         ItemsSource="{Binding [selector_options]}"
+				         SelectedIndex="{Binding [selected_index], Mode=OneWay}"
+				         ScrollViewer.VerticalScrollBarVisibility="Auto">
+					<ListBox.Template>
+						<ControlTemplate TargetType="{x:Type ListBox}">
+							<Border x:Name="BuildOrderListChrome"
+							        Background="Transparent"
+							        BorderThickness="0">
+								<ScrollViewer VerticalScrollBarVisibility="Auto">
+									<ItemsPresenter />
+								</ScrollViewer>
+							</Border>
+						</ControlTemplate>
+					</ListBox.Template>
+					<ListBox.ItemContainerStyle>
+						<Style TargetType="{x:Type ListBoxItem}">
+							<Setter Property="OverridesDefaultStyle" Value="True" />
+							<Setter Property="Template">
+								<Setter.Value>
+									<ControlTemplate TargetType="{x:Type ListBoxItem}">
+										<Border x:Name="BuildOrderCardChrome"
+										        Margin="0,0,0,4"
+										        Padding="12,10"
+										        Background="#FF182235"
+										        BorderBrush="#FF5E4A2A"
+										        BorderThickness="1">
+											<ContentPresenter Content="{TemplateBinding Content}"
+											                  ContentTemplate="{TemplateBinding ContentTemplate}" />
+										</Border>
+										<ControlTemplate.Triggers>
+											<Trigger Property="IsMouseOver" Value="True">
+												<Setter TargetName="BuildOrderCardChrome"
+												        Property="BorderBrush"
+												        Value="#FFC39A5A" />
+											</Trigger>
+											<Trigger Property="IsSelected" Value="True">
+												<Setter TargetName="BuildOrderCardChrome"
+												        Property="Background"
+												        Value="#FF176B8A" />
+												<Setter TargetName="BuildOrderCardChrome"
+												        Property="BorderBrush"
+												        Value="#FFF0D08A" />
+											</Trigger>
+										</ControlTemplate.Triggers>
+									</ControlTemplate>
+								</Setter.Value>
+							</Setter>
+						</Style>
+					</ListBox.ItemContainerStyle>
+				</ListBox>
+				<TextBlock x:Name="BuildOrderSelectorEmptyMessage"
+				           Foreground="#FFF4F1E8"
+				           IsHitTestVisible="False"
+				           Text="{Binding [empty_message]}"
+				           TextWrapping="Wrap" />
+			</Grid>
+		</StackPanel>
+		<StackPanel Grid.Row="2" Orientation="Horizontal">
+		<Button x:Name="BuildOrderSelectorStartGame"
+		        MinWidth="110"
+		        Padding="12,7"
+		        HorizontalAlignment="Left"
+		        Background="#FFD7A84A"
+		        Foreground="#FF172033"
+		        BorderBrush="#FFF0D08A"
+		        BorderThickness="1"
+		        FontWeight="Bold"
+		        OverridesDefaultStyle="True"
+		        Command="{Binding [commands][start_game]}"
+		        CommandParameter="{Binding SelectedItem[id], ElementName=BuildOrderSelectorList}"
+		        Content="Start Game">
+			<Button.Template>
+				<ControlTemplate TargetType="{x:Type Button}">
+					<Border x:Name="BuildOrderStartGameChrome"
+					        Padding="{TemplateBinding Padding}"
+					        Background="{TemplateBinding Background}"
+					        BorderBrush="{TemplateBinding BorderBrush}"
+					        BorderThickness="{TemplateBinding BorderThickness}">
+						<ContentPresenter Content="{TemplateBinding Content}"
+						                  HorizontalAlignment="Center"
+						                  VerticalAlignment="Center" />
+					</Border>
+				</ControlTemplate>
+			</Button.Template>
+		</Button>
+		<Button x:Name="BuildOrderSelectorContinueWithout"
+		        MinWidth="180"
+		        Margin="12,0,0,0"
+		        Padding="12,7"
+		        Background="#FF182235"
+		        Foreground="#FFF2E2B6"
+		        BorderBrush="#FFC39A5A"
+		        BorderThickness="1"
+		        FontWeight="Bold"
+		        OverridesDefaultStyle="True"
+		        Command="{Binding [commands][continue_without]}"
+		        Content="Continue Without Build Order">
+			<Button.Template>
+				<ControlTemplate TargetType="{x:Type Button}">
+					<Border Padding="{TemplateBinding Padding}"
+					        Background="{TemplateBinding Background}"
+					        BorderBrush="{TemplateBinding BorderBrush}"
+					        BorderThickness="{TemplateBinding BorderThickness}">
+						<ContentPresenter Content="{TemplateBinding Content}"
+						                  HorizontalAlignment="Center"
+						                  VerticalAlignment="Center" />
+					</Border>
+				</ControlTemplate>
+			</Button.Template>
+		</Button>
+		</StackPanel>
+	</Grid>
+	</Border>
+	</Border>
+</Grid>
+]]
+
+BUILD_ORDER_EDITOR_UI_RESOURCES = { "food", "wood", "gold", "stone" }
+BUILD_ORDER_EDITOR_UI_LIVE_LISTS = {
+	live_building = "buildings",
+	live_technology = "technologies",
+	live_age_up = "age_ups",
+	live_family = "families",
+}
+
+-- Validation paths are persistence/schema keys, not player-facing labels. Keep
+-- their presentation mapping explicit so a new internal segment cannot leak
+-- into the editor or inherit an unrelated ancestor label.
+BUILD_ORDER_EDITOR_ERROR_FIELD_LABEL_KEYS = {
+	age_up = "age_up_choice",
+	alternatives = "choices",
+	assignments = "assignments",
+	building = "building",
+	buildings = "buildings",
+	builders = "builders",
+	checks = "checks",
+	choice = "choice",
+	choices = "choices",
+	city = "civilization",
+	civ = "civilization",
+	civilization = "civilization",
+	constant = "constant_production",
+	count = "count",
+	entering_age = "entering_age",
+	family = "unit_family",
+	food = "food",
+	gold = "gold",
+	hint = "hint",
+	id = "choice",
+	inferred_age = "entering_age",
+	kind = "check_kind",
+	location = "location",
+	no_collect = "no_collect",
+	optional = "optional",
+	payload = "check_details",
+	queued = "complete_when_queued",
+	rallypoint = "rallypoint",
+	resource = "resource",
+	resources = "stockpile",
+	steps = "steps",
+	stone = "stone",
+	technology = "technology",
+	text = "text",
+	title = "title",
+	unit_family = "unit_family",
+	vils = "builders",
+	wood = "wood",
+}
+
+BUILD_ORDER_EDITOR_UI_STATE = {
+	created = false,
+	screen = "hidden",
+	model = {},
+	view_model = nil,
+	callbacks = {},
+	commands = nil,
+	draggable_paths = {},
+	drag_source_path = nil,
+	drag_target_path = nil,
+	drag_target_active = false,
+}
+
+BUILD_ORDER_EDITOR_UI_XAML = [[
+<Grid x:Name="BuildOrderEditorRoot"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:esActions="clr-namespace:WPFGUI.Shared.Actions;assembly=EngineUI"
+      xmlns:pages="clr-namespace:WPFGUI.HUD.Pages;assembly=EngineUI"
+      Width="760"
+      MaxHeight="920"
+      Margin="24"
+      HorizontalAlignment="Center"
+      VerticalAlignment="Center"
+      Visibility="{Binding [root_visibility]}">
+	<Grid.Resources>
+		<DataTemplate x:Key="BuildOrderErrorTemplate">
+			<TextBlock Margin="0,2,0,0"
+			           Foreground="#FFFF7777"
+			           Text="{Binding}"
+			           TextWrapping="Wrap" />
+		</DataTemplate>
+
+		<DataTemplate x:Key="BuildOrderValidationMessageTemplate">
+			<StackPanel Margin="0,2,0,0" Orientation="Horizontal">
+				<TextBlock Foreground="#FFFF7777" Text="{Binding [label]}" />
+				<TextBlock Margin="5,0,0,0"
+				           Foreground="#FFFF7777"
+				           Text="{Binding [message]}"
+				           TextWrapping="Wrap" />
+			</StackPanel>
+		</DataTemplate>
+
+		<DataTemplate x:Key="BuildOrderLiveOptionTemplate">
+			<StackPanel Orientation="Horizontal">
+				<Image Width="28"
+				       Height="28"
+				       Margin="0,0,8,0"
+				       Source="{Binding [icon]}"
+				       Stretch="Uniform" />
+				<StackPanel>
+					<TextBlock FontWeight="Bold" Text="{Binding [label]}" />
+					<TextBlock FontSize="11"
+					           Foreground="#FFB8B8B8"
+					           Text="{Binding [id_fallback]}"
+					           TextWrapping="Wrap" />
+				</StackPanel>
+			</StackPanel>
+		</DataTemplate>
+
+		<DataTemplate x:Key="BuildOrderObjectCardTemplate">
+			<Border Margin="0,4,0,0"
+			        Padding="7"
+			        Background="#CC242424"
+			        BorderBrush="#FF707070"
+			        BorderThickness="1">
+				<Expander IsExpanded="{Binding [expanded], Mode=OneWay}">
+					<Expander.Header>
+						<DockPanel LastChildFill="True">
+							<Button DockPanel.Dock="Right"
+							        Margin="5,0,0,0"
+							        Command="{Binding [collapse_command]}"
+							        CommandParameter="{Binding}"
+							        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:53" />
+							<Button DockPanel.Dock="Right"
+							        Margin="5,0,0,0"
+							        Command="{Binding [expand_command]}"
+							        CommandParameter="{Binding}"
+							        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:54" />
+							<TextBlock VerticalAlignment="Center"
+							           FontWeight="Bold"
+							           Text="{Binding [label]}" />
+						</DockPanel>
+					</Expander.Header>
+					<ItemsControl Margin="0,4,0,0"
+					              ItemsSource="{Binding [fields]}"
+					              ItemTemplate="{DynamicResource BuildOrderFieldTemplate}" />
+				</Expander>
+			</Border>
+		</DataTemplate>
+
+		<DataTemplate x:Key="BuildOrderListItemTemplate">
+			<Border Margin="0,3,0,0"
+			        Padding="6"
+			        BorderBrush="#FF606060"
+			        BorderThickness="1">
+				<StackPanel>
+					<ContentControl Content="{Binding}"
+					                ContentTemplate="{DynamicResource BuildOrderFieldTemplate}" />
+					<Button Margin="0,4,0,0"
+					        HorizontalAlignment="Left"
+					        Command="{Binding [delete_command]}"
+					        CommandParameter="{Binding}"
+					        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:55" />
+				</StackPanel>
+			</Border>
+		</DataTemplate>
+
+		<DataTemplate x:Key="BuildOrderFieldTemplate">
+			<Border Margin="0,4,0,0"
+			        Padding="6"
+			        BorderBrush="#FF555555"
+			        BorderThickness="0,0,0,1">
+				<StackPanel>
+					<TextBlock FontWeight="Bold"
+					           Visibility="{Binding [inline_label_visibility]}"
+					           Text="{Binding [label]}" />
+					<Button Margin="0,3,0,0"
+					        HorizontalAlignment="Left"
+					        Visibility="{Binding [add_visibility]}"
+					        Command="{Binding [add_command]}"
+					        CommandParameter="{Binding}"
+					        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:56" />
+					<TextBox Visibility="{Binding [text_visibility]}"
+					         Text="{Binding [display_value], Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
+						<TextBox.Triggers>
+							<EventTrigger RoutedEvent="UIElement.LostKeyboardFocus">
+								<esActions:CallCommandAction Command="{Binding [field_change_command]}"
+								                             CommandParameter="{Binding}" />
+							</EventTrigger>
+						</TextBox.Triggers>
+					</TextBox>
+					<CheckBox Visibility="{Binding [boolean_visibility]}"
+					          IsChecked="{Binding [value], Mode=TwoWay}"
+					          Command="{Binding [field_change_command]}"
+					          CommandParameter="{Binding}"
+					          Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:57" />
+					<ComboBox Visibility="{Binding [enum_visibility]}"
+					          ItemsSource="{Binding [options]}"
+					          ItemTemplate="{StaticResource BuildOrderLiveOptionTemplate}"
+					          SelectedItem="{Binding [selected_option], Mode=TwoWay}">
+						<ComboBox.Triggers>
+							<EventTrigger RoutedEvent="Selector.SelectionChanged">
+								<esActions:CallCommandAction Command="{Binding [field_change_command]}"
+								                             CommandParameter="{Binding}" />
+							</EventTrigger>
+						</ComboBox.Triggers>
+					</ComboBox>
+					<ComboBox Visibility="{Binding [live_visibility]}"
+					          ItemsSource="{Binding [options]}"
+					          ItemTemplate="{StaticResource BuildOrderLiveOptionTemplate}"
+					          SelectedItem="{Binding [selected_option], Mode=TwoWay}">
+						<ComboBox.Triggers>
+							<EventTrigger RoutedEvent="Selector.SelectionChanged">
+								<esActions:CallCommandAction Command="{Binding [field_change_command]}"
+								                             CommandParameter="{Binding}" />
+							</EventTrigger>
+						</ComboBox.Triggers>
+					</ComboBox>
+					<TextBlock Margin="0,3,0,0"
+					           Foreground="#FFB8B8B8"
+					           Visibility="{Binding [empty_options_visibility]}"
+					           Text="$dfb5645698a84afb91cf7a2dfb0f4a4e:58" />
+					<ContentControl Visibility="{Binding [object_visibility]}"
+					                Content="{Binding}"
+					                ContentTemplate="{StaticResource BuildOrderObjectCardTemplate}" />
+					<StackPanel Visibility="{Binding [list_visibility]}">
+						<ItemsControl ItemsSource="{Binding [items]}"
+						              ItemTemplate="{StaticResource BuildOrderListItemTemplate}" />
+						<Button Margin="0,4,0,0"
+						        HorizontalAlignment="Left"
+						        Command="{Binding [add_command]}"
+						        CommandParameter="{Binding}"
+						        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:59" />
+					</StackPanel>
+					<ItemsControl ItemsSource="{Binding [errors]}"
+					              ItemTemplate="{StaticResource BuildOrderErrorTemplate}" />
+				</StackPanel>
+			</Border>
+		</DataTemplate>
+
+		<DataTemplate x:Key="BuildOrderResourceFieldsTemplate">
+			<Border Margin="0,5,0,0"
+			        Padding="8"
+			        BorderBrush="#FF777777"
+			        BorderThickness="1">
+				<StackPanel>
+					<TextBlock Margin="0,0,0,5"
+					           FontWeight="Bold"
+					           Text="{Binding [label]}" />
+					<TextBlock Margin="0,0,0,4"
+					           Foreground="#FFC8C8C8"
+					           Text="$dfb5645698a84afb91cf7a2dfb0f4a4e:61" />
+					<UniformGrid Columns="4">
+						<StackPanel Margin="2">
+							<Label Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:62" />
+							<TextBox Text="{Binding [food][display_value], Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
+								<TextBox.Triggers>
+									<EventTrigger RoutedEvent="UIElement.LostKeyboardFocus">
+										<esActions:CallCommandAction Command="{Binding [food][field_change_command]}"
+										                             CommandParameter="{Binding [food]}" />
+									</EventTrigger>
+								</TextBox.Triggers>
+							</TextBox>
+						</StackPanel>
+						<StackPanel Margin="2">
+							<Label Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:63" />
+							<TextBox Text="{Binding [wood][display_value], Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
+								<TextBox.Triggers>
+									<EventTrigger RoutedEvent="UIElement.LostKeyboardFocus">
+										<esActions:CallCommandAction Command="{Binding [wood][field_change_command]}"
+										                             CommandParameter="{Binding [wood]}" />
+									</EventTrigger>
+								</TextBox.Triggers>
+							</TextBox>
+						</StackPanel>
+						<StackPanel Margin="2">
+							<Label Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:64" />
+							<TextBox Text="{Binding [gold][display_value], Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
+								<TextBox.Triggers>
+									<EventTrigger RoutedEvent="UIElement.LostKeyboardFocus">
+										<esActions:CallCommandAction Command="{Binding [gold][field_change_command]}"
+										                             CommandParameter="{Binding [gold]}" />
+									</EventTrigger>
+								</TextBox.Triggers>
+							</TextBox>
+						</StackPanel>
+						<StackPanel Margin="2">
+							<Label Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:65" />
+							<TextBox Text="{Binding [stone][display_value], Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
+								<TextBox.Triggers>
+									<EventTrigger RoutedEvent="UIElement.LostKeyboardFocus">
+										<esActions:CallCommandAction Command="{Binding [stone][field_change_command]}"
+										                             CommandParameter="{Binding [stone]}" />
+									</EventTrigger>
+								</TextBox.Triggers>
+							</TextBox>
+						</StackPanel>
+					</UniformGrid>
+					<StackPanel Margin="0,7,0,0"
+					            Visibility="{Binding [no_collect_visibility]}">
+						<TextBlock FontWeight="Bold" Text="$dfb5645698a84afb91cf7a2dfb0f4a4e:66" />
+						<ItemsControl ItemsSource="{Binding [no_collect][options]}">
+							<ItemsControl.ItemTemplate>
+								<DataTemplate>
+									<CheckBox IsChecked="{Binding [selected], Mode=TwoWay}"
+									          Command="{Binding [field_change_command]}"
+									          CommandParameter="{Binding}"
+									          Content="{Binding [label]}" />
+								</DataTemplate>
+							</ItemsControl.ItemTemplate>
+						</ItemsControl>
+					</StackPanel>
+				</StackPanel>
+			</Border>
+		</DataTemplate>
+
+		<DataTemplate x:Key="BuildOrderCheckCardTemplate">
+			<Border Margin="0,5,0,0"
+			        Padding="8"
+			        Background="#EE292929"
+			        BorderBrush="#FF898989"
+			        BorderThickness="1">
+				<Border.Triggers>
+					<EventTrigger RoutedEvent="UIElement.MouseEnter">
+						<esActions:CallCommandAction Command="{Binding [drag_target_command]}"
+						                             CommandParameter="{Binding}" />
+					</EventTrigger>
+					<EventTrigger RoutedEvent="UIElement.MouseLeave">
+						<esActions:CallCommandAction Command="{Binding [drag_target_leave_command]}"
+						                             CommandParameter="{Binding}" />
+					</EventTrigger>
+				</Border.Triggers>
+				<DockPanel LastChildFill="True">
+					<Border x:Name="BuildOrderCheckDragHandle"
+					        DockPanel.Dock="Left"
+					        Margin="0,0,5,0"
+					        Padding="7,2"
+					        VerticalAlignment="Top"
+					        Background="#FF484848">
+						<Border.Triggers>
+							<EventTrigger RoutedEvent="UIElement.PreviewMouseLeftButtonDown">
+								<esActions:CallCommandAction Command="{Binding [drag_begin_command]}"
+								                             CommandParameter="{Binding}" />
+							</EventTrigger>
+						</Border.Triggers>
+						<TextBlock Text="$dfb5645698a84afb91cf7a2dfb0f4a4e:67" />
+					</Border>
+					<Expander IsExpanded="{Binding [expanded], Mode=OneWay}">
+					<Expander.Header>
+						<DockPanel LastChildFill="True">
+							<Button DockPanel.Dock="Right"
+							        Margin="5,0,0,0"
+							        Command="{Binding [delete_command]}"
+							        CommandParameter="{Binding}"
+							        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:68" />
+							<Button DockPanel.Dock="Right"
+							        Margin="5,0,0,0"
+							        Command="{Binding [move_down_command]}"
+							        CommandParameter="{Binding}"
+							        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:69"
+							        IsEnabled="{Binding [can_move_down]}" />
+							<Button DockPanel.Dock="Right"
+							        Margin="5,0,0,0"
+							        Command="{Binding [move_up_command]}"
+							        CommandParameter="{Binding}"
+							        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:70"
+							        IsEnabled="{Binding [can_move_up]}" />
+							<Button DockPanel.Dock="Right"
+							        Margin="5,0,0,0"
+							        Command="{Binding [collapse_command]}"
+							        CommandParameter="{Binding}"
+							        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:53" />
+							<Button DockPanel.Dock="Right"
+							        Margin="5,0,0,0"
+							        Command="{Binding [expand_command]}"
+							        CommandParameter="{Binding}"
+							        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:54" />
+							<TextBlock VerticalAlignment="Center"
+							           FontSize="15"
+							           FontWeight="Bold"
+							           Text="{Binding [label]}" />
+						</DockPanel>
+					</Expander.Header>
+					<StackPanel Margin="0,7,0,0">
+						<ItemsControl ItemsSource="{Binding [resource_groups]}"
+						              ItemTemplate="{StaticResource BuildOrderResourceFieldsTemplate}" />
+						<ItemsControl ItemsSource="{Binding [flat_fields]}"
+						              ItemTemplate="{StaticResource BuildOrderFieldTemplate}" />
+						<ItemsControl ItemsSource="{Binding [errors]}"
+						              ItemTemplate="{StaticResource BuildOrderErrorTemplate}" />
+					</StackPanel>
+					</Expander>
+				</DockPanel>
+			</Border>
+		</DataTemplate>
+
+		<DataTemplate x:Key="BuildOrderStepCardTemplate">
+			<Border Margin="0,8,0,0"
+			        Padding="10"
+			        Background="#F2383838"
+			        BorderBrush="#FFB8B8B8"
+			        BorderThickness="1">
+				<Border.Triggers>
+					<EventTrigger RoutedEvent="UIElement.MouseEnter">
+						<esActions:CallCommandAction Command="{Binding [drag_target_command]}"
+						                             CommandParameter="{Binding}" />
+					</EventTrigger>
+					<EventTrigger RoutedEvent="UIElement.MouseLeave">
+						<esActions:CallCommandAction Command="{Binding [drag_target_leave_command]}"
+						                             CommandParameter="{Binding}" />
+					</EventTrigger>
+				</Border.Triggers>
+				<DockPanel LastChildFill="True">
+					<Border x:Name="BuildOrderStepDragHandle"
+					        DockPanel.Dock="Left"
+					        Margin="0,0,5,0"
+					        Padding="7,2"
+					        VerticalAlignment="Top"
+					        Background="#FF545454">
+						<Border.Triggers>
+							<EventTrigger RoutedEvent="UIElement.PreviewMouseLeftButtonDown">
+								<esActions:CallCommandAction Command="{Binding [drag_begin_command]}"
+								                             CommandParameter="{Binding}" />
+							</EventTrigger>
+						</Border.Triggers>
+						<TextBlock Text="$dfb5645698a84afb91cf7a2dfb0f4a4e:71" />
+					</Border>
+					<Expander IsExpanded="{Binding [expanded], Mode=OneWay}">
+					<Expander.Header>
+						<DockPanel LastChildFill="True">
+							<Button DockPanel.Dock="Right"
+							        Margin="5,0,0,0"
+							        Command="{Binding [delete_command]}"
+							        CommandParameter="{Binding}"
+							        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:72" />
+							<Button DockPanel.Dock="Right"
+							        Margin="5,0,0,0"
+							        Command="{Binding [move_down_command]}"
+							        CommandParameter="{Binding}"
+							        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:69"
+							        IsEnabled="{Binding [can_move_down]}" />
+							<Button DockPanel.Dock="Right"
+							        Margin="5,0,0,0"
+							        Command="{Binding [move_up_command]}"
+							        CommandParameter="{Binding}"
+							        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:70"
+							        IsEnabled="{Binding [can_move_up]}" />
+							<Button DockPanel.Dock="Right"
+							        Margin="5,0,0,0"
+							        Command="{Binding [collapse_command]}"
+							        CommandParameter="{Binding}"
+							        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:53" />
+							<Button DockPanel.Dock="Right"
+							        Margin="5,0,0,0"
+							        Command="{Binding [expand_command]}"
+							        CommandParameter="{Binding}"
+							        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:54" />
+							<StackPanel>
+								<TextBlock FontSize="17"
+								           FontWeight="Bold"
+								           Text="{Binding [label]}" />
+								<StackPanel Orientation="Horizontal">
+									<TextBlock FontSize="11"
+									           Foreground="#FFC8C8C8"
+									           Text="{Binding [age_label]}" />
+									<TextBlock Margin="4,0,0,0"
+									           FontSize="11"
+									           Foreground="#FFC8C8C8"
+									           Text="{Binding [age_number]}" />
+								</StackPanel>
+							</StackPanel>
+						</DockPanel>
+					</Expander.Header>
+					<StackPanel Margin="0,8,0,0">
+						<ItemsControl ItemsSource="{Binding [flat_fields]}"
+						              ItemTemplate="{StaticResource BuildOrderFieldTemplate}" />
+						<ItemsControl ItemsSource="{Binding [checks]}"
+						              ItemTemplate="{StaticResource BuildOrderCheckCardTemplate}" />
+						<StackPanel x:Name="BuildOrderCheckKindChooser"
+						            Margin="0,7,0,0"
+						            DataContext="{Binding [check_add]}">
+							<TextBlock FontWeight="Bold"
+							           Text="$dfb5645698a84afb91cf7a2dfb0f4a4e:43" />
+							<ComboBox x:Name="BuildOrderCheckKindOptions"
+							          Margin="0,3,0,0"
+							          ItemsSource="{Binding [options]}"
+							          ItemTemplate="{StaticResource BuildOrderLiveOptionTemplate}"
+							          SelectedItem="{Binding [selected_option], Mode=TwoWay}" />
+							<Button x:Name="BuildOrderAddCheck"
+							        Margin="0,4,0,0"
+							        HorizontalAlignment="Left"
+							        Command="{Binding [add_check_command]}"
+							        CommandParameter="{Binding}"
+							        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:42" />
+						</StackPanel>
+						<ItemsControl ItemsSource="{Binding [errors]}"
+						              ItemTemplate="{StaticResource BuildOrderErrorTemplate}" />
+					</StackPanel>
+					</Expander>
+				</DockPanel>
+			</Border>
+		</DataTemplate>
+
+		<DataTemplate x:Key="BuildOrderSelectorRowTemplate">
+			<Border Margin="0,4,0,0"
+			        Padding="8"
+			        BorderBrush="#FF707070"
+			        BorderThickness="1">
+				<DockPanel LastChildFill="True">
+					<Button DockPanel.Dock="Right"
+					        Margin="5,0,0,0"
+					        Command="{Binding [edit_command]}"
+					        CommandParameter="{Binding}"
+					        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:34"
+					        IsEnabled="{Binding [edit_enabled]}" />
+					<Button DockPanel.Dock="Right"
+					        Margin="5,0,0,0"
+					        Command="{Binding [select_command]}"
+					        CommandParameter="{Binding}"
+					        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:32" />
+					<StackPanel>
+						<TextBlock FontWeight="Bold" Text="{Binding [label]}" />
+						<TextBlock Foreground="#FF91D18B"
+						           Visibility="{Binding [selected_visibility]}"
+						           Text="$dfb5645698a84afb91cf7a2dfb0f4a4e:33" />
+						<TextBlock FontSize="11"
+						           Foreground="#FFC8C8C8"
+						           Text="{Binding [id_fallback]}" />
+					</StackPanel>
+				</DockPanel>
+			</Border>
+		</DataTemplate>
+	</Grid.Resources>
+
+	<Border Padding="14"
+	        Background="#F2181818"
+	        BorderBrush="#FFD0D0D0"
+	        BorderThickness="1">
+		<Grid>
+			<Grid x:Name="BuildOrderSelectorScreen"
+			      Visibility="{Binding [selector_visibility]}">
+				<Grid.RowDefinitions>
+					<RowDefinition Height="Auto" />
+					<RowDefinition Height="Auto" />
+					<RowDefinition Height="*" />
+				</Grid.RowDefinitions>
+				<DockPanel Grid.Row="0" Margin="0,0,0,8">
+					<Button DockPanel.Dock="Right"
+					        Margin="5,0,0,0"
+					        Command="{Binding [commands][unpause]}"
+					        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:36" />
+					<Button DockPanel.Dock="Right"
+					        Margin="5,0,0,0"
+					        Command="{Binding [commands][create]}"
+					        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:35" />
+					<DockPanel>
+						<Image Width="34"
+						       Height="34"
+						       Margin="0,0,8,0"
+						       Source="{Binding DataContext.LocalPlayer.RaceIconSecondary, RelativeSource={RelativeSource AncestorType={x:Type pages:CardinalHUDPage}}}"
+						       Stretch="Uniform" />
+						<StackPanel>
+						<TextBlock FontSize="22"
+						           FontWeight="Bold"
+						           Text="$dfb5645698a84afb91cf7a2dfb0f4a4e:29" />
+						<TextBlock Text="{Binding [current_civ]}" />
+						</StackPanel>
+					</DockPanel>
+				</DockPanel>
+				<TextBlock Grid.Row="1"
+				           Margin="0,0,0,8"
+				           Foreground="#FFFFB566"
+				           Visibility="{Binding [selector_message_visibility]}"
+				           Text="{Binding [selector_message]}"
+				           TextWrapping="Wrap" />
+				<ListView Grid.Row="2"
+				          ItemsSource="{Binding [selector_options]}"
+				          ItemTemplate="{StaticResource BuildOrderSelectorRowTemplate}"
+				          ScrollViewer.VerticalScrollBarVisibility="Auto" />
+			</Grid>
+
+			<Grid x:Name="BuildOrderEditorScreen"
+			      Visibility="{Binding [editor_visibility]}">
+				<Grid.RowDefinitions>
+					<RowDefinition Height="Auto" />
+					<RowDefinition Height="*" />
+				</Grid.RowDefinitions>
+				<Grid.Triggers>
+					<EventTrigger RoutedEvent="UIElement.PreviewMouseLeftButtonUp">
+						<esActions:CallCommandAction Command="{Binding [commands][drag_commit]}" />
+					</EventTrigger>
+					<EventTrigger RoutedEvent="UIElement.MouseLeave">
+						<esActions:CallCommandAction Command="{Binding [commands][drag_cancel]}" />
+					</EventTrigger>
+				</Grid.Triggers>
+				<Border x:Name="BuildOrderEditorActionHeader"
+				        Grid.Row="0"
+				        Padding="0,0,0,8"
+				        BorderBrush="#FF777777"
+				        BorderThickness="0,0,0,1">
+					<DockPanel LastChildFill="True">
+						<StackPanel DockPanel.Dock="Right"
+						            Margin="8,0,0,0"
+						            Orientation="Horizontal">
+							<Button Margin="5,0,0,0"
+							        Command="{Binding [commands][save]}"
+							        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:38"
+							        IsEnabled="{Binding [save_enabled]}" />
+							<Button Margin="5,0,0,0"
+							        Command="{Binding [commands][cancel]}"
+							        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:39" />
+							<Button Margin="5,0,0,0"
+							        Command="{Binding [commands][copy]}"
+							        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:40" />
+						</StackPanel>
+						<DockPanel DockPanel.Dock="Left" Margin="0,0,10,0">
+							<Image Width="42"
+							       Height="42"
+							       Margin="0,0,9,0"
+							       Source="{Binding DataContext.LocalPlayer.RaceIconSecondary, RelativeSource={RelativeSource AncestorType={x:Type pages:CardinalHUDPage}}}"
+							       Stretch="Uniform" />
+							<StackPanel>
+								<TextBlock Foreground="#FFC8C8C8" Text="$dfb5645698a84afb91cf7a2dfb0f4a4e:37" />
+								<TextBlock x:Name="BuildOrderCurrentCivilization"
+								           FontSize="17"
+								           FontWeight="Bold"
+								           Text="{Binding [current_civ]}" />
+							</StackPanel>
+						</DockPanel>
+						<ContentControl x:Name="BuildOrderTitleEditor"
+						                Content="{Binding [title_field]}"
+						                ContentTemplate="{StaticResource BuildOrderFieldTemplate}" />
+					</DockPanel>
+				</Border>
+				<ScrollViewer x:Name="BuildOrderEditorScroll"
+				              Grid.Row="1"
+				              HorizontalScrollBarVisibility="Disabled"
+				              VerticalScrollBarVisibility="Auto">
+					<StackPanel Margin="0,10,0,0">
+						<ItemsControl ItemsSource="{Binding [steps]}"
+						              ItemTemplate="{StaticResource BuildOrderStepCardTemplate}" />
+						<Button Margin="0,9,0,0"
+						        HorizontalAlignment="Left"
+						        Command="{Binding [commands][add]}"
+						        CommandParameter="steps"
+						        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:41" />
+						<ItemsControl ItemsSource="{Binding [validation_messages]}"
+						              ItemTemplate="{StaticResource BuildOrderValidationMessageTemplate}" />
+					</StackPanel>
+				</ScrollViewer>
+			</Grid>
+
+			<Grid x:Name="BuildOrderConfirmationScreen"
+			      Visibility="{Binding [confirmation_visibility]}">
+				<StackPanel>
+					<TextBlock FontSize="22"
+					           FontWeight="Bold"
+					           Text="$dfb5645698a84afb91cf7a2dfb0f4a4e:44" />
+					<TextBlock Margin="0,8,0,12"
+					           Text="{Binding [confirmation_message]}"
+					           TextWrapping="Wrap" />
+					<StackPanel Orientation="Horizontal">
+						<Button Margin="0,0,7,0"
+						        Command="{Binding [commands][confirm_unpause]}"
+						        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:46" />
+						<Button Command="{Binding [commands][cancel]}"
+						        Content="$dfb5645698a84afb91cf7a2dfb0f4a4e:39" />
+					</StackPanel>
+				</StackPanel>
+			</Grid>
+		</Grid>
+	</Border>
+</Grid>
+]]
+
+function BuildOrderEditorUI_Visibility(visible)
+	if visible then
+		return "Visible"
+	end
+	return "Collapsed"
+end
+
+function BuildOrderEditorUI_JoinPath(path, key)
+	if key == nil then
+		return path or ""
+	end
+	if path == nil or path == "" then
+		return key
+	end
+	return path .. "." .. key
+end
+
+function BuildOrderEditorUI_ErrorMap(errors)
+	local errorMap = {}
+	for _, record in ipairs(errors or {}) do
+		if type(record) == "table" and type(record.path) == "string"
+			and type(record.message) == "string" then
+			local message = record.message
+			if record.localized ~= true and type(BuildOrderEditor_LocalizeError) == "function" then
+				message = BuildOrderEditor_LocalizeError(message)
+			end
+			if errorMap[record.path] == nil then
+				errorMap[record.path] = {}
+			end
+			table.insert(errorMap[record.path], message)
+		end
+	end
+	return errorMap
+end
+
+function BuildOrderEditorUI_FriendlyErrorLabel(path)
+	local labels = BUILD_ORDER_EDITOR_FIELD_LABELS or {}
+	if type(path) ~= "string" or path == "" then
+		return labels.build_order or ""
+	end
+	local fieldKeys = BUILD_ORDER_EDITOR_ERROR_FIELD_LABEL_KEYS or {}
+	local semanticKey = nil
+	for segment in string.gmatch(path, "[^%.]+") do
+		if fieldKeys[segment] ~= nil then
+			semanticKey = fieldKeys[segment]
+		end
+	end
+	if semanticKey ~= nil and labels[semanticKey] ~= nil then
+		return labels[semanticKey]
+	end
+	return labels.unknown_field or labels.build_order or ""
+end
+
+function BuildOrderEditorUI_LocalizedErrorMessage(record)
+	if type(record) ~= "table" or type(record.message) ~= "string" then
+		return ""
+	end
+	if record.localized == true or type(BuildOrderEditor_LocalizeError) ~= "function" then
+		return record.message
+	end
+	return BuildOrderEditor_LocalizeError(record.message)
+end
+
+function BuildOrderEditorUI_Context(context, parentAdapter, currentAge)
+	context = context or {}
+	return {
+		error_map = context.error_map or {},
+		discovery = context.discovery,
+		expanded = context.expanded or {},
+		commands = context.commands,
+		civ = context.civ,
+		parent_adapter = parentAdapter,
+		current_age = currentAge or context.current_age,
+	}
+end
+
+function BuildOrderEditorUI_AttachCommands(node, context)
+	local commands = context and context.commands
+	if type(commands) ~= "table" then
+		return node
+	end
+	node.field_change_command = commands.field_change
+	node.add_command = commands.add
+	node.delete_command = commands.delete
+	node.expand_command = commands.expand
+	node.collapse_command = commands.collapse
+	node.drag_begin_command = commands.drag_begin
+	node.drag_target_command = commands.drag_target
+	node.drag_target_leave_command = commands.drag_target_leave
+	node.drag_commit_command = commands.drag_commit
+	node.move_up_command = commands.move_up
+	node.move_down_command = commands.move_down
+	return node
+end
+
+function BuildOrderEditorUI_BaseNode(schema, path, context)
+	local expanded = true
+	if type(context.expanded[path]) == "boolean" then
+		expanded = context.expanded[path]
+	end
+	local node = {
+		key = schema.key,
+		path = path or "",
+		node_type = schema.node_type,
+		label = schema.label or schema.key or "",
+		expanded = expanded,
+		errors = context.error_map[path] or {},
+		fields = {},
+		items = {},
+		options = {},
+		flat_fields = {},
+		resource_groups = {},
+		add_visibility = "Collapsed",
+		text_visibility = "Collapsed",
+		boolean_visibility = "Collapsed",
+		enum_visibility = "Collapsed",
+		live_visibility = "Collapsed",
+		empty_options_visibility = "Collapsed",
+		list_visibility = "Collapsed",
+		object_visibility = "Collapsed",
+		inline_label_visibility = "Visible",
+		no_collect_visibility = "Collapsed",
+	}
+	return BuildOrderEditorUI_AttachCommands(node, context)
+end
+
+function BuildOrderEditorUI_ListContains(values, candidate)
+	if type(values) ~= "table" then
+		return false
+	end
+	for _, value in ipairs(values) do
+		if value == candidate then
+			return true
+		end
+	end
+	return false
+end
+
+function BuildOrderEditorUI_OptionID(option)
+	if type(option) ~= "table" then
+		return ""
+	end
+	if type(option.id) == "string" then
+		return option.id
+	end
+	if type(option.ids) == "table" then
+		return BuildOrderEditor_Join(option.ids, ", ")
+	end
+	return ""
+end
+
+function BuildOrderEditorUI_NormalizeOption(option, fieldPath, context)
+	local idFallback = BuildOrderEditorUI_OptionID(option)
+	local label = idFallback
+	if type(option) == "table" and type(option.label) == "string"
+		and option.label ~= "" then
+		label = option.label
+	end
+	local icon = type(option) == "table" and option.icon or ""
+	local value = type(option) == "table" and option.id or nil
+	if type(option) == "table" and type(option.ids) == "table" then
+		value = {
+			label = label,
+			icon = icon,
+			ids = BuildOrderEditor_DeepCopy(option.ids),
+		}
+	end
+	local normalized = {
+		id = type(option) == "table" and option.id or nil,
+		ids = type(option) == "table" and BuildOrderEditor_DeepCopy(option.ids) or nil,
+		kind = type(option) == "table" and option.kind or nil,
+		age = type(option) == "table" and option.age or nil,
+		label = label,
+		icon = icon,
+		id_fallback = idFallback,
+		path = fieldPath,
+		value = value,
+		selected = false,
+	}
+	if context and type(context.commands) == "table" then
+		normalized.field_change_command = context.commands.field_change
+	end
+	return normalized
+end
+
+function BuildOrderEditorUI_ValuesEqual(value, option)
+	if type(option) ~= "table" then
+		return false
+	end
+	if option.id ~= nil then
+		return value == option.id
+	end
+	if type(option.ids) == "table" and type(value) == "table" then
+		return BuildOrderEditor_ListsEqual(BuildOrderEditor_GetFamilyIDs(value), option.ids)
+	end
+	return false
+end
+
+function BuildOrderEditorUI_NormalizeOptions(options, value, fieldPath, context, maximumAge, exactAge)
+	local normalized = {}
+	for _, option in ipairs(options or {}) do
+		if type(option) == "table"
+			and ((exactAge ~= nil and option.age == exactAge)
+				or (exactAge == nil and (maximumAge == nil or option.age == nil or option.age <= maximumAge))) then
+			local item = BuildOrderEditorUI_NormalizeOption(option, fieldPath, context)
+			item.selected = BuildOrderEditorUI_ValuesEqual(value, option)
+			table.insert(normalized, item)
+		end
+	end
+	return normalized
+end
+
+function BuildOrderEditorUI_EnumOptions(values, selectedValue, fieldPath, context)
+	local options = {}
+	for _, value in ipairs(values or {}) do
+		local option = BuildOrderEditorUI_NormalizeOption({
+			id = value,
+			label = BuildOrderEditor_HumanizeID(value),
+			icon = "",
+			kind = "enum",
+		}, fieldPath, context)
+		option.selected = value == selectedValue
+		table.insert(options, option)
+	end
+	return options
+end
+
+function BuildOrderEditorUI_FallbackOption(value, fieldPath, context)
+	local source = nil
+	if type(value) == "string" and value ~= "" then
+		source = {
+			id = value,
+			label = value,
+			icon = "",
+			kind = "fallback",
+		}
+	elseif type(value) == "table" then
+		local ids = BuildOrderEditor_GetFamilyIDs(value)
+		if #ids > 0 then
+			source = {
+				ids = ids,
+				label = value.label or BuildOrderEditor_Join(ids, ", "),
+				icon = value.icon or "",
+				kind = "fallback",
+			}
+		end
+	end
+	if source == nil then
+		return nil
+	end
+	local fallback = BuildOrderEditorUI_NormalizeOption(source, fieldPath, context)
+	fallback.selected = true
+	fallback.is_fallback = true
+	return fallback
+end
+
+function BuildOrderEditorUI_LiveOptions(adapter, value, fieldPath, context)
+	local listName = BUILD_ORDER_EDITOR_UI_LIVE_LISTS[adapter]
+	local maximumAge = context.current_age
+	local exactAge = nil
+	if adapter == "live_age_up" then
+		if maximumAge ~= nil then
+			exactAge = maximumAge + 1
+		end
+	end
+	if type(context.discovery) ~= "table" or listName == nil then
+		local emptyOptions = {}
+		emptyOptions.live_candidate_count = 0
+		local fallback = BuildOrderEditorUI_FallbackOption(value, fieldPath, context)
+		if fallback ~= nil then
+			table.insert(emptyOptions, fallback)
+		end
+		return emptyOptions
+	end
+	local options = BuildOrderEditorUI_NormalizeOptions(
+		context.discovery[listName] or {},
+		value,
+		fieldPath,
+		context,
+		maximumAge,
+		exactAge
+	)
+	local liveCandidateCount = #options
+	options.live_candidate_count = liveCandidateCount
+	local hasSelection = false
+	for _, option in ipairs(options) do
+		if option.selected then
+			hasSelection = true
+		end
+	end
+	if not hasSelection then
+		local fallback = BuildOrderEditorUI_FallbackOption(value, fieldPath, context)
+		if fallback ~= nil then
+			table.insert(options, fallback)
+		end
+	end
+	return options
+end
+
+function BuildOrderEditorUI_SelectedOption(options)
+	for _, option in ipairs(options or {}) do
+		if option.selected then
+			return option
+		end
+	end
+	return nil
+end
+
+function BuildOrderEditorUI_ProjectPrimitive(schema, value, path, context)
+	local node = BuildOrderEditorUI_BaseNode(schema, path, context)
+	node.value = value
+	node.display_value = value
+	if value == nil then
+		node.display_value = ""
+	end
+	node.required = schema.required == true
+	node.value_type = schema.value_type
+	node.adapter = schema.adapter
+	local isLive = schema.adapter == "live_building"
+		or schema.adapter == "live_technology"
+		or schema.adapter == "live_family"
+		or schema.adapter == "live_age_up"
+	if isLive then
+		node.options = BuildOrderEditorUI_LiveOptions(schema.adapter, value, path, context)
+		node.selected_option = BuildOrderEditorUI_SelectedOption(node.options)
+		node.live_candidate_count = node.options.live_candidate_count or 0
+		node.live_visibility = "Visible"
+		if node.live_candidate_count == 0 then
+			node.empty_options_visibility = "Visible"
+		end
+	elseif schema.value_type == "boolean" then
+		node.boolean_visibility = "Visible"
+	else
+		node.text_visibility = "Visible"
+	end
+	return node
+end
+
+function BuildOrderEditorUI_ProjectEnum(schema, value, path, context)
+	local node = BuildOrderEditorUI_BaseNode(schema, path, context)
+	node.value = value
+	node.required = schema.required == true
+	node.adapter = schema.adapter
+	node.options = BuildOrderEditorUI_EnumOptions(schema.values, value, path, context)
+	node.selected_option = BuildOrderEditorUI_SelectedOption(node.options)
+	node.enum_visibility = "Visible"
+	return node
+end
+
+function BuildOrderEditorUI_ProjectOptional(schema, value, path, context)
+	local child = BuildOrderEditorUI_ProjectNode(schema.field, value, path, context)
+	child.key = schema.key
+	child.label = schema.label or child.label
+	child.optional = true
+	child.empty = value == nil
+	child.inline_optional = context.parent_adapter == "resources"
+	if child.empty and not child.inline_optional then
+		child.add_visibility = "Visible"
+		child.text_visibility = "Collapsed"
+		child.boolean_visibility = "Collapsed"
+		child.enum_visibility = "Collapsed"
+		child.live_visibility = "Collapsed"
+		child.list_visibility = "Collapsed"
+		child.object_visibility = "Collapsed"
+		child.inline_label_visibility = "Visible"
+	end
+	return child
+end
+
+function BuildOrderEditorUI_ProjectList(schema, value, path, context)
+	local node = BuildOrderEditorUI_BaseNode(schema, path, context)
+	local values = value
+	if type(values) ~= "table" then
+		values = {}
+	end
+	node.min_items = schema.min_items or 0
+	node.adapter = schema.adapter
+	node.empty = #values == 0
+	node.list_visibility = "Visible"
+	node.is_steps = schema.key == "steps"
+	node.is_checks = schema.key == "checks"
+	node.is_no_collect = schema.key == "no_collect"
+	for index, itemValue in ipairs(values) do
+		local itemAge = context.current_age
+		if schema.key == "steps" and type(itemValue) == "table" then
+			itemAge = itemValue.inferred_age or itemAge
+		end
+		local itemContext = BuildOrderEditorUI_Context(context, nil, itemAge)
+		local itemPath = BuildOrderEditorUI_JoinPath(path, index)
+		local item = BuildOrderEditorUI_ProjectNode(
+			schema.item,
+			itemValue,
+			itemPath,
+			itemContext
+		)
+		item.index = index
+		item.parent_path = path
+		table.insert(node.items, item)
+	end
+	if node.is_no_collect and schema.item and schema.item.values then
+		node.options = BuildOrderEditorUI_EnumOptions(schema.item.values, nil, path, context)
+		for _, option in ipairs(node.options) do
+			option.selected = BuildOrderEditorUI_ListContains(values, option.id)
+		end
+	end
+	return node
+end
+
+function BuildOrderEditorUI_CollectResourceGroups(node, output)
+	if node.is_resource_group then
+		table.insert(output, node)
+		return output
+	end
+	for _, field in ipairs(node.fields or {}) do
+		BuildOrderEditorUI_CollectResourceGroups(field, output)
+	end
+	return output
+end
+
+function BuildOrderEditorUI_CollectFlatFields(node, output, includeObject)
+	if node.is_resource_group then
+		return output
+	end
+	if node.node_type == "object" then
+		if includeObject then
+			table.insert(output, node)
+		else
+			for _, field in ipairs(node.fields or {}) do
+				BuildOrderEditorUI_CollectFlatFields(field, output, true)
+			end
+		end
+	elseif node.node_type == "list" and not node.is_steps and not node.is_checks then
+		table.insert(output, node)
+	elseif node.node_type == "primitive" or node.node_type == "enum" then
+		table.insert(output, node)
+	end
+	return output
+end
+
+function BuildOrderEditorUI_ProjectObject(schema, value, path, context)
+	local node = BuildOrderEditorUI_BaseNode(schema, path, context)
+	node.object_visibility = "Visible"
+	node.inline_label_visibility = "Collapsed"
+	local objectValue = value
+	if type(objectValue) ~= "table" then
+		objectValue = {}
+	end
+	node.value = value
+	node.inferred_age = objectValue.inferred_age
+	node.age_label = ""
+	node.age_number = nil
+	if type(node.inferred_age) == "number" then
+		node.age_label = (BUILD_ORDER_EDITOR_FIELD_LABELS or {}).entering_age or ""
+		node.age_number = node.inferred_age
+	end
+	if type(objectValue.title) == "string" and objectValue.title ~= "" then
+		node.label = objectValue.title
+	end
+	local childContext = BuildOrderEditorUI_Context(
+		context,
+		schema.adapter,
+		context.current_age
+	)
+	for _, fieldSchema in ipairs(schema.fields or {}) do
+		local fieldValue = objectValue
+		if fieldSchema.key ~= nil then
+			fieldValue = objectValue[fieldSchema.key]
+		end
+		local fieldPath = BuildOrderEditorUI_JoinPath(path, fieldSchema.key)
+		local field = BuildOrderEditorUI_ProjectNode(
+			fieldSchema,
+			fieldValue,
+			fieldPath,
+			childContext
+		)
+		table.insert(node.fields, field)
+		if fieldSchema.key == "steps" then
+			node.steps = field.items
+		elseif fieldSchema.key == "checks" then
+			node.checks = field.items
+			node.checks_path = field.path
+		end
+	end
+	if node.checks ~= nil then
+		BuildOrderEditorUI_CollectFlatFields(node, node.flat_fields)
+	end
+	if schema.adapter == "resources" then
+		node.is_resource_group = true
+		node.object_visibility = "Collapsed"
+		node.inline_label_visibility = "Visible"
+		for _, field in ipairs(node.fields) do
+			if field.key == "food" then
+				node.food = field
+			elseif field.key == "wood" then
+				node.wood = field
+			elseif field.key == "gold" then
+				node.gold = field
+			elseif field.key == "stone" then
+				node.stone = field
+			elseif field.key == "no_collect" then
+				node.no_collect = field
+				node.no_collect_visibility = "Visible"
+			end
+		end
+	end
+	return node
+end
+
+function BuildOrderEditorUI_ProjectVariant(schema, value, path, context)
+	local kind = type(value) == "table" and value[schema.discriminator] or nil
+	local variant = schema.variants and schema.variants[kind]
+	if type(variant) ~= "table" then
+		local missing = BuildOrderEditorUI_BaseNode({
+			key = nil,
+			label = (BUILD_ORDER_EDITOR_FIELD_LABELS or {}).unknown_check or "",
+			node_type = "object",
+		}, path, context)
+		missing.kind = kind
+		missing.is_check = true
+		return missing
+	end
+	local objectSchema = {
+		key = nil,
+		label = variant.label,
+		node_type = "object",
+		fields = variant.fields,
+	}
+	local node = BuildOrderEditorUI_ProjectObject(objectSchema, value, path, context)
+	node.kind = kind
+	node.label = variant.label
+	node.is_check = true
+	node.resource_groups = {}
+	node.flat_fields = {}
+	BuildOrderEditorUI_CollectResourceGroups(node, node.resource_groups)
+	BuildOrderEditorUI_CollectFlatFields(node, node.flat_fields)
+	return node
+end
+
+function BuildOrderEditorUI_ProjectNode(schema, value, path, context)
+	context = context or BuildOrderEditorUI_Context(nil, nil, nil)
+	if type(schema) ~= "table" then
+		return BuildOrderEditorUI_BaseNode({
+			key = nil,
+			label = (BUILD_ORDER_EDITOR_FIELD_LABELS or {}).unknown_field or "",
+			node_type = "primitive",
+		}, path, context)
+	end
+	if schema.node_type == "primitive" then
+		return BuildOrderEditorUI_ProjectPrimitive(schema, value, path, context)
+	elseif schema.node_type == "enum" then
+		return BuildOrderEditorUI_ProjectEnum(schema, value, path, context)
+	elseif schema.node_type == "optional" then
+		return BuildOrderEditorUI_ProjectOptional(schema, value, path, context)
+	elseif schema.node_type == "list" then
+		return BuildOrderEditorUI_ProjectList(schema, value, path, context)
+	elseif schema.node_type == "variant" then
+		return BuildOrderEditorUI_ProjectVariant(schema, value, path, context)
+	end
+	return BuildOrderEditorUI_ProjectObject(schema, value, path, context)
+end
+
+function BuildOrderEditorUI_ProjectDraft(draft, errors, discovery, expanded, schema, commands)
+	draft = type(draft) == "table" and draft or {}
+	local context = {
+		error_map = BuildOrderEditorUI_ErrorMap(errors),
+		discovery = discovery,
+		expanded = expanded or {},
+		commands = commands,
+		civ = draft.civ,
+		parent_adapter = nil,
+		current_age = 1,
+	}
+	return BuildOrderEditorUI_ProjectNode(
+		schema or BUILD_ORDER_EDITOR_SCHEMA,
+		draft,
+		"",
+		context
+	)
+end
+
+function BuildOrderEditorUI_ParameterPath(parameter)
+	if type(parameter) == "table" then
+		return parameter.path
+	end
+	if type(parameter) == "string" then
+		return parameter
+	end
+	return nil
+end
+
+function BuildOrderEditorUI_ClearDragTarget(parameter)
+	local path = BuildOrderEditorUI_ParameterPath(parameter)
+	if path ~= nil and BUILD_ORDER_EDITOR_UI_STATE.drag_target_path ~= path then
+		return false
+	end
+	BUILD_ORDER_EDITOR_UI_STATE.drag_target_path = nil
+	BUILD_ORDER_EDITOR_UI_STATE.drag_target_active = false
+	return true
+end
+
+function BuildOrderEditorUI_ClearDrag()
+	BUILD_ORDER_EDITOR_UI_STATE.drag_source_path = nil
+	BuildOrderEditorUI_ClearDragTarget(nil)
+end
+
+function BuildOrderEditorUI_CancelDrag(parameter)
+	local wasDragging = BUILD_ORDER_EDITOR_UI_STATE.drag_source_path ~= nil
+		or BUILD_ORDER_EDITOR_UI_STATE.drag_target_path ~= nil
+	BuildOrderEditorUI_ClearDrag()
+	return wasDragging
+end
+
+function BuildOrderEditorUI_AreCompatiblePaths(sourcePath, targetPath)
+	local source = BUILD_ORDER_EDITOR_UI_STATE.draggable_paths[sourcePath]
+	local target = BUILD_ORDER_EDITOR_UI_STATE.draggable_paths[targetPath]
+	return type(source) == "table"
+		and type(target) == "table"
+		and source.parent_path == target.parent_path
+		and source.card_kind == target.card_kind
+end
+
+function BuildOrderEditorUI_BeginDrag(parameter)
+	local path = BuildOrderEditorUI_ParameterPath(parameter)
+	if BUILD_ORDER_EDITOR_UI_STATE.draggable_paths[path] == nil then
+		BuildOrderEditorUI_ClearDrag()
+		return false
+	end
+	BUILD_ORDER_EDITOR_UI_STATE.drag_source_path = path
+	BuildOrderEditorUI_ClearDragTarget(nil)
+	return true
+end
+
+function BuildOrderEditorUI_UpdateDragTarget(parameter)
+	local path = BuildOrderEditorUI_ParameterPath(parameter)
+	local sourcePath = BUILD_ORDER_EDITOR_UI_STATE.drag_source_path
+	if not BuildOrderEditorUI_AreCompatiblePaths(sourcePath, path) then
+		BuildOrderEditorUI_ClearDragTarget(nil)
+		return false
+	end
+	BUILD_ORDER_EDITOR_UI_STATE.drag_target_path = path
+	BUILD_ORDER_EDITOR_UI_STATE.drag_target_active = true
+	return true
+end
+
+function BuildOrderEditorUI_LeaveDragTarget(parameter)
+	return BuildOrderEditorUI_ClearDragTarget(parameter)
+end
+
+function BuildOrderEditorUI_InvokeCallback(key, first, second, third)
+	local callbackName = BUILD_ORDER_EDITOR_UI_STATE.callbacks[key]
+	if type(callbackName) ~= "string" or type(_G[callbackName]) ~= "function" then
+		return false
+	end
+	_G[callbackName](first, second, third)
+	return true
+end
+
+function BuildOrderEditorUI_DispatchStartGame(parameter)
+	return BuildOrderEditorUI_InvokeCallback("start_game", parameter)
+end
+
+function BuildOrderEditorUI_DispatchContinueWithout(parameter)
+	return BuildOrderEditorUI_InvokeCallback("continue_without", parameter)
+end
+
+function BuildOrderEditorUI_CommitDrag(parameter)
+	local sourcePath = BUILD_ORDER_EDITOR_UI_STATE.drag_source_path
+	local targetPath = BUILD_ORDER_EDITOR_UI_STATE.drag_target_path
+	local source = BUILD_ORDER_EDITOR_UI_STATE.draggable_paths[sourcePath]
+	local target = BUILD_ORDER_EDITOR_UI_STATE.draggable_paths[targetPath]
+	local compatible = BuildOrderEditorUI_AreCompatiblePaths(sourcePath, targetPath)
+	local targetActive = BUILD_ORDER_EDITOR_UI_STATE.drag_target_active == true
+	BuildOrderEditorUI_ClearDrag()
+	if not targetActive or not compatible or type(source) ~= "table" or type(target) ~= "table" then
+		return false
+	end
+	return BuildOrderEditorUI_InvokeCallback(
+		"reorder",
+		source.parent_path,
+		source.index,
+		target.index
+	)
+end
+
+function BuildOrderEditorUI_MoveUp(parameter)
+	local path = BuildOrderEditorUI_ParameterPath(parameter)
+	local record = BUILD_ORDER_EDITOR_UI_STATE.draggable_paths[path]
+	if type(record) ~= "table" or record.index <= 1 then
+		return false
+	end
+	return BuildOrderEditorUI_InvokeCallback(
+		"reorder",
+		record.parent_path,
+		record.index,
+		record.index - 1
+	)
+end
+
+function BuildOrderEditorUI_MoveDown(parameter)
+	local path = BuildOrderEditorUI_ParameterPath(parameter)
+	local record = BUILD_ORDER_EDITOR_UI_STATE.draggable_paths[path]
+	if type(record) ~= "table" or record.index >= record.max_index then
+		return false
+	end
+	return BuildOrderEditorUI_InvokeCallback(
+		"reorder",
+		record.parent_path,
+		record.index,
+		record.index + 1
+	)
+end
+
+function BuildOrderEditorUI_NoOp(parameter)
+	return false
+end
+
+function BuildOrderEditorUI_CommandName(key)
+	local callbackName = BUILD_ORDER_EDITOR_UI_STATE.callbacks[key]
+	if type(callbackName) == "string" and callbackName ~= "" then
+		return callbackName
+	end
+	return "BuildOrderEditorUI_NoOp"
+end
+
+function BuildOrderEditorUI_CreateCommands()
+	return {
+		select = UI_CreateCommand(BuildOrderEditorUI_CommandName("select")),
+		create = UI_CreateCommand(BuildOrderEditorUI_CommandName("create")),
+		edit = UI_CreateCommand(BuildOrderEditorUI_CommandName("edit")),
+		copy = UI_CreateCommand(BuildOrderEditorUI_CommandName("copy")),
+		save = UI_CreateCommand(BuildOrderEditorUI_CommandName("save")),
+		cancel = UI_CreateCommand(BuildOrderEditorUI_CommandName("cancel")),
+		unpause = UI_CreateCommand(BuildOrderEditorUI_CommandName("unpause")),
+		confirm_unpause = UI_CreateCommand(BuildOrderEditorUI_CommandName("confirm_unpause")),
+		field_change = UI_CreateCommand(BuildOrderEditorUI_CommandName("field_change")),
+		add = UI_CreateCommand(BuildOrderEditorUI_CommandName("add")),
+		add_check = UI_CreateCommand(BuildOrderEditorUI_CommandName("add_check")),
+		delete = UI_CreateCommand(BuildOrderEditorUI_CommandName("delete")),
+		expand = UI_CreateCommand(BuildOrderEditorUI_CommandName("expand")),
+		collapse = UI_CreateCommand(BuildOrderEditorUI_CommandName("collapse")),
+		reorder = UI_CreateCommand(BuildOrderEditorUI_CommandName("reorder")),
+		drag_begin = UI_CreateCommand("BuildOrderEditorUI_BeginDrag"),
+		drag_target = UI_CreateCommand("BuildOrderEditorUI_UpdateDragTarget"),
+		drag_target_leave = UI_CreateCommand("BuildOrderEditorUI_LeaveDragTarget"),
+		drag_commit = UI_CreateCommand("BuildOrderEditorUI_CommitDrag"),
+		drag_cancel = UI_CreateCommand("BuildOrderEditorUI_CancelDrag"),
+		move_up = UI_CreateCommand("BuildOrderEditorUI_MoveUp"),
+		move_down = UI_CreateCommand("BuildOrderEditorUI_MoveDown"),
+	}
+end
+
+function BuildOrderEditorUI_CreateProbeCommands()
+	return {
+		start_game = UI_CreateCommand("BuildOrderEditorUI_DispatchStartGame"),
+		continue_without = UI_CreateCommand("BuildOrderEditorUI_DispatchContinueWithout"),
+	}
+end
+
+function BuildOrderEditorUI_SelectorOptions(model, commands)
+	local options = {}
+	local source = model.orders or model.options or {}
+	for _, order in ipairs(source) do
+		if type(order) == "table" then
+			local id = order.id or ""
+			local label = order.label or order.title or id
+			table.insert(options, {
+				id = id,
+				value = id,
+				label = label,
+				selected = order.selected == true,
+			})
+		end
+	end
+	return options
+end
+
+function BuildOrderEditorUI_CheckKindOptions()
+	local options = {}
+	for _, kind in ipairs(BUILD_ORDER_EDITOR_CHECK_ORDER or {}) do
+		local schema = BUILD_ORDER_EDITOR_CHECK_SCHEMAS[kind]
+		if type(schema) == "table" then
+			table.insert(options, {
+				id = kind,
+				value = kind,
+				label = schema.label or kind,
+				id_fallback = kind,
+				icon = "",
+			})
+		end
+	end
+	return options
+end
+
+function BuildOrderEditorUI_ValidationMessages(errors)
+	local messages = {}
+	for _, record in ipairs(errors or {}) do
+		if type(record) == "table" and type(record.message) == "string" then
+			table.insert(messages, {
+				label = BuildOrderEditorUI_FriendlyErrorLabel(record.path),
+				message = BuildOrderEditorUI_LocalizedErrorMessage(record),
+			})
+		end
+	end
+	return messages
+end
+
+function BuildOrderEditorUI_RegisterCards(steps, commands)
+	local paths = {}
+	for stepIndex, step in ipairs(steps or {}) do
+		local stepCount = #steps
+		step.index = stepIndex
+		step.parent_path = "steps"
+		step.card_kind = "step"
+		step.can_move_up = stepIndex > 1
+		step.can_move_down = stepIndex < stepCount
+		step.drag_begin_command = commands.drag_begin
+		step.drag_target_command = commands.drag_target
+		step.drag_commit_command = commands.drag_commit
+		step.move_up_command = commands.move_up
+		step.move_down_command = commands.move_down
+		local checkKindOptions = BuildOrderEditorUI_CheckKindOptions()
+		step.check_add = {
+			path = step.checks_path,
+			options = checkKindOptions,
+			selected_option = checkKindOptions[1],
+			add_check_command = commands.add_check,
+		}
+		paths[step.path] = {
+			parent_path = "steps",
+			index = stepIndex,
+			max_index = stepCount,
+			card_kind = "step",
+		}
+		for checkIndex, check in ipairs(step.checks or {}) do
+			local checkCount = #step.checks
+			check.index = checkIndex
+			check.parent_path = step.path .. ".checks"
+			check.card_kind = "check"
+			check.can_move_up = checkIndex > 1
+			check.can_move_down = checkIndex < checkCount
+			check.drag_begin_command = commands.drag_begin
+			check.drag_target_command = commands.drag_target
+			check.drag_commit_command = commands.drag_commit
+			check.move_up_command = commands.move_up
+			check.move_down_command = commands.move_down
+			paths[check.path] = {
+				parent_path = check.parent_path,
+				index = checkIndex,
+				max_index = checkCount,
+				card_kind = "check",
+			}
+		end
+	end
+	BUILD_ORDER_EDITOR_UI_STATE.draggable_paths = paths
+end
+
+function BuildOrderEditorUI_BuildViewModel(screen, model)
+	model = type(model) == "table" and model or {}
+	local commands = BUILD_ORDER_EDITOR_UI_STATE.commands or {}
+	local view = {
+		screen = screen,
+		root_visibility = BuildOrderEditorUI_Visibility(screen ~= "hidden"),
+		selector_visibility = BuildOrderEditorUI_Visibility(screen == "selector"),
+		editor_visibility = BuildOrderEditorUI_Visibility(screen == "editor"),
+		confirmation_visibility = BuildOrderEditorUI_Visibility(screen == "confirmation"),
+		commands = commands,
+		current_civ = model.current_civ or model.civ or "",
+		selector_options = {},
+		selector_message = model.message or "",
+		selector_message_visibility = BuildOrderEditorUI_Visibility(
+			type(model.message) == "string" and model.message ~= ""
+		),
+		steps = {},
+		validation_messages = {},
+		confirmation_message = model.message or "",
+		save_enabled = false,
+	}
+	if screen == "selector" then
+		view.selector_options = BuildOrderEditorUI_SelectorOptions(model, commands)
+		BUILD_ORDER_EDITOR_UI_STATE.draggable_paths = {}
+	elseif screen == "editor" then
+		local draft = model.draft
+		if type(draft) ~= "table" then
+			draft = model
+		end
+		view.current_civ = model.current_civ or draft.civ or ""
+		view.root = BuildOrderEditorUI_ProjectDraft(
+			draft,
+			model.errors or {},
+			model.discovery,
+			model.expanded or {},
+			model.schema,
+			commands
+		)
+		view.steps = view.root.steps or {}
+		for _, field in ipairs(view.root.fields or {}) do
+			if field.key == "title" then
+				view.title_field = field
+			end
+		end
+		view.validation_messages = BuildOrderEditorUI_ValidationMessages(model.errors)
+		view.save_enabled = model.save_enabled ~= false and #(model.errors or {}) == 0
+		BuildOrderEditorUI_RegisterCards(view.steps, commands)
+	else
+		BUILD_ORDER_EDITOR_UI_STATE.draggable_paths = {}
+	end
+	return view
+end
+
+function BuildOrderEditorUI_Refresh()
+	BUILD_ORDER_EDITOR_UI_STATE.view_model = BuildOrderEditorUI_BuildViewModel(
+		BUILD_ORDER_EDITOR_UI_STATE.screen,
+		BUILD_ORDER_EDITOR_UI_STATE.model
+	)
+	if BUILD_ORDER_EDITOR_UI_STATE.created then
+		UI_SetDataContext(BUILD_ORDER_EDITOR_UI_NAME, BUILD_ORDER_EDITOR_UI_STATE.view_model)
+	end
+	return BUILD_ORDER_EDITOR_UI_STATE.view_model
+end
+
+function BuildOrderEditorUI_BuildProbeViewModel(screen, model)
+	model = type(model) == "table" and model or {}
+	local commands = BUILD_ORDER_EDITOR_UI_STATE.commands or {}
+	local options = BuildOrderEditorUI_SelectorOptions(model, commands)
+	return {
+		selector_visible = screen == "selector",
+		selector_options = options,
+		selected_index = -1,
+		empty_message = #options == 0 and "No build orders for this civilization" or "",
+		commands = commands,
+	}
+end
+
+function BuildOrderEditorUI_RefreshProbe()
+	local nextViewModel = BuildOrderEditorUI_BuildProbeViewModel(
+		BUILD_ORDER_EDITOR_UI_STATE.screen,
+		BUILD_ORDER_EDITOR_UI_STATE.model
+	)
+	if type(BUILD_ORDER_EDITOR_UI_STATE.view_model) ~= "table" then
+		BUILD_ORDER_EDITOR_UI_STATE.view_model = nextViewModel
+	else
+		for key, value in pairs(nextViewModel) do
+			BUILD_ORDER_EDITOR_UI_STATE.view_model[key] = value
+		end
+	end
+	print("BuildOrderTrace: ui refresh screen=" .. tostring(BUILD_ORDER_EDITOR_UI_STATE.screen)
+		.. " selector=" .. tostring(BUILD_ORDER_EDITOR_UI_STATE.view_model.selector_visible)
+		.. " editor=" .. tostring(BUILD_ORDER_EDITOR_UI_STATE.view_model.editor_visible)
+		.. " created=" .. tostring(BUILD_ORDER_EDITOR_UI_STATE.created))
+	if BUILD_ORDER_EDITOR_UI_STATE.created then
+		print("BuildOrderTrace: ui set-context begin name=" .. BUILD_ORDER_EDITOR_UI_NAME)
+		UI_SetDataContext(BUILD_ORDER_EDITOR_UI_NAME, BUILD_ORDER_EDITOR_UI_STATE.view_model)
+		print("BuildOrderTrace: ui set-context end")
+	end
+	return BUILD_ORDER_EDITOR_UI_STATE.view_model
+end
+
+function BuildOrderEditorUI_CreatePresenter()
+	BUILD_ORDER_EDITOR_UI_STATE.commands = BuildOrderEditorUI_CreateProbeCommands()
+	BUILD_ORDER_EDITOR_UI_STATE.view_model = BuildOrderEditorUI_BuildProbeViewModel(
+		"selector",
+		BUILD_ORDER_EDITOR_UI_STATE.model
+	)
+	UI_AddChild("ScarDefault", "XamlPresenter", BUILD_ORDER_EDITOR_UI_NAME, {
+		IsHitTestVisible = true,
+		Xaml = BUILD_ORDER_EDITOR_UI_PROBE_XAML,
+		DataContext = UI_CreateDataContext(BUILD_ORDER_EDITOR_UI_STATE.view_model),
+	})
+end
+
+function BuildOrderEditorUI_EnsureCreated()
+	if BUILD_ORDER_EDITOR_UI_STATE.created then
+		return true
+	end
+	local success = pcall(BuildOrderEditorUI_CreatePresenter)
+	if not success then
+		BUILD_ORDER_EDITOR_UI_STATE.created = false
+		BUILD_ORDER_EDITOR_UI_STATE.view_model = nil
+		return false
+	end
+	BUILD_ORDER_EDITOR_UI_STATE.created = true
+	return true
+end
+
+function BuildOrderEditorUI_SetScreen(screen, model)
+	if screen == "selector" then
+		return BuildOrderEditorUI_ShowSelector(model)
+	end
+	if screen == "editor" then
+		return BuildOrderEditorUI_ShowEditor(model)
+	end
+	if screen == "hidden" then
+		return BuildOrderEditorUI_Hide()
+	end
+	return false
+end
+
+function BuildOrderEditorUI_ShowSelector(model)
+	BUILD_ORDER_EDITOR_UI_STATE.screen = "selector"
+	BUILD_ORDER_EDITOR_UI_STATE.model = type(model) == "table" and model or {}
+	BuildOrderEditorUI_ClearDrag()
+	if not BuildOrderEditorUI_EnsureCreated() then
+		return false
+	end
+	BuildOrderEditorUI_RefreshProbe()
+	return true
+end
+
+function BuildOrderEditorUI_ShowEditor(model)
+	print("BuildOrderTrace: ui show-editor enter created="
+		.. tostring(BUILD_ORDER_EDITOR_UI_STATE.created)
+		.. " screen=" .. tostring(BUILD_ORDER_EDITOR_UI_STATE.screen))
+	if not BUILD_ORDER_EDITOR_UI_STATE.created then
+		return false
+	end
+	BUILD_ORDER_EDITOR_UI_STATE.screen = "editor"
+	BUILD_ORDER_EDITOR_UI_STATE.model = type(model) == "table" and model or {}
+	BuildOrderEditorUI_RefreshProbe()
+	print("BuildOrderTrace: ui show-editor result=true")
+	return true
+end
+
+function BuildOrderEditorUI_ShowNoSelectionConfirmation(model)
+	return false
+end
+
+function BuildOrderEditorUI_Hide()
+	if BUILD_ORDER_EDITOR_UI_STATE.created then
+		UI_Remove(BUILD_ORDER_EDITOR_UI_NAME)
+		BUILD_ORDER_EDITOR_UI_STATE.created = false
+		BUILD_ORDER_EDITOR_UI_STATE.screen = "hidden"
+		BUILD_ORDER_EDITOR_UI_STATE.view_model = nil
+		return true
+	end
+	return false
+end
+
+function BuildOrderEditorUI_SetCallbacks(callbacks)
+	BUILD_ORDER_EDITOR_UI_STATE.callbacks = type(callbacks) == "table" and callbacks or {}
+end
+
+function BuildOrderEditorUI_Stop()
+	if BUILD_ORDER_EDITOR_UI_STATE.created then
+		UI_Remove(BUILD_ORDER_EDITOR_UI_NAME)
+	end
+	BuildOrderEditorUI_ClearDrag()
+	BUILD_ORDER_EDITOR_UI_STATE.created = false
+	BUILD_ORDER_EDITOR_UI_STATE.screen = "hidden"
+	BUILD_ORDER_EDITOR_UI_STATE.callbacks = {}
+	BUILD_ORDER_EDITOR_UI_STATE.commands = nil
+	BUILD_ORDER_EDITOR_UI_STATE.model = {}
+	BUILD_ORDER_EDITOR_UI_STATE.draggable_paths = {}
+end

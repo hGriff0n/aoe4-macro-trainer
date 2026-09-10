@@ -1,0 +1,275 @@
+function BuildOrderEditorSchema_Primitive(key, label, valueType, required, adapter)
+	return {
+		key = key,
+		label = label,
+		node_type = "primitive",
+		value_type = valueType,
+		required = required == true,
+		adapter = adapter,
+	}
+end
+
+function BuildOrderEditorSchema_Enum(key, label, values, required, adapter)
+	return {
+		key = key,
+		label = label,
+		node_type = "enum",
+		values = values,
+		required = required == true,
+		adapter = adapter,
+	}
+end
+
+function BuildOrderEditorSchema_Object(key, label, fields, adapter)
+	return {
+		key = key,
+		label = label,
+		node_type = "object",
+		fields = fields,
+		adapter = adapter,
+	}
+end
+
+function BuildOrderEditorSchema_Optional(key, label, field)
+	return {
+		key = key,
+		label = label,
+		node_type = "optional",
+		field = field,
+	}
+end
+
+function BuildOrderEditorSchema_List(key, label, item, minItems, adapter)
+	return {
+		key = key,
+		label = label,
+		node_type = "list",
+		item = item,
+		min_items = minItems or 0,
+		adapter = adapter,
+	}
+end
+
+BUILD_ORDER_EDITOR_ADAPTERS = {
+	alternatives = { min_items = 1 },
+	resources = { keys = { "food", "wood", "gold", "stone" } },
+	no_collect = { values = { "food", "wood", "gold", "stone" } },
+	live_building = { discovery_kind = "building" },
+	live_technology = { discovery_kind = "technology" },
+	live_family = { discovery_kind = "family" },
+	live_age_up = { discovery_kind = "age_up" },
+}
+
+BUILD_ORDER_EDITOR_CHECK_LABELS = {
+	vils = "$dfb5645698a84afb91cf7a2dfb0f4a4e:73",
+	rallypoint = "$dfb5645698a84afb91cf7a2dfb0f4a4e:74",
+	built = "$dfb5645698a84afb91cf7a2dfb0f4a4e:75",
+	age_up = "$dfb5645698a84afb91cf7a2dfb0f4a4e:76",
+	upgrades = "$dfb5645698a84afb91cf7a2dfb0f4a4e:77",
+	produce = "$dfb5645698a84afb91cf7a2dfb0f4a4e:78",
+	resources = "$dfb5645698a84afb91cf7a2dfb0f4a4e:79",
+	buildings = "$dfb5645698a84afb91cf7a2dfb0f4a4e:80",
+	units = "$dfb5645698a84afb91cf7a2dfb0f4a4e:81",
+	hints = "$dfb5645698a84afb91cf7a2dfb0f4a4e:82",
+}
+
+BUILD_ORDER_EDITOR_FIELD_LABELS = {
+	optional = "$dfb5645698a84afb91cf7a2dfb0f4a4e:83",
+	build_order = "$dfb5645698a84afb91cf7a2dfb0f4a4e:84",
+	civilization = "$dfb5645698a84afb91cf7a2dfb0f4a4e:85",
+	title = "$dfb5645698a84afb91cf7a2dfb0f4a4e:86",
+	steps = "$dfb5645698a84afb91cf7a2dfb0f4a4e:87",
+	step = "$dfb5645698a84afb91cf7a2dfb0f4a4e:88",
+	checks = "$dfb5645698a84afb91cf7a2dfb0f4a4e:89",
+	assignments = "$dfb5645698a84afb91cf7a2dfb0f4a4e:90",
+	resource = "$dfb5645698a84afb91cf7a2dfb0f4a4e:91",
+	building = "$dfb5645698a84afb91cf7a2dfb0f4a4e:92",
+	buildings = "$dfb5645698a84afb91cf7a2dfb0f4a4e:93",
+	count = "$dfb5645698a84afb91cf7a2dfb0f4a4e:94",
+	builders = "$dfb5645698a84afb91cf7a2dfb0f4a4e:95",
+	location = "$dfb5645698a84afb91cf7a2dfb0f4a4e:96",
+	age_up_choice = "$dfb5645698a84afb91cf7a2dfb0f4a4e:97",
+	choices = "$dfb5645698a84afb91cf7a2dfb0f4a4e:98",
+	choice = "$dfb5645698a84afb91cf7a2dfb0f4a4e:99",
+	technology = "$dfb5645698a84afb91cf7a2dfb0f4a4e:100",
+	complete_when_queued = "$dfb5645698a84afb91cf7a2dfb0f4a4e:101",
+	unit_family = "$dfb5645698a84afb91cf7a2dfb0f4a4e:102",
+	constant_production = "$dfb5645698a84afb91cf7a2dfb0f4a4e:103",
+	stockpile = "$dfb5645698a84afb91cf7a2dfb0f4a4e:104",
+	hint = "$dfb5645698a84afb91cf7a2dfb0f4a4e:105",
+	text = "$dfb5645698a84afb91cf7a2dfb0f4a4e:106",
+	check_kind = "$dfb5645698a84afb91cf7a2dfb0f4a4e:107",
+	unknown_check = "$dfb5645698a84afb91cf7a2dfb0f4a4e:108",
+	unknown_field = "$dfb5645698a84afb91cf7a2dfb0f4a4e:109",
+	entering_age = "$dfb5645698a84afb91cf7a2dfb0f4a4e:110",
+	check_details = "$dfb5645698a84afb91cf7a2dfb0f4a4e:142",
+	food = "$dfb5645698a84afb91cf7a2dfb0f4a4e:62",
+	wood = "$dfb5645698a84afb91cf7a2dfb0f4a4e:63",
+	gold = "$dfb5645698a84afb91cf7a2dfb0f4a4e:64",
+	stone = "$dfb5645698a84afb91cf7a2dfb0f4a4e:65",
+	no_collect = "$dfb5645698a84afb91cf7a2dfb0f4a4e:66",
+	rallypoint = "$dfb5645698a84afb91cf7a2dfb0f4a4e:74",
+}
+
+BUILD_ORDER_EDITOR_ERROR_LABELS = {
+	["must be a positive integer or unselected"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:111",
+	["must be a positive integer"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:111",
+	["must be selected"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:112",
+	["must select a game-data value"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:113",
+	["does not match the required game-data kind"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:114",
+	["must select a unit family"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:115",
+	["must be a canonical squad identifier"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:116",
+	["must not repeat a canonical squad identifier"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:117",
+	["does not match a discovered semantic unit family"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:118",
+	["must contain at least one selection"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:119",
+	["must not repeat a selection"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:120",
+	["must be a resource list"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:121",
+	["must be food, wood, gold, or stone"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:122",
+	["must not repeat a resource"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:123",
+	["must be true or false"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:124",
+	["must be a non-empty string or unselected"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:125",
+	["must be a check"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:126",
+	["must be a supported check kind"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:127",
+	["must be an object"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:128",
+	["must select a threshold or no-collect resource"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:129",
+	["must select at least one resource"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:130",
+	["must be a non-empty string"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:131",
+	["must be a build-order draft"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:132",
+	["must contain a title that can form an ID"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:133",
+	["must contain a civilization"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:134",
+	["must contain at least one step"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:135",
+	["must be a step"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:136",
+	["must contain at least one check"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:137",
+	["only one age-up check is allowed per step"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:138",
+	conversion_error = "$dfb5645698a84afb91cf7a2dfb0f4a4e:139",
+	id_collision = "$dfb5645698a84afb91cf7a2dfb0f4a4e:140",
+	persistence_error = "$dfb5645698a84afb91cf7a2dfb0f4a4e:141",
+}
+
+BUILD_ORDER_EDITOR_CHECK_ORDER = {
+	"vils",
+	"rallypoint",
+	"built",
+	"age_up",
+	"upgrades",
+	"produce",
+	"resources",
+	"buildings",
+	"units",
+	"hints",
+}
+
+BUILD_ORDER_EDITOR_CHECK_SCHEMAS = {
+	vils = {
+		label = BUILD_ORDER_EDITOR_CHECK_LABELS.vils,
+		fields = {
+			BuildOrderEditorSchema_Object("payload", BUILD_ORDER_EDITOR_FIELD_LABELS.assignments, {
+				BuildOrderEditorSchema_Optional("food", BUILD_ORDER_EDITOR_FIELD_LABELS.food, BuildOrderEditorSchema_Primitive(nil, BUILD_ORDER_EDITOR_FIELD_LABELS.food, "positive_integer", false, nil)),
+				BuildOrderEditorSchema_Optional("wood", BUILD_ORDER_EDITOR_FIELD_LABELS.wood, BuildOrderEditorSchema_Primitive(nil, BUILD_ORDER_EDITOR_FIELD_LABELS.wood, "positive_integer", false, nil)),
+				BuildOrderEditorSchema_Optional("gold", BUILD_ORDER_EDITOR_FIELD_LABELS.gold, BuildOrderEditorSchema_Primitive(nil, BUILD_ORDER_EDITOR_FIELD_LABELS.gold, "positive_integer", false, nil)),
+				BuildOrderEditorSchema_Optional("stone", BUILD_ORDER_EDITOR_FIELD_LABELS.stone, BuildOrderEditorSchema_Primitive(nil, BUILD_ORDER_EDITOR_FIELD_LABELS.stone, "positive_integer", false, nil)),
+				BuildOrderEditorSchema_List("no_collect", BUILD_ORDER_EDITOR_FIELD_LABELS.no_collect, BuildOrderEditorSchema_Enum(nil, BUILD_ORDER_EDITOR_FIELD_LABELS.resource, BUILD_ORDER_EDITOR_ADAPTERS.no_collect.values, true, nil), 0, "no_collect"),
+			}, "resources"),
+		},
+	},
+	rallypoint = {
+		label = BUILD_ORDER_EDITOR_CHECK_LABELS.rallypoint,
+		fields = {
+			BuildOrderEditorSchema_Object("payload", BUILD_ORDER_EDITOR_FIELD_LABELS.rallypoint, {
+				BuildOrderEditorSchema_Enum("resource", BUILD_ORDER_EDITOR_FIELD_LABELS.resource, BUILD_ORDER_EDITOR_ADAPTERS.no_collect.values, true, nil),
+			}, nil),
+		},
+	},
+	built = {
+		label = BUILD_ORDER_EDITOR_CHECK_LABELS.built,
+		fields = {
+			BuildOrderEditorSchema_Object("payload", BUILD_ORDER_EDITOR_FIELD_LABELS.building, {
+				BuildOrderEditorSchema_List("alternatives", BUILD_ORDER_EDITOR_FIELD_LABELS.buildings, BuildOrderEditorSchema_Primitive(nil, BUILD_ORDER_EDITOR_FIELD_LABELS.building, "live_id", true, "live_building"), 1, "alternatives"),
+				BuildOrderEditorSchema_Primitive("count", BUILD_ORDER_EDITOR_FIELD_LABELS.count, "positive_integer", true, nil),
+				BuildOrderEditorSchema_Optional("vils", BUILD_ORDER_EDITOR_FIELD_LABELS.builders, BuildOrderEditorSchema_Primitive(nil, BUILD_ORDER_EDITOR_FIELD_LABELS.builders, "positive_integer", false, nil)),
+				BuildOrderEditorSchema_Optional("location", BUILD_ORDER_EDITOR_FIELD_LABELS.location, BuildOrderEditorSchema_Primitive(nil, BUILD_ORDER_EDITOR_FIELD_LABELS.location, "string", false, nil)),
+			}, nil),
+		},
+	},
+	age_up = {
+		label = BUILD_ORDER_EDITOR_CHECK_LABELS.age_up,
+		fields = {
+			BuildOrderEditorSchema_Object("payload", BUILD_ORDER_EDITOR_FIELD_LABELS.age_up_choice, {
+				BuildOrderEditorSchema_List("alternatives", BUILD_ORDER_EDITOR_FIELD_LABELS.choices, BuildOrderEditorSchema_Primitive(nil, BUILD_ORDER_EDITOR_FIELD_LABELS.choice, "live_id", true, "live_age_up"), 1, "alternatives"),
+				BuildOrderEditorSchema_Optional("vils", BUILD_ORDER_EDITOR_FIELD_LABELS.builders, BuildOrderEditorSchema_Primitive(nil, BUILD_ORDER_EDITOR_FIELD_LABELS.builders, "positive_integer", false, nil)),
+				BuildOrderEditorSchema_Optional("location", BUILD_ORDER_EDITOR_FIELD_LABELS.location, BuildOrderEditorSchema_Primitive(nil, BUILD_ORDER_EDITOR_FIELD_LABELS.location, "string", false, nil)),
+			}, nil),
+		},
+	},
+	upgrades = {
+		label = BUILD_ORDER_EDITOR_CHECK_LABELS.upgrades,
+		fields = {
+			BuildOrderEditorSchema_Object("payload", BUILD_ORDER_EDITOR_FIELD_LABELS.technology, {
+				BuildOrderEditorSchema_Primitive("id", BUILD_ORDER_EDITOR_FIELD_LABELS.technology, "live_id", true, "live_technology"),
+				BuildOrderEditorSchema_Primitive("queued", BUILD_ORDER_EDITOR_FIELD_LABELS.complete_when_queued, "boolean", true, nil),
+			}, nil),
+			BuildOrderEditorSchema_Primitive("optional", BUILD_ORDER_EDITOR_FIELD_LABELS.optional, "boolean", true, nil),
+		},
+	},
+	produce = {
+		label = BUILD_ORDER_EDITOR_CHECK_LABELS.produce,
+		fields = {
+			BuildOrderEditorSchema_Object("payload", BUILD_ORDER_EDITOR_FIELD_LABELS.unit_family, {
+				BuildOrderEditorSchema_Primitive("family", BUILD_ORDER_EDITOR_FIELD_LABELS.unit_family, "live_family", true, "live_family"),
+				BuildOrderEditorSchema_Primitive("count", BUILD_ORDER_EDITOR_FIELD_LABELS.count, "positive_integer", true, nil),
+				BuildOrderEditorSchema_Primitive("constant", BUILD_ORDER_EDITOR_FIELD_LABELS.constant_production, "boolean", true, nil),
+				BuildOrderEditorSchema_Primitive("queued", BUILD_ORDER_EDITOR_FIELD_LABELS.complete_when_queued, "boolean", true, nil),
+			}, nil),
+		},
+	},
+	resources = {
+		label = BUILD_ORDER_EDITOR_CHECK_LABELS.resources,
+		fields = {
+			BuildOrderEditorSchema_Object("payload", BUILD_ORDER_EDITOR_FIELD_LABELS.stockpile, {
+				BuildOrderEditorSchema_Optional("food", BUILD_ORDER_EDITOR_FIELD_LABELS.food, BuildOrderEditorSchema_Primitive(nil, BUILD_ORDER_EDITOR_FIELD_LABELS.food, "positive_integer", false, nil)),
+				BuildOrderEditorSchema_Optional("wood", BUILD_ORDER_EDITOR_FIELD_LABELS.wood, BuildOrderEditorSchema_Primitive(nil, BUILD_ORDER_EDITOR_FIELD_LABELS.wood, "positive_integer", false, nil)),
+				BuildOrderEditorSchema_Optional("gold", BUILD_ORDER_EDITOR_FIELD_LABELS.gold, BuildOrderEditorSchema_Primitive(nil, BUILD_ORDER_EDITOR_FIELD_LABELS.gold, "positive_integer", false, nil)),
+				BuildOrderEditorSchema_Optional("stone", BUILD_ORDER_EDITOR_FIELD_LABELS.stone, BuildOrderEditorSchema_Primitive(nil, BUILD_ORDER_EDITOR_FIELD_LABELS.stone, "positive_integer", false, nil)),
+			}, "resources"),
+		},
+	},
+	buildings = {
+		label = BUILD_ORDER_EDITOR_CHECK_LABELS.buildings,
+		fields = {
+			BuildOrderEditorSchema_Object("payload", BUILD_ORDER_EDITOR_FIELD_LABELS.building, {
+				BuildOrderEditorSchema_Primitive("id", BUILD_ORDER_EDITOR_FIELD_LABELS.building, "live_id", true, "live_building"),
+				BuildOrderEditorSchema_Primitive("count", BUILD_ORDER_EDITOR_FIELD_LABELS.count, "positive_integer", true, nil),
+			}, nil),
+		},
+	},
+	units = {
+		label = BUILD_ORDER_EDITOR_CHECK_LABELS.units,
+		fields = {
+			BuildOrderEditorSchema_Object("payload", BUILD_ORDER_EDITOR_FIELD_LABELS.unit_family, {
+				BuildOrderEditorSchema_Primitive("family", BUILD_ORDER_EDITOR_FIELD_LABELS.unit_family, "live_family", true, "live_family"),
+				BuildOrderEditorSchema_Primitive("count", BUILD_ORDER_EDITOR_FIELD_LABELS.count, "positive_integer", true, nil),
+			}, nil),
+		},
+	},
+	hints = {
+		label = BUILD_ORDER_EDITOR_CHECK_LABELS.hints,
+		fields = {
+			BuildOrderEditorSchema_Object("payload", BUILD_ORDER_EDITOR_FIELD_LABELS.hint, {
+				BuildOrderEditorSchema_Primitive("text", BUILD_ORDER_EDITOR_FIELD_LABELS.text, "string", true, nil),
+			}, nil),
+		},
+	},
+}
+
+BUILD_ORDER_EDITOR_SCHEMA = BuildOrderEditorSchema_Object(nil, BUILD_ORDER_EDITOR_FIELD_LABELS.build_order, {
+	BuildOrderEditorSchema_Primitive("civ", BUILD_ORDER_EDITOR_FIELD_LABELS.civilization, "string", true, nil),
+	BuildOrderEditorSchema_Primitive("title", BUILD_ORDER_EDITOR_FIELD_LABELS.title, "string", true, nil),
+	BuildOrderEditorSchema_List("steps", BUILD_ORDER_EDITOR_FIELD_LABELS.steps, BuildOrderEditorSchema_Object(nil, BUILD_ORDER_EDITOR_FIELD_LABELS.step, {
+		BuildOrderEditorSchema_Primitive("title", BUILD_ORDER_EDITOR_FIELD_LABELS.title, "string", true, nil),
+		BuildOrderEditorSchema_List("checks", BUILD_ORDER_EDITOR_FIELD_LABELS.checks, {
+			node_type = "variant",
+			discriminator = "kind",
+			variants = BUILD_ORDER_EDITOR_CHECK_SCHEMAS,
+		}, 1, nil),
+	}, nil), 1, nil),
+}, nil)

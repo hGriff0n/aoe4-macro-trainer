@@ -1,0 +1,181 @@
+BUILD_ORDER_DATASTORE_ID = "macroTrainerBuildOrders"
+BUILD_ORDER_DATASTORE_SCHEMA_VERSION = 1
+BUILD_ORDER_DATASTORE_ON_COMPLETE = nil
+BUILD_ORDER_DATASTORE_LOADING = false
+BUILD_ORDER_CATALOG = {}
+
+function BuildOrderDatastore_IsValidCheck(check)
+	if type(check) ~= "table" then
+		return false
+	end
+	if type(check.id) ~= "string" or check.id == "" then
+		return false
+	end
+	if type(check.kind) ~= "string" or check.kind == "" then
+		return false
+	end
+	if type(check.title) ~= "string" or check.title == "" then
+		return false
+	end
+	if type(check.optional) ~= "boolean" then
+		return false
+	end
+	if type(check.payload) ~= "table" then
+		return false
+	end
+	return true
+end
+
+function BuildOrderDatastore_IsValidStep(step)
+	if type(step) ~= "table" then
+		return false
+	end
+	if type(step.title) ~= "string" or step.title == "" then
+		return false
+	end
+	if type(step.checks) ~= "table" or #step.checks == 0 then
+		return false
+	end
+	for _, check in ipairs(step.checks) do
+		if not BuildOrderDatastore_IsValidCheck(check) then
+			return false
+		end
+	end
+	return true
+end
+
+function BuildOrderDatastore_IsValidOrder(id, buildOrder)
+	if type(id) ~= "string" or id == "" then
+		return false
+	end
+	if type(buildOrder) ~= "table" then
+		return false
+	end
+	if buildOrder.id ~= id then
+		return false
+	end
+	if type(buildOrder.civ) ~= "string" or buildOrder.civ == "" then
+		return false
+	end
+	if type(buildOrder.title) ~= "string" or buildOrder.title == "" then
+		return false
+	end
+	if type(buildOrder.steps) ~= "table" or #buildOrder.steps == 0 then
+		return false
+	end
+	for _, step in ipairs(buildOrder.steps) do
+		if not BuildOrderDatastore_IsValidStep(step) then
+			return false
+		end
+	end
+	return true
+end
+
+function BuildOrderDatastore_SaveCatalog()
+	local stored = {
+		schema_version = BUILD_ORDER_DATASTORE_SCHEMA_VERSION,
+		build_orders = BUILD_ORDER_CATALOG,
+	}
+	Game_StoreTableData(BUILD_ORDER_DATASTORE_ID, stored)
+	Game_SaveTextDataStore(BUILD_ORDER_DATASTORE_ID, "")
+end
+
+function BuildOrderDatastore_Apply(originalID, newID, buildOrder)
+	if not BuildOrderDatastore_IsValidOrder(newID, buildOrder) then
+		return false, "invalid_build_order"
+	end
+	if BUILD_ORDER_CATALOG[newID] ~= nil and newID ~= originalID then
+		return false, "id_collision"
+	end
+	local originalValue = nil
+	local hasOriginal = false
+	if originalID ~= nil then
+		originalValue = BUILD_ORDER_CATALOG[originalID]
+		hasOriginal = originalValue ~= nil
+	end
+	local destinationValue = BUILD_ORDER_CATALOG[newID]
+	local hasDestination = destinationValue ~= nil
+	if originalID ~= nil and originalID ~= newID then
+		BUILD_ORDER_CATALOG[originalID] = nil
+	end
+	BUILD_ORDER_CATALOG[newID] = buildOrder
+	local saved = pcall(BuildOrderDatastore_SaveCatalog)
+	if saved ~= true then
+		if hasDestination then
+			BUILD_ORDER_CATALOG[newID] = destinationValue
+		else
+			BUILD_ORDER_CATALOG[newID] = nil
+		end
+		if originalID ~= nil and originalID ~= newID then
+			if hasOriginal then
+				BUILD_ORDER_CATALOG[originalID] = originalValue
+			else
+				BUILD_ORDER_CATALOG[originalID] = nil
+			end
+		end
+		return false, "persistence_error"
+	end
+	return true, ""
+end
+
+function BuildOrderDatastore_Replace(loaded)
+	BUILD_ORDER_CATALOG = {}
+	if type(loaded) ~= "table" then
+		print("BuildOrderDatastore: no datastore catalog was loaded")
+		return
+	end
+	if loaded.schema_version ~= BUILD_ORDER_DATASTORE_SCHEMA_VERSION then
+		print("BuildOrderDatastore: unsupported datastore schema")
+		return
+	end
+	if type(loaded.build_orders) ~= "table" then
+		print("BuildOrderDatastore: invalid datastore catalog")
+		return
+	end
+
+	for id, buildOrder in pairs(loaded.build_orders) do
+		if BuildOrderDatastore_IsValidOrder(id, buildOrder) then
+			BUILD_ORDER_CATALOG[id] = buildOrder
+		else
+			print("BuildOrderDatastore: skipped invalid build order " .. tostring(id))
+		end
+	end
+end
+
+function BuildOrderDatastore_Complete()
+	local onComplete = BUILD_ORDER_DATASTORE_ON_COMPLETE
+	BUILD_ORDER_DATASTORE_ON_COMPLETE = nil
+	BUILD_ORDER_DATASTORE_LOADING = false
+	if type(onComplete) == "function" then
+		onComplete()
+	end
+end
+
+function BuildOrderDatastore_FinishLoad()
+	Rule_RemoveMe()
+	if not BUILD_ORDER_DATASTORE_LOADING then
+		return
+	end
+
+	local loaded = Game_RetrieveTableData(BUILD_ORDER_DATASTORE_ID, false)
+	BuildOrderDatastore_Replace(loaded)
+	BuildOrderDatastore_Complete()
+end
+
+function BuildOrderDatastore_Load(onComplete)
+	if BUILD_ORDER_DATASTORE_LOADING then
+		return
+	end
+
+	BUILD_ORDER_DATASTORE_ON_COMPLETE = onComplete
+	BUILD_ORDER_DATASTORE_LOADING = true
+	Game_LoadTextDataStore(BUILD_ORDER_DATASTORE_ID, "")
+	Rule_Remove(BuildOrderDatastore_FinishLoad)
+	Rule_Add(BuildOrderDatastore_FinishLoad)
+end
+
+function BuildOrderDatastore_Stop()
+	Rule_Remove(BuildOrderDatastore_FinishLoad)
+	BUILD_ORDER_DATASTORE_ON_COMPLETE = nil
+	BUILD_ORDER_DATASTORE_LOADING = false
+end

@@ -1,91 +1,294 @@
-BUILD_ORDER_STARTUP_NO_SYSTEMS_TITLE = "$dfb5645698a84afb91cf7a2dfb0f4a4e:25"
-BUILD_ORDER_STARTUP_NO_SYSTEMS_MESSAGE = "$dfb5645698a84afb91cf7a2dfb0f4a4e:26"
-BUILD_ORDER_STARTUP_INVALID_TITLE = "$dfb5645698a84afb91cf7a2dfb0f4a4e:27"
-BUILD_ORDER_STARTUP_MISSING_BUILD_TITLE = "$dfb5645698a84afb91cf7a2dfb0f4a4e:28"
+BUILD_ORDER_STARTUP_SELECTOR_TITLE = "$dfb5645698a84afb91cf7a2dfb0f4a4e:29"
+BUILD_ORDER_STARTUP_CONFIRMATION_TITLE = "$dfb5645698a84afb91cf7a2dfb0f4a4e:44"
+BUILD_ORDER_STARTUP_CONFIRMATION_MESSAGE = "$dfb5645698a84afb91cf7a2dfb0f4a4e:45"
+BUILD_ORDER_STARTUP_FALLBACK_TITLE = "$dfb5645698a84afb91cf7a2dfb0f4a4e:47"
+BUILD_ORDER_STARTUP_FALLBACK_MESSAGE = "$dfb5645698a84afb91cf7a2dfb0f4a4e:48"
+BUILD_ORDER_STARTUP_FALLBACK_CONTINUE = "$dfb5645698a84afb91cf7a2dfb0f4a4e:49"
+BUILD_ORDER_STARTUP_FALLBACK_STAY = "$dfb5645698a84afb91cf7a2dfb0f4a4e:50"
+BUILD_ORDER_STARTUP_MISSING_SELECTION = "$dfb5645698a84afb91cf7a2dfb0f4a4e:51"
+BUILD_ORDER_STARTUP_INVALID_SELECTION = "$dfb5645698a84afb91cf7a2dfb0f4a4e:52"
 
-function BuildOrderStartup_Start()
-	local selectedID = _mod.selectedBuildOrderID
-	if selectedID == nil then
-		if _mod.simspeedEnabled then
-			Mod_StartSimspeedCycle()
-		else
-			BuildOrderStartup_ShowNoSystemsError()
+function BuildOrderStartup_Callbacks()
+	return {
+		start_game = "BuildOrderStartup_StartGame",
+		continue_without = "BuildOrderStartup_ContinueWithoutSelection",
+	}
+end
+
+function BuildOrderStartup_CanonicalCivID(player)
+	local raceName = Player_GetRaceName(player)
+	if type(BuildOrderDiscovery_CanonicalCivID) == "function" then
+		return BuildOrderDiscovery_CanonicalCivID(raceName)
+	end
+	return string.lower(raceName or "")
+end
+
+function BuildOrderStartup_ChoiceComesBefore(leftID, rightID)
+	local left = BUILD_ORDER_CATALOG[leftID]
+	local right = BUILD_ORDER_CATALOG[rightID]
+	local leftTitle = string.lower(left.title)
+	local rightTitle = string.lower(right.title)
+	if leftTitle ~= rightTitle then
+		return leftTitle < rightTitle
+	end
+	return leftID < rightID
+end
+
+function BuildOrderStartup_CollectCompatible()
+	local actualCiv = BuildOrderStartup_CanonicalCivID(Game_GetLocalPlayer())
+	local compatible = {}
+	for id, buildOrder in pairs(BUILD_ORDER_CATALOG or {}) do
+		if type(id) == "string"
+			and type(buildOrder) == "table"
+			and type(buildOrder.civ) == "string"
+			and type(buildOrder.title) == "string"
+			and string.lower(buildOrder.civ) == actualCiv then
+			local insertAt = #compatible + 1
+			for index, existingID in ipairs(compatible) do
+				if BuildOrderStartup_ChoiceComesBefore(id, existingID) then
+					insertAt = index
+					break
+				end
+			end
+			for index = #compatible, insertAt, -1 do
+				compatible[index + 1] = compatible[index]
+			end
+			compatible[insertAt] = id
 		end
-		return
 	end
-
-	local buildOrder = BUILD_ORDER_CATALOG[selectedID]
-	if buildOrder == nil then
-		BuildOrderStartup_ShowMissingBuildError()
-		return
-	end
-
-	local localPlayer = Game_GetLocalPlayer()
-	local actualCiv = string.lower(Player_GetRaceName(localPlayer))
-	if actualCiv ~= string.lower(buildOrder.civ) then
-		BuildOrderStartup_ShowInvalidBuildError(buildOrder, actualCiv)
-		return
-	end
-
-	BuildOrder_Start(buildOrder, localPlayer)
-	if _mod.simspeedEnabled then
-		Mod_StartSimspeedCycle()
-	end
+	_mod.compatibleBuildOrderIDs = compatible
+	return compatible
 end
 
-function BuildOrderStartup_ShowNoSystemsError()
-	BuildOrderStartup_ShowError(
-		BUILD_ORDER_STARTUP_NO_SYSTEMS_TITLE,
-		BUILD_ORDER_STARTUP_NO_SYSTEMS_MESSAGE)
+function BuildOrderStartup_IsCompatibleID(id)
+	if type(id) ~= "string" then
+		return false
+	end
+	for _, compatibleID in ipairs(_mod.compatibleBuildOrderIDs or {}) do
+		if compatibleID == id then
+			return true
+		end
+	end
+	return false
 end
 
-function BuildOrderStartup_ShowInvalidBuildError(buildOrder, actualCiv)
-	local message = "Selected build order for " .. buildOrder.civ .. " but playing as " .. actualCiv
-	BuildOrderStartup_ShowError(BUILD_ORDER_STARTUP_INVALID_TITLE, message)
+function BuildOrderStartup_BuildSelectorOrders()
+	local orders = {}
+	for _, id in ipairs(_mod.compatibleBuildOrderIDs or {}) do
+		local buildOrder = BUILD_ORDER_CATALOG[id]
+		table.insert(orders, {
+			id = id,
+			label = buildOrder.title,
+			selected = _mod.selectedBuildOrderID == id,
+		})
+	end
+	return orders
 end
 
-function BuildOrderStartup_ShowMissingBuildError()
-	BuildOrderStartup_ShowError(
-		BUILD_ORDER_STARTUP_INVALID_TITLE,
-		BUILD_ORDER_STARTUP_MISSING_BUILD_TITLE)
+function BuildOrderStartup_ResetFallbackButtons()
+	UI_MessageBoxSetButton(DB_Button1, "", "", "", false)
+	UI_MessageBoxSetButton(DB_Button2, "", "", "", false)
+	UI_MessageBoxSetButton(DB_Button3, "", "", "", false)
+	UI_MessageBoxSetButton(DB_Button4, "", "", "", false)
 end
 
-function BuildOrderStartup_ShowError(title, message)
-	_mod.buildOrderDisabled = true
-	_mod.startupAlertOpen = true
-	UI_MessageBoxSetText(title, message)
+function BuildOrderStartup_ShowFallback()
+	if not _mod.startupActive then
+		return false
+	end
+	_mod.startupFallbackOpen = true
+	_mod.startupScreen = "fallback"
+	BuildOrderStartup_ResetFallbackButtons()
+	UI_MessageBoxSetText(
+		BUILD_ORDER_STARTUP_FALLBACK_TITLE,
+		BUILD_ORDER_STARTUP_FALLBACK_MESSAGE
+	)
 	UI_MessageBoxSetButton(
 		DB_Button1,
-		"Continue Without Build Order",
-		"Resume the match without build-order objectives.",
+		BUILD_ORDER_STARTUP_FALLBACK_CONTINUE,
+		BUILD_ORDER_STARTUP_CONFIRMATION_MESSAGE,
 		"",
-		true)
-	UI_MessageBoxShow(DC_Default, BuildOrderStartup_Continue)
-	Rule_Remove(BuildOrderStartup_PauseNextTick)
-	Rule_Add(BuildOrderStartup_PauseNextTick)
+		true
+	)
+	UI_MessageBoxSetButton(
+		DB_Button2,
+		BUILD_ORDER_STARTUP_FALLBACK_STAY,
+		BUILD_ORDER_STARTUP_CONFIRMATION_MESSAGE,
+		"",
+		true
+	)
+	UI_MessageBoxShow(DC_Default, BuildOrderStartup_HandleFallbackChoice)
+	return true
+end
+
+function BuildOrderStartup_ShowSelector(message)
+	if not _mod.startupActive then
+		return false
+	end
+	BuildOrderStartup_CollectCompatible()
+	_mod.startupMessage = message
+	_mod.startupScreen = "selector"
+	_mod.startupFallbackOpen = false
+	BuildOrderEditorUI_SetCallbacks(BuildOrderStartup_Callbacks())
+	local shown = BuildOrderEditorUI_ShowSelector({
+		current_civ = BuildOrderStartup_CanonicalCivID(Game_GetLocalPlayer()),
+		orders = BuildOrderStartup_BuildSelectorOrders(),
+		message = message or "",
+	})
+	if not shown then
+		BuildOrderStartup_ShowFallback()
+		return false
+	end
+	return true
 end
 
 function BuildOrderStartup_PauseNextTick()
 	Rule_RemoveMe()
-	if _mod.startupAlertOpen then
+	if _mod.startupAwaitingChoice then
 		Misc_SetSimRate(0)
 	end
 end
 
-function BuildOrderStartup_Continue(button)
-	if not _mod.startupAlertOpen or button ~= DB_Button1 then
-		return
+function BuildOrderStartup_Start()
+	if _mod.startupStarted then
+		return false
 	end
-
-	_mod.startupAlertOpen = false
+	_mod.startupStarted = true
+	_mod.startupActive = true
+	_mod.startupAwaitingChoice = true
+	_mod.startupFallbackOpen = false
+	_mod.startupMessage = nil
+	BuildOrderStartup_CollectCompatible()
 	Rule_Remove(BuildOrderStartup_PauseNextTick)
+	Rule_Add(BuildOrderStartup_PauseNextTick)
+	local message = nil
+	if _mod.selectedBuildOrderID ~= nil then
+		local selectedBuildOrder = BUILD_ORDER_CATALOG[_mod.selectedBuildOrderID]
+		if type(selectedBuildOrder) ~= "table" then
+			message = BUILD_ORDER_STARTUP_MISSING_SELECTION
+		elseif not BuildOrderStartup_IsCompatibleID(_mod.selectedBuildOrderID) then
+			message = BUILD_ORDER_STARTUP_INVALID_SELECTION
+		end
+	end
+	BuildOrderStartup_ShowSelector(message)
+	return true
+end
+
+function BuildOrderStartup_ParameterID(parameter)
+	if type(parameter) == "table" then
+		return parameter.id or parameter.value
+	end
+	if type(parameter) == "string" then
+		return parameter
+	end
+	return nil
+end
+
+function BuildOrderStartup_FinishStartGame()
+	_mod.startupActive = false
+	_mod.startupAwaitingChoice = false
+	_mod.startupFallbackOpen = false
+	_mod.startupScreen = "hidden"
+	Rule_Remove(BuildOrderStartup_PauseNextTick)
+	BuildOrderEditorUI_Hide()
 	Misc_SetSimRate(NORMAL_SIM_RATE)
+end
+
+function BuildOrderStartup_StartSelected(buildOrder)
+	if not _mod.startupActive or _mod.buildOrderStarted then
+		return false
+	end
+	local localPlayer = Game_GetLocalPlayer()
+	local actualCiv = BuildOrderStartup_CanonicalCivID(localPlayer)
+	if type(buildOrder) ~= "table" then
+		BuildOrderStartup_ShowSelector(BUILD_ORDER_STARTUP_MISSING_SELECTION)
+		return false
+	end
+	if type(buildOrder.civ) ~= "string"
+		or actualCiv ~= string.lower(buildOrder.civ) then
+		BuildOrderStartup_ShowSelector(BUILD_ORDER_STARTUP_INVALID_SELECTION)
+		return false
+	end
+	_mod.buildOrderStarted = true
+	BuildOrderStartup_FinishStartGame()
+	BuildOrder_Start(buildOrder, localPlayer)
 	if _mod.simspeedEnabled then
 		Mod_StartSimspeedCycle()
 	end
+	return true
+end
+
+function BuildOrderStartup_StartGame(parameter)
+	if not _mod.startupActive or _mod.startupScreen ~= "selector" then
+		return false
+	end
+	local parameterID = BuildOrderStartup_ParameterID(parameter)
+	if parameterID == nil then
+		return false
+	end
+	if not BuildOrderStartup_IsCompatibleID(parameterID) then
+		BuildOrderStartup_ShowSelector(BUILD_ORDER_STARTUP_INVALID_SELECTION)
+		return false
+	end
+	_mod.selectedBuildOrderID = parameterID
+	local buildOrder = BUILD_ORDER_CATALOG[_mod.selectedBuildOrderID]
+	if type(buildOrder) ~= "table" then
+		BuildOrderStartup_ShowSelector(BUILD_ORDER_STARTUP_MISSING_SELECTION)
+		return false
+	end
+	if not BuildOrderStartup_IsCompatibleID(_mod.selectedBuildOrderID) then
+		BuildOrderStartup_ShowSelector(BUILD_ORDER_STARTUP_INVALID_SELECTION)
+		return false
+	end
+	return BuildOrderStartup_StartSelected(buildOrder)
+end
+
+function BuildOrderStartup_ContinueWithoutSelection()
+	if not _mod.startupActive or _mod.startupScreen ~= "selector" then
+		return false
+	end
+	_mod.selectedBuildOrderID = nil
+	return BuildOrderStartup_ContinueWithoutBuildOrder(true)
+end
+
+function BuildOrderStartup_ContinueWithoutBuildOrder(confirmed)
+	if confirmed ~= true or not _mod.startupActive
+		or not _mod.startupAwaitingChoice then
+		return false
+	end
+	BuildOrderStartup_FinishStartGame()
+	if _mod.simspeedEnabled then
+		Mod_StartSimspeedCycle()
+	end
+	return true
+end
+
+function BuildOrderStartup_HandleFallbackChoice(button)
+	if not _mod.startupActive or not _mod.startupFallbackOpen then
+		return false
+	end
+	if button == DB_Button1 then
+		return BuildOrderStartup_ContinueWithoutBuildOrder(true)
+	end
+	if button == DB_Button2 then
+		return BuildOrderStartup_ShowFallback()
+	end
+	return false
 end
 
 function BuildOrderStartup_Stop()
-	_mod.startupAlertOpen = false
+	if not _mod.startupStarted then
+		return false
+	end
+	_mod.startupStarted = false
+	_mod.startupActive = false
+	_mod.startupAwaitingChoice = false
+	_mod.startupFallbackOpen = false
+	_mod.startupScreen = "hidden"
+	_mod.startupMessage = nil
+	_mod.compatibleBuildOrderIDs = {}
+	_mod.buildOrderStarted = false
 	Rule_Remove(BuildOrderStartup_PauseNextTick)
+	BuildOrderEditorUI_Hide()
+	return true
 end
