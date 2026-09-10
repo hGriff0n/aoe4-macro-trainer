@@ -106,12 +106,11 @@ class BuildOrderEditorDiscoveryContractTests(unittest.TestCase):
                     expected,
                 )
 
-    def test_collect_enumerates_all_three_property_bag_groups(self) -> None:
+    def test_collect_enumerates_entity_and_squad_property_bag_groups(self) -> None:
         body = function_body(self.source, "BuildOrderDiscovery_Collect")
         for pbg_type in (
             "PBG_EntityProperties",
             "PBG_SquadProperties",
-            "PBG_UpgradeProperties",
         ):
             with self.subTest(pbg_type=pbg_type):
                 self.assertIn(f"BP_GetPropertyBagGroupCount({pbg_type})", body)
@@ -152,6 +151,9 @@ class BuildOrderEditorDiscoveryContractTests(unittest.TestCase):
         self.assertIn("for age = 2, 4 do", body)
         self.assertIn("Entity_IsEBPOfType(pbg, ageType)", body)
         self.assertIn("Squad_IsSBPOfType(pbg, ageType)", body)
+        self.assertIn(
+            "ipairs(BUILD_ORDER_DISCOVERY_UPGRADE_AGE_TYPES)", body
+        )
         self.assertIn("BP_IsUpgradeOfType(pbg, ageType)", body)
         self.assertNotIn("Player_CanConstruct", body)
 
@@ -168,11 +170,10 @@ class BuildOrderEditorDiscoveryContractTests(unittest.TestCase):
         self.assertIn("Player_GetUpgradeBPCost(player, pbg)", technology)
         self.assertIn("best-effort availability", self.source)
 
-    def test_collection_resolves_each_property_bag_blueprint(self) -> None:
+    def test_collection_resolves_entity_and_squad_property_bag_blueprints(self) -> None:
         body = function_body(self.source, "BuildOrderDiscovery_Collect")
         self.assertIn("BP_GetEntityBlueprint(pathName)", body)
         self.assertIn("BP_GetSquadBlueprint(pathName)", body)
-        self.assertIn("BP_GetUpgradeBlueprint(pathName)", body)
 
     def test_presentation_uses_kind_specific_ui_info(self) -> None:
         body = function_body(self.source, "BuildOrderDiscovery_GetPresentation")
@@ -252,6 +253,32 @@ class BuildOrderEditorDiscoveryContractTests(unittest.TestCase):
 
 
 class BuildOrderEditorDiscoveryBehaviorTests(unittest.TestCase):
+    def test_upgrade_age_uses_upgrade_specific_age_types(self) -> None:
+        runtime = ScarRuntime(DISCOVERY_SCAR.read_text(encoding="utf-8"))
+        runtime.globals["Entity_IsEBPOfType"] = lambda _pbg, _type_name: False
+        runtime.globals["Squad_IsSBPOfType"] = lambda _pbg, _type_name: False
+
+        cases = (
+            ("scar_dark_age_upgrade", 1),
+            ("scar_feudal_age_upgrade", 2),
+            ("scar_castle_age_upgrade", 3),
+            ("scar_imperial_age_upgrade", 4),
+        )
+        for expected_type, expected_age in cases:
+            with self.subTest(expected_type=expected_type):
+                runtime.globals["BP_IsUpgradeOfType"] = (
+                    lambda _pbg, type_name: type_name == expected_type
+                )
+                self.assertEqual(
+                    runtime.call(
+                        "BuildOrderDiscovery_GetAge",
+                        "technology",
+                        "upgrade_test",
+                        "upgrade-pbg",
+                    ),
+                    expected_age,
+                )
+
     def test_collects_race_filtered_buildings_and_cost_available_technologies_and_keeps_landmarks_in_both_lists(self) -> None:
         runtime = ScarRuntime(DISCOVERY_SCAR.read_text(encoding="utf-8"))
         local_race = object()
@@ -284,15 +311,19 @@ class BuildOrderEditorDiscoveryBehaviorTests(unittest.TestCase):
         runtime.globals["BP_GetPropertyBagGroupCount"] = lambda group: {
             "entities": len(entity_paths),
             "squads": 0,
-            "upgrades": len(upgrade_paths),
+            "upgrades": 0,
         }[group]
         runtime.globals["BP_GetPropertyBagGroupPathName"] = (
             lambda group, index: {
                 "entities": entity_paths,
                 "squads": [],
-                "upgrades": upgrade_paths,
+                "upgrades": [],
             }[group][index]
         )
+        runtime.globals["BP_GetUpgradesMatchingTypes"] = (
+            lambda _type_groups: runtime.table(upgrade_paths)
+        )
+        runtime.globals["BP_GetName"] = lambda pbg: pbg
         runtime.globals["BP_GetEntityTypeExtRaceCount"] = lambda _path: 1
         runtime.globals["BP_GetEntityTypeExtRaceBlueprintAtIndex"] = (
             lambda path, _index: foreign_race if path.endswith("_fre") else local_race
@@ -371,6 +402,10 @@ class BuildOrderEditorDiscoveryBehaviorTests(unittest.TestCase):
         runtime.globals["BP_GetPropertyBagGroupPathName"] = (
             lambda group, index: upgrades[index]
         )
+        runtime.globals["BP_GetUpgradesMatchingTypes"] = (
+            lambda _type_groups: runtime.table(upgrades)
+        )
+        runtime.globals["BP_GetName"] = lambda pbg: pbg
         runtime.globals["BP_GetEntityBlueprint"] = lambda path: path
         runtime.globals["BP_GetSquadBlueprint"] = lambda path: path
         runtime.globals["BP_GetUpgradeBlueprint"] = lambda path: path
@@ -380,7 +415,10 @@ class BuildOrderEditorDiscoveryBehaviorTests(unittest.TestCase):
         runtime.globals["Squad_IsSBPOfType"] = lambda _pbg, _type_name: False
         runtime.globals["BP_IsUpgradeOfType"] = lambda pbg, type_name: (
             pbg == "upgrade_abbasid_wing_feudal"
-            and type_name in {"abbasid_wing_upgrade", "scar_age2"}
+            and type_name in {
+                "abbasid_wing_upgrade",
+                "scar_feudal_age_upgrade",
+            }
         )
         runtime.globals["Player_GetUpgradeBPCost"] = (
             lambda _player, pbg: runtime.table({"food": 400})

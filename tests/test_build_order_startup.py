@@ -47,6 +47,9 @@ class BuildOrderStartupBehaviorTests(unittest.TestCase):
     def setUp(self) -> None:
         self.source = STARTUP_PATH.read_text(encoding="utf-8")
         self.runtime = ScarRuntime(self.source)
+        self.runtime.globals["tostring"] = lambda value: (
+            "nil" if value is None else str(value).lower()
+        )
         self.runtime.globals["NORMAL_SIM_RATE"] = 8
         self.runtime.globals["DB_Button1"] = "button-1"
         self.runtime.globals["DB_Button2"] = "button-2"
@@ -96,7 +99,9 @@ class BuildOrderStartupBehaviorTests(unittest.TestCase):
         self.message_box_text = []
         self.message_box_buttons = []
         self.message_box_callbacks = []
+        self.trace_messages = []
 
+        self.runtime.globals["print"] = self.trace_messages.append
         self.runtime.globals["Game_GetLocalPlayer"] = lambda: "local-player"
         self.runtime.globals["Player_GetRaceName"] = (
             lambda player: "english" if player == "local-player" else "french"
@@ -177,6 +182,10 @@ class BuildOrderStartupBehaviorTests(unittest.TestCase):
         return self.selector_models[-1]["orders"].array()
 
     def test_start_collects_local_orders_schedules_pause_and_is_idempotent(self) -> None:
+        catalog = self.runtime.globals["BUILD_ORDER_CATALOG"]
+        catalog["english-alpha-a"]["steps"] = self.runtime.table(
+            [{"title": "Opening", "checks": []}]
+        )
         self.runtime.globals["_mod"]["selectedBuildOrderID"] = "english-zulu"
 
         self.assertTrue(self.start())
@@ -188,13 +197,14 @@ class BuildOrderStartupBehaviorTests(unittest.TestCase):
         self.assertEqual(
             [option["id"] for option in self.selector_orders()],
             [
-                self.runtime.globals["BUILD_ORDER_STARTUP_NO_ORDER_ID"],
                 "english-alpha-a",
                 "english-alpha-b",
                 "english-zulu",
             ],
         )
-        self.assertFalse(self.selector_orders()[0]["editable"])
+        for option in self.selector_orders():
+            self.assertIsNone(option["editable"])
+            self.assertIsNone(option["steps"])
         self.assertTrue(self.selector_orders()[-1]["selected"])
         self.assertEqual(
             self.runtime.globals["_mod"]["selectedBuildOrderID"],
@@ -228,55 +238,12 @@ class BuildOrderStartupBehaviorTests(unittest.TestCase):
 
         self.assertEqual(compatible.array(), ["ayyubids-feudal"])
 
-    def test_select_changes_state_without_resuming_and_edit_cancel_restores_it(self) -> None:
+    def test_selected_order_starts_game_once_and_is_the_only_objective_start(self) -> None:
         self.start()
-        self.assertTrue(
-            self.call("BuildOrderStartup_Select", {"id": "english-alpha-a"})
-        )
-        state = self.runtime.globals["_mod"]
-        self.assertEqual(state["selectedBuildOrderID"], "english-alpha-a")
-        self.assertEqual(self.sim_rates, [])
-        self.assertEqual(self.objective_starts, [])
-        self.assertTrue(self.selector_orders()[1]["selected"])
 
         self.assertTrue(
-            self.call("BuildOrderStartup_Edit", {"id": "english-alpha-a"})
+            self.call("BuildOrderStartup_StartGame", {"id": "english-alpha-a"})
         )
-        self.assertEqual(self.edit_calls[0][0], "english-alpha-a")
-        self.assertEqual(state["selectedBuildOrderID"], "english-alpha-a")
-        self.invoke(self.edit_calls[0][1], None)
-        self.assertEqual(state["selectedBuildOrderID"], "english-alpha-a")
-        self.assertTrue(self.selector_orders()[1]["selected"])
-
-    def test_create_cancel_restores_prior_selection_and_save_selects_saved_id(self) -> None:
-        state = self.runtime.globals["_mod"]
-        state["selectedBuildOrderID"] = "english-zulu"
-        self.start()
-
-        self.assertTrue(self.call("BuildOrderStartup_Create"))
-        self.assertEqual(state["selectedBuildOrderID"], "english-zulu")
-        self.invoke(self.create_callbacks[-1], None)
-        self.assertEqual(state["selectedBuildOrderID"], "english-zulu")
-        self.assertTrue(self.selector_orders()[-1]["selected"])
-
-        self.assertTrue(self.call("BuildOrderStartup_Create"))
-        saved_id = "english-saved"
-        self.catalog[saved_id] = build_order(saved_id, "Saved")
-        self.runtime.globals["BUILD_ORDER_CATALOG"][saved_id] = self.runtime.table(
-            self.catalog[saved_id]
-        )
-        self.invoke(self.create_callbacks[-1], saved_id)
-        self.assertEqual(state["selectedBuildOrderID"], saved_id)
-        saved_option = next(
-            option for option in self.selector_orders() if option["id"] == saved_id
-        )
-        self.assertTrue(saved_option["selected"])
-
-    def test_selected_order_unpauses_once_and_is_the_only_objective_start(self) -> None:
-        self.start()
-        self.call("BuildOrderStartup_Select", {"id": "english-alpha-a"})
-
-        self.assertTrue(self.call("BuildOrderStartup_Unpause"))
         self.assertEqual(len(self.objective_starts), 1)
         selected, player = self.objective_starts[0]
         self.assertEqual(selected["id"], "english-alpha-a")
@@ -285,7 +252,7 @@ class BuildOrderStartupBehaviorTests(unittest.TestCase):
         self.assertEqual(self.cycle_starts, 1)
         self.assertEqual(self.ui_hides, 1)
 
-        self.assertFalse(self.call("BuildOrderStartup_Unpause"))
+        self.assertFalse(self.call("BuildOrderStartup_StartGame"))
         self.assertEqual(len(self.objective_starts), 1)
         self.assertEqual(self.sim_rates, [8])
         self.assertEqual(self.cycle_starts, 1)
@@ -296,26 +263,37 @@ class BuildOrderStartupBehaviorTests(unittest.TestCase):
         self.assertIn("BuildOrder_Start(buildOrder, localPlayer)", start_selected)
         self.assertEqual(self.source.count("BuildOrder_Start("), 1)
 
-    def test_no_order_requires_confirmation_and_starts_only_enabled_cycle(self) -> None:
+    def test_continue_without_build_order_clears_selection_and_starts(self) -> None:
+        self.runtime.globals["_mod"]["selectedBuildOrderID"] = "english-alpha-a"
         self.start()
 
-        self.assertTrue(self.call("BuildOrderStartup_Unpause"))
-        self.assertEqual(len(self.confirmation_models), 1)
-        self.assertEqual(self.sim_rates, [])
-        self.assertEqual(self.objective_starts, [])
-
-        self.assertTrue(self.call("BuildOrderStartup_Cancel"))
-        self.assertEqual(len(self.selector_models), 2)
-        self.assertEqual(self.sim_rates, [])
-
-        self.call("BuildOrderStartup_Unpause")
-        self.assertTrue(self.call("BuildOrderStartup_ConfirmNoOrder"))
+        self.assertTrue(self.call("BuildOrderStartup_ContinueWithoutSelection"))
+        self.assertIsNone(self.runtime.globals["_mod"]["selectedBuildOrderID"])
+        self.assertEqual(self.confirmation_models, [])
         self.assertEqual(self.sim_rates, [8])
         self.assertEqual(self.cycle_starts, 1)
         self.assertEqual(self.objective_starts, [])
-        self.assertFalse(self.call("BuildOrderStartup_ConfirmNoOrder"))
+        self.assertFalse(self.call("BuildOrderStartup_ContinueWithoutSelection"))
         self.assertEqual(self.sim_rates, [8])
         self.assertEqual(self.cycle_starts, 1)
+
+    def test_start_game_requires_a_selected_build_order(self) -> None:
+        self.start()
+
+        self.assertFalse(self.call("BuildOrderStartup_StartGame"))
+        self.assertEqual(self.sim_rates, [])
+        self.assertEqual(self.objective_starts, [])
+
+    def test_no_compatible_orders_projects_an_empty_list(self) -> None:
+        self.runtime.globals["BUILD_ORDER_CATALOG"] = self.runtime.table({})
+
+        self.assertTrue(self.start())
+
+        self.assertEqual(self.selector_orders(), [])
+        self.assertEqual(self.objective_starts, [])
+        self.assertFalse(self.call("BuildOrderStartup_StartGame"))
+        self.assertEqual(self.sim_rates, [])
+        self.assertEqual(self.cycle_starts, 0)
 
     def test_missing_selection_returns_to_selector_without_resuming(self) -> None:
         state = self.runtime.globals["_mod"]
@@ -327,13 +305,13 @@ class BuildOrderStartupBehaviorTests(unittest.TestCase):
         )
         self.assertEqual(state["selectedBuildOrderID"], "english-missing")
 
-        self.assertFalse(self.call("BuildOrderStartup_Unpause"))
+        self.assertFalse(self.call("BuildOrderStartup_StartGame"))
         self.assertEqual(self.sim_rates, [])
         self.assertEqual(self.objective_starts, [])
         self.assertEqual(self.selector_models[-1]["message"], f"${MOD_NAMESPACE}:51")
 
         self.assertFalse(
-            self.call("BuildOrderStartup_Select", {"id": "not-in-selector"})
+            self.call("BuildOrderStartup_StartGame", {"id": "not-in-selector"})
         )
         self.assertEqual(state["selectedBuildOrderID"], "english-missing")
 
@@ -350,7 +328,7 @@ class BuildOrderStartupBehaviorTests(unittest.TestCase):
         )
         self.assertEqual(state["selectedBuildOrderID"], "french-alpha")
 
-        self.assertFalse(self.call("BuildOrderStartup_Unpause"))
+        self.assertFalse(self.call("BuildOrderStartup_StartGame"))
         self.assertEqual(self.selector_models[-1]["message"], f"${MOD_NAMESPACE}:52")
         self.assertEqual(self.sim_rates, [])
         self.assertEqual(self.objective_starts, [])
@@ -421,18 +399,15 @@ class BuildOrderStartupContractTests(unittest.TestCase):
         cls.startup = STARTUP_PATH.read_text(encoding="utf-8")
         cls.main = MAIN_PATH.read_text(encoding="utf-8")
 
-    def test_startup_registers_only_local_ui_callbacks_and_no_network_events(self) -> None:
+    def test_startup_registers_only_start_and_continue_callbacks(self) -> None:
         callbacks = function_body(self.startup, "BuildOrderStartup_Callbacks")
-        for name in (
-            "BuildOrderStartup_Select",
-            "BuildOrderStartup_Edit",
-            "BuildOrderStartup_Create",
-            "BuildOrderStartup_Unpause",
-            "BuildOrderStartup_Cancel",
-            "BuildOrderStartup_ConfirmNoOrder",
-        ):
-            self.assertIn(name, callbacks)
+        self.assertIn("BuildOrderStartup_StartGame", callbacks)
+        self.assertIn("BuildOrderStartup_ContinueWithoutSelection", callbacks)
+        self.assertNotIn("BuildOrderEditor_Callbacks()", callbacks)
+        for name in ("BuildOrderStartup_Edit", "BuildOrderStartup_Create"):
+            self.assertNotIn(name, self.startup)
         self.assertIn("Game_GetLocalPlayer()", self.startup)
+        self.assertNotIn("No Build Order", self.startup)
         self.assertNotRegex(self.startup, r"\b(?:Event|Network|Net)_")
 
     def test_main_delegates_load_and_cleans_every_system_once(self) -> None:
@@ -456,7 +431,6 @@ class BuildOrderStartupContractTests(unittest.TestCase):
         rows = csv_rows(LOCDB_PATH)
         expected = {
             29: "Choose a Build Order",
-            31: "No build order",
             44: "Continue without a build order?",
             45: "No build-order objectives will be started.",
             47: "Build Order UI Unavailable",

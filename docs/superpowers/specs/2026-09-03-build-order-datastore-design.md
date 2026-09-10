@@ -26,23 +26,25 @@ The `.rlt` is normal Lua datastore text with one `LuaDataStore` root. Its logica
 
 ```lua
 LuaDataStore = {
-    schema_version = 1,
-    build_orders = {
-        ["english-example"] = {
-            id = "english-example",
-            civ = "english",
-            title = "Example",
-            source = "https://example.com/build-order",
-            steps = {
-                {
-                    title = "Opening",
-                    checks = {
-                        {
-                            id = "english-example:1:1",
-                            kind = "vils",
-                            title = "Assign 7 food",
-                            optional = false,
-                            payload = { food = 7 },
+    macroTrainerBuildOrders = {
+        schema_version = 1,
+        build_orders = {
+            ["english-example"] = {
+                id = "english-example",
+                civ = "english",
+                title = "Example",
+                source = "https://example.com/build-order",
+                steps = {
+                    {
+                        title = "Opening",
+                        checks = {
+                            {
+                                id = "english-example:1:1",
+                                kind = "vils",
+                                title = "Assign 7 food",
+                                optional = false,
+                                payload = { food = 7 },
+                            },
                         },
                     },
                 },

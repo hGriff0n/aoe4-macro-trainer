@@ -31,7 +31,7 @@ class BuildOrderDatastoreContractTests(unittest.TestCase):
         )
         cls.main = MAIN_PATH.read_text(encoding="utf-8")
 
-    def test_load_waits_one_rule_tick_then_retrieves_named_global(self) -> None:
+    def test_load_waits_one_rule_tick_then_retrieves_returned_catalog(self) -> None:
         load = function_body(self.datastore, "BuildOrderDatastore_Load")
         finish = function_body(self.datastore, "BuildOrderDatastore_FinishLoad")
 
@@ -42,9 +42,9 @@ class BuildOrderDatastoreContractTests(unittest.TestCase):
         self.assertNotIn("Game_RetrieveTableData", load)
         self.assertIn("Rule_RemoveMe()", finish)
         self.assertIn(
-            "Game_RetrieveTableData(BUILD_ORDER_DATASTORE_ID, false)", finish
+            "local loaded = Game_RetrieveTableData(BUILD_ORDER_DATASTORE_ID, false)",
+            finish,
         )
-        self.assertIn("local loaded = _G[BUILD_ORDER_DATASTORE_ID]", finish)
 
     def test_main_imports_datastore_as_the_only_catalog_before_startup(self) -> None:
         datastore = 'import("build_orders/datastore.scar")'
@@ -246,6 +246,47 @@ class BuildOrderDatastoreBehaviorTests(unittest.TestCase):
             {"old": original}
         )
         return original, replacement
+
+    def test_load_uses_the_catalog_returned_by_the_named_datastore(self) -> None:
+        loaded_order = self.runtime.table(self.valid_order("english-loaded"))
+        loaded = self.runtime.table(
+            {
+                "schema_version": 1,
+                "build_orders": {"english-loaded": loaded_order},
+            }
+        )
+        load_calls = []
+        retrieve_calls = []
+        added_rules = []
+        completions = []
+        self.runtime.globals["Game_LoadTextDataStore"] = (
+            lambda datastore_id, path: load_calls.append((datastore_id, path))
+        )
+        self.runtime.globals["Game_RetrieveTableData"] = (
+            lambda datastore_id, clear: (
+                retrieve_calls.append((datastore_id, clear)),
+                loaded,
+            )[1]
+        )
+        self.runtime.globals["Rule_Remove"] = lambda _rule: None
+        self.runtime.globals["Rule_Add"] = added_rules.append
+        self.runtime.globals["Rule_RemoveMe"] = lambda: None
+        self.runtime.globals["_G"] = self.runtime.table({})
+        self.runtime.globals["print"] = lambda _message: None
+
+        self.runtime.globals["BuildOrderDatastore_Load"](
+            lambda: completions.append("complete")
+        )
+        self.runtime.call("BuildOrderDatastore_FinishLoad")
+
+        self.assertEqual(load_calls, [("macroTrainerBuildOrders", "")])
+        self.assertEqual(retrieve_calls, [("macroTrainerBuildOrders", False)])
+        self.assertEqual(len(added_rules), 1)
+        self.assertIs(
+            self.runtime.globals["BUILD_ORDER_CATALOG"]["english-loaded"],
+            loaded_order,
+        )
+        self.assertEqual(completions, ["complete"])
 
     def test_persistence_exceptions_restore_entry_identity_and_allow_retry(self) -> None:
         for failure in ("store", "save"):

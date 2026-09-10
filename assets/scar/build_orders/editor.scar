@@ -45,10 +45,14 @@ function BuildOrderEditor_BuildViewData()
 end
 
 function BuildOrderEditor_Present()
-	return BuildOrderEditorUI_ShowEditor(BuildOrderEditor_BuildViewData())
+	print("BuildOrderTrace: editor present enter")
+	local shown = BuildOrderEditorUI_ShowEditor(BuildOrderEditor_BuildViewData())
+	print("BuildOrderTrace: editor present result=" .. tostring(shown))
+	return shown
 end
 
 function BuildOrderEditor_Refresh()
+	print("BuildOrderTrace: editor refresh enter")
 	if type(BUILD_ORDER_EDITOR_STATE.draft) ~= "table" then
 		return false
 	end
@@ -57,33 +61,41 @@ function BuildOrderEditor_Refresh()
 		BUILD_ORDER_EDITOR_STATE.draft,
 		BUILD_ORDER_EDITOR_STATE.discovery
 	)
-	return BuildOrderEditor_Present()
+	local refreshed = BuildOrderEditor_Present()
+	print("BuildOrderTrace: editor refresh result=" .. tostring(refreshed))
+	return refreshed
 end
 
 function BuildOrderEditor_OpenDraft(draft, originalID, discovery, onComplete)
+	print("BuildOrderTrace: editor open-draft enter")
 	BUILD_ORDER_EDITOR_STATE.draft = draft
 	BUILD_ORDER_EDITOR_STATE.original_id = originalID
 	BUILD_ORDER_EDITOR_STATE.discovery = discovery
 	BUILD_ORDER_EDITOR_STATE.errors = {}
 	BUILD_ORDER_EDITOR_STATE.on_complete = onComplete
 	BUILD_ORDER_EDITOR_STATE.expanded = {}
-	BuildOrderEditorUI_SetCallbacks(BuildOrderEditor_Callbacks())
-	return BuildOrderEditor_Refresh()
+	local opened = BuildOrderEditor_Refresh()
+	print("BuildOrderTrace: editor open-draft result=" .. tostring(opened))
+	return opened
 end
 
 function BuildOrderEditor_OpenCreate(onComplete)
+	print("BuildOrderTrace: editor open-create enter")
 	BuildOrderEditor_Clear()
 	local discovery = BuildOrderDiscovery_Collect(Game_GetLocalPlayer())
+	print("BuildOrderTrace: editor discovery complete")
 	local civ = ""
 	if type(discovery) == "table" and type(discovery.civ) == "string" then
 		civ = discovery.civ
 	end
-	return BuildOrderEditor_OpenDraft(
+	local opened = BuildOrderEditor_OpenDraft(
 		BuildOrderEditor_NewDraft(civ),
 		nil,
 		discovery,
 		onComplete
 	)
+	print("BuildOrderTrace: editor open-create result=" .. tostring(opened))
+	return opened
 end
 
 function BuildOrderEditor_OpenEdit(originalID, onComplete)

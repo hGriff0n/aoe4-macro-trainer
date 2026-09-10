@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 
 from tests.scar_runtime import LuaResults, LuaTable, ScarRuntime
-from tools.build_orders.datastore import _render_value, parse_datastore
+from tools.build_orders.datastore import DATASTORE_ID, _render_value, parse_datastore
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -27,6 +27,18 @@ def function_body(source: str, name: str) -> str:
 
 
 def strip_xaml(source: str) -> str:
+    source = re.sub(
+        r"BUILD_ORDER_EDITOR_UI_PROBE_XAML\s*=\s*\[\[.*?\]\]",
+        'BUILD_ORDER_EDITOR_UI_PROBE_XAML = ""',
+        source,
+        flags=re.DOTALL,
+    )
+    source = re.sub(
+        r"BUILD_ORDER_EDITOR_UI_EDITOR_PROBE_XAML\s*=\s*\[\[.*?\]\]",
+        'BUILD_ORDER_EDITOR_UI_EDITOR_PROBE_XAML = ""',
+        source,
+        flags=re.DOTALL,
+    )
     return re.sub(
         r"BUILD_ORDER_EDITOR_UI_XAML\s*=\s*\[\[.*?\]\]",
         'BUILD_ORDER_EDITOR_UI_XAML = ""',
@@ -67,7 +79,8 @@ def parse_saved_editor_order(order) -> object:
         "schema_version": 1,
         "build_orders": {saved["id"]: saved},
     }
-    return parse_datastore("LuaDataStore = " + _render_value(datastore, 0) + "\n")
+    wrapped = {DATASTORE_ID: datastore}
+    return parse_datastore("LuaDataStore = " + _render_value(wrapped, 0) + "\n")
 
 
 def valid_order(
@@ -254,7 +267,9 @@ class BuildOrderEditorBehaviorTests(unittest.TestCase):
         self.apply_calls = []
         self.apply_result = (True, "")
         self.apply_exception = None
+        self.trace_messages = []
 
+        self.runtime.globals["print"] = self.trace_messages.append
         self.runtime.globals["Game_GetLocalPlayer"] = lambda: "local-player"
         self.real_discovery_collect = self.runtime.globals[
             "BuildOrderDiscovery_Collect"
@@ -352,6 +367,9 @@ class BuildOrderEditorBehaviorTests(unittest.TestCase):
         )
         self.runtime.globals["BP_GetPropertyBagGroupPathName"] = (
             lambda group, index: property_groups[group][index]
+        )
+        self.runtime.globals["BP_GetUpgradesMatchingTypes"] = (
+            lambda _type_groups: self.runtime.table([])
         )
         self.runtime.globals["BP_GetEntityTypeExtRaceCount"] = lambda _path: 1
         self.runtime.globals["BP_GetEntityTypeExtRaceBlueprintAtIndex"] = (
@@ -452,22 +470,30 @@ class BuildOrderEditorBehaviorTests(unittest.TestCase):
         self.assertEqual(state["draft"]["original_id"], order["id"])
         self.assertGreaterEqual(self.discovery_clears, 2)
 
-        callbacks = self.callback_tables[-1]
-        for command in (
-            "copy",
-            "save",
-            "cancel",
-            "field_change",
-            "add",
-            "add_check",
-            "delete",
-            "expand",
-            "collapse",
-            "reorder",
-        ):
-            with self.subTest(command=command):
-                self.assertIsInstance(callbacks[command], str)
-                self.assertTrue(callbacks[command].startswith("BuildOrderEditor_"))
+        self.assertEqual(self.callback_tables, [])
+        open_draft = function_body(
+            EDITOR_SCAR.read_text(encoding="utf-8"), "BuildOrderEditor_OpenDraft"
+        )
+        self.assertNotIn("BuildOrderEditorUI_SetCallbacks", open_draft)
+
+    def test_open_create_logs_each_editor_boundary(self) -> None:
+        self.runtime.globals["tostring"] = lambda value: str(value).lower()
+        self.assertTrue(self.runtime.call("BuildOrderEditor_OpenCreate", None))
+
+        self.assertEqual(
+            self.trace_messages,
+            [
+                "BuildOrderTrace: editor open-create enter",
+                "BuildOrderTrace: editor discovery complete",
+                "BuildOrderTrace: editor open-draft enter",
+                "BuildOrderTrace: editor refresh enter",
+                "BuildOrderTrace: editor present enter",
+                "BuildOrderTrace: editor present result=true",
+                "BuildOrderTrace: editor refresh result=true",
+                "BuildOrderTrace: editor open-draft result=true",
+                "BuildOrderTrace: editor open-create result=true",
+            ],
+        )
 
     def test_copy_deep_copies_current_draft_and_chooses_free_numbered_title(self) -> None:
         original = valid_order()

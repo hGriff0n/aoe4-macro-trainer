@@ -1,3 +1,36 @@
+BUILD_ORDER_OBJECTIVE_TITLE_KEYS = {
+	["Step 1"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:143",
+	["Step 2"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:144",
+	["Step 3"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:145",
+	["Step 4"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:146",
+	["Step 5"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:147",
+	["Step 6"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:148",
+	["Step 7"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:149",
+	["Assign 6 food | 3 gold"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:150",
+	["[HINT] Starting vils to berries"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:151",
+	["Build mining camp"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:152",
+	["Build house"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:153",
+	["Assign 9 food | 3 gold"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:154",
+	["[HINT] Rallied food vils to sheep under TC"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:155",
+	["Build house of wisdom"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:156",
+	["Age Up: economic wing"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:157",
+	["Assign 4 food | 7 wood | 6 stone"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:158",
+	["Rally to stone"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:159",
+	["Collect at least 150 gold"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:160",
+	["[HINT] Move gold vils to stone after collecting 150"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:161",
+	["Queue fresh foodstuffs for research"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:162",
+	["Queue fertile crescent for research"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:163",
+	["Assign 4 food | 7 wood | 7 stone"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:164",
+	["Rally to wood"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:165",
+	["[HINT] Build TC with stone vils"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:166",
+	["Build town center"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:167",
+	["Assign 4 food | 11 wood | 7 stone"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:168",
+	["Rally to food"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:169",
+	["Assign 6 food | 11 wood | 9 stone"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:170",
+	["Build archery range"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:171",
+	["[HINT] Remacro for production/upgrades after starting construction of final TC"] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:172",
+}
+
 BUILD_ORDER_STATE = {
 	localPlayer = nil,
 	civ = nil,
@@ -12,6 +45,14 @@ BUILD_ORDER_STATE = {
 	checkUpdateDepth = 0,
 	checkAdvancePending = false,
 }
+
+function BuildOrder_ObjectiveTitle(value)
+	local key = BUILD_ORDER_OBJECTIVE_TITLE_KEYS[value]
+	if key ~= nil then
+		return key
+	end
+	return LOC(value)
+end
 
 function BuildOrder_RegisterHandler(kind, handler)
 	BUILD_ORDER_STATE.handlerMap[kind] = handler
@@ -81,7 +122,7 @@ function BuildOrder_ActivateStep(stepIndex)
 	local player = BUILD_ORDER_STATE.localPlayer
 	local faction = Player_GetRaceName(player)
 	local primaryID = Obj_Create(
-		player, step.title, Loc_Empty(), "", DT_PRIMARY_DEFAULT,
+		player, BuildOrder_ObjectiveTitle(step.title), Loc_Empty(), "", DT_PRIMARY_DEFAULT,
 		faction, OT_Primary, 0, "buildOrderStep")
 	Obj_SetState(primaryID, OS_Incomplete)
 	Obj_SetVisible(primaryID, true)
@@ -100,7 +141,7 @@ function BuildOrder_ActivateStep(stepIndex)
 			}
 		end
 		local childID = Obj_Create(
-			player, check.title, Loc_Empty(), "", DT_SECONDARY_DEFAULT,
+			player, BuildOrder_ObjectiveTitle(check.title), Loc_Empty(), "", DT_SECONDARY_DEFAULT,
 			faction, OT_Secondary, primaryID, "buildOrderCheck")
 		Obj_SetState(childID, OS_Incomplete)
 		Obj_SetVisible(childID, true)

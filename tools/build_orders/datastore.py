@@ -9,6 +9,7 @@ from .model import BuildOrder, Catalog, CheckDescriptor, Step
 
 
 SCHEMA_VERSION = 1
+DATASTORE_ID = "macroTrainerBuildOrders"
 DATASTORE_FILENAME = "macroTrainerBuildOrders.rlt"
 _IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
@@ -276,11 +277,13 @@ def _catalog_data(catalog: Catalog) -> dict[str, object]:
 
 def render_datastore(catalog: Catalog) -> str:
     data = _catalog_data(catalog)
-    build_orders = _render_value(data["build_orders"], 1)
+    build_orders = _render_value(data["build_orders"], 2)
     return (
         "LuaDataStore = {\n"
-        f"    schema_version = {SCHEMA_VERSION},\n"
-        f"    build_orders = {build_orders},\n"
+        f"    {DATASTORE_ID} = {{\n"
+        f"        schema_version = {SCHEMA_VERSION},\n"
+        f"        build_orders = {build_orders},\n"
+        "    },\n"
         "}\n"
     )
 
@@ -439,7 +442,9 @@ def _validate_check_payload(kind: str, payload: dict[str, object], path: str) ->
 
 
 def parse_datastore(text: str) -> Catalog:
-    root = _require_mapping(_Parser(text).parse(), "LuaDataStore")
+    datastore = _require_mapping(_Parser(text).parse(), "LuaDataStore")
+    _require_exact_keys(datastore, {DATASTORE_ID}, set(), "LuaDataStore")
+    root = _require_mapping(datastore[DATASTORE_ID], DATASTORE_ID)
     _require_exact_keys(root, {"schema_version", "build_orders"}, set(), "LuaDataStore")
     if root["schema_version"] != SCHEMA_VERSION:
         raise DatastoreError(

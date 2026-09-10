@@ -20,6 +20,13 @@ BUILD_ORDER_DISCOVERY_LISTS = {
 
 BUILD_ORDER_DISCOVERY_CURRENT = nil
 
+BUILD_ORDER_DISCOVERY_UPGRADE_AGE_TYPES = {
+	"scar_dark_age_upgrade",
+	"scar_feudal_age_upgrade",
+	"scar_castle_age_upgrade",
+	"scar_imperial_age_upgrade",
+}
+
 BUILD_ORDER_DISCOVERY_CIV_ALIASES = {
 	abbasid = "abbasid",
 	abbasid_ha_01 = "abbasid",
@@ -71,13 +78,20 @@ function BuildOrderDiscovery_CanonicalCivID(raceName)
 end
 
 function BuildOrderDiscovery_GetAge(kind, pathName, pbg)
+	if kind == "upgrade" or kind == "technology" then
+		for age, ageType in ipairs(BUILD_ORDER_DISCOVERY_UPGRADE_AGE_TYPES) do
+			if BP_IsUpgradeOfType(pbg, ageType) then
+				return age
+			end
+		end
+		return nil
+	end
+
 	for age = 2, 4 do
 		local ageType = "scar_age" .. age
 		if (kind == "entity" or kind == "building") and Entity_IsEBPOfType(pbg, ageType) then
 			return age
 		elseif kind == "squad" and Squad_IsSBPOfType(pbg, ageType) then
-			return age
-		elseif (kind == "upgrade" or kind == "technology") and BP_IsUpgradeOfType(pbg, ageType) then
 			return age
 		end
 	end
@@ -291,9 +305,13 @@ function BuildOrderDiscovery_Collect(player)
 		end
 	end
 
-	for index = 0, BP_GetPropertyBagGroupCount(PBG_UpgradeProperties) - 1 do
-		local pathName = BP_GetPropertyBagGroupPathName(PBG_UpgradeProperties, index)
-		local pbg = BP_GetUpgradeBlueprint(pathName)
+	local upgradeTypeGroups = {}
+	for _, ageType in ipairs(BUILD_ORDER_DISCOVERY_UPGRADE_AGE_TYPES) do
+		table.insert(upgradeTypeGroups, { ageType })
+	end
+	local upgradePBGs = BP_GetUpgradesMatchingTypes(upgradeTypeGroups)
+	for _, pbg in ipairs(upgradePBGs) do
+		local pathName = BP_GetName(pbg)
 		if BuildOrderDiscovery_IsTechnologyBestEffortAvailable(player, pbg) then
 			local option = BuildOrderDiscovery_CreateOption("technology", pathName, pbg, race)
 			if BuildOrderDiscovery_IsAgeUpOption("upgrade", pbg, snapshot.civ) then

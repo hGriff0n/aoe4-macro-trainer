@@ -1,6 +1,4 @@
 BUILD_ORDER_STARTUP_SELECTOR_TITLE = "$dfb5645698a84afb91cf7a2dfb0f4a4e:29"
-BUILD_ORDER_STARTUP_NO_ORDER_ID = "__no_build_order__"
-BUILD_ORDER_STARTUP_NO_ORDER_LABEL = "$dfb5645698a84afb91cf7a2dfb0f4a4e:31"
 BUILD_ORDER_STARTUP_CONFIRMATION_TITLE = "$dfb5645698a84afb91cf7a2dfb0f4a4e:44"
 BUILD_ORDER_STARTUP_CONFIRMATION_MESSAGE = "$dfb5645698a84afb91cf7a2dfb0f4a4e:45"
 BUILD_ORDER_STARTUP_FALLBACK_TITLE = "$dfb5645698a84afb91cf7a2dfb0f4a4e:47"
@@ -12,12 +10,8 @@ BUILD_ORDER_STARTUP_INVALID_SELECTION = "$dfb5645698a84afb91cf7a2dfb0f4a4e:52"
 
 function BuildOrderStartup_Callbacks()
 	return {
-		select = "BuildOrderStartup_Select",
-		edit = "BuildOrderStartup_Edit",
-		create = "BuildOrderStartup_Create",
-		unpause = "BuildOrderStartup_Unpause",
-		cancel = "BuildOrderStartup_Cancel",
-		confirm_unpause = "BuildOrderStartup_ConfirmNoOrder",
+		start_game = "BuildOrderStartup_StartGame",
+		continue_without = "BuildOrderStartup_ContinueWithoutSelection",
 	}
 end
 
@@ -79,25 +73,12 @@ function BuildOrderStartup_IsCompatibleID(id)
 end
 
 function BuildOrderStartup_BuildSelectorOrders()
-	local orders = {
-		{
-			id = BUILD_ORDER_STARTUP_NO_ORDER_ID,
-			label = BUILD_ORDER_STARTUP_NO_ORDER_LABEL,
-			title = BUILD_ORDER_STARTUP_NO_ORDER_LABEL,
-			source = "",
-			id_fallback = "",
-			editable = false,
-			selected = _mod.selectedBuildOrderID == nil,
-		},
-	}
+	local orders = {}
 	for _, id in ipairs(_mod.compatibleBuildOrderIDs or {}) do
 		local buildOrder = BUILD_ORDER_CATALOG[id]
 		table.insert(orders, {
 			id = id,
 			label = buildOrder.title,
-			title = buildOrder.title,
-			source = buildOrder.source or "",
-			editable = true,
 			selected = _mod.selectedBuildOrderID == id,
 		})
 	end
@@ -176,7 +157,6 @@ function BuildOrderStartup_Start()
 	_mod.startupActive = true
 	_mod.startupAwaitingChoice = true
 	_mod.startupFallbackOpen = false
-	_mod.startupPriorSelectionID = nil
 	_mod.startupMessage = nil
 	BuildOrderStartup_CollectCompatible()
 	Rule_Remove(BuildOrderStartup_PauseNextTick)
@@ -204,76 +184,7 @@ function BuildOrderStartup_ParameterID(parameter)
 	return nil
 end
 
-function BuildOrderStartup_Select(parameter)
-	if not _mod.startupActive or _mod.startupScreen ~= "selector" then
-		return false
-	end
-	local id = BuildOrderStartup_ParameterID(parameter)
-	if id == BUILD_ORDER_STARTUP_NO_ORDER_ID then
-		_mod.selectedBuildOrderID = nil
-		BuildOrderStartup_ShowSelector(nil)
-		return true
-	end
-	if not BuildOrderStartup_IsCompatibleID(id) then
-		return false
-	end
-	_mod.selectedBuildOrderID = id
-	BuildOrderStartup_ShowSelector(nil)
-	return true
-end
-
-function BuildOrderStartup_OnEditorComplete(savedID)
-	if not _mod.startupActive then
-		return false
-	end
-	local priorSelectionID = _mod.startupPriorSelectionID
-	_mod.startupPriorSelectionID = nil
-	if type(savedID) == "string" and type(BUILD_ORDER_CATALOG[savedID]) == "table" then
-		_mod.selectedBuildOrderID = savedID
-		return BuildOrderStartup_ShowSelector(nil)
-	end
-	_mod.selectedBuildOrderID = priorSelectionID
-	if savedID ~= nil then
-		return BuildOrderStartup_ShowSelector(BUILD_ORDER_STARTUP_MISSING_SELECTION)
-	end
-	return BuildOrderStartup_ShowSelector(nil)
-end
-
-function BuildOrderStartup_Create()
-	if not _mod.startupActive or _mod.startupScreen ~= "selector" then
-		return false
-	end
-	_mod.startupPriorSelectionID = _mod.selectedBuildOrderID
-	_mod.startupScreen = "editor"
-	local opened = BuildOrderEditor_OpenCreate(BuildOrderStartup_OnEditorComplete)
-	if not opened then
-		_mod.startupScreen = "selector"
-		BuildOrderStartup_ShowSelector(nil)
-		return false
-	end
-	return true
-end
-
-function BuildOrderStartup_Edit(parameter)
-	if not _mod.startupActive or _mod.startupScreen ~= "selector" then
-		return false
-	end
-	local id = BuildOrderStartup_ParameterID(parameter)
-	if not BuildOrderStartup_IsCompatibleID(id) then
-		return false
-	end
-	_mod.startupPriorSelectionID = _mod.selectedBuildOrderID
-	_mod.startupScreen = "editor"
-	local opened = BuildOrderEditor_OpenEdit(id, BuildOrderStartup_OnEditorComplete)
-	if not opened then
-		_mod.startupScreen = "selector"
-		BuildOrderStartup_ShowSelector(BUILD_ORDER_STARTUP_MISSING_SELECTION)
-		return false
-	end
-	return true
-end
-
-function BuildOrderStartup_FinishUnpause()
+function BuildOrderStartup_FinishStartGame()
 	_mod.startupActive = false
 	_mod.startupAwaitingChoice = false
 	_mod.startupFallbackOpen = false
@@ -299,7 +210,7 @@ function BuildOrderStartup_StartSelected(buildOrder)
 		return false
 	end
 	_mod.buildOrderStarted = true
-	BuildOrderStartup_FinishUnpause()
+	BuildOrderStartup_FinishStartGame()
 	BuildOrder_Start(buildOrder, localPlayer)
 	if _mod.simspeedEnabled then
 		Mod_StartSimspeedCycle()
@@ -307,20 +218,19 @@ function BuildOrderStartup_StartSelected(buildOrder)
 	return true
 end
 
-function BuildOrderStartup_Unpause()
+function BuildOrderStartup_StartGame(parameter)
 	if not _mod.startupActive or _mod.startupScreen ~= "selector" then
 		return false
 	end
-	if _mod.selectedBuildOrderID == nil then
-		_mod.startupScreen = "confirmation"
-		local shown = BuildOrderEditorUI_ShowNoSelectionConfirmation({
-			message = BUILD_ORDER_STARTUP_CONFIRMATION_MESSAGE,
-		})
-		if not shown then
-			BuildOrderStartup_ShowFallback()
-		end
-		return true
+	local parameterID = BuildOrderStartup_ParameterID(parameter)
+	if parameterID == nil then
+		return false
 	end
+	if not BuildOrderStartup_IsCompatibleID(parameterID) then
+		BuildOrderStartup_ShowSelector(BUILD_ORDER_STARTUP_INVALID_SELECTION)
+		return false
+	end
+	_mod.selectedBuildOrderID = parameterID
 	local buildOrder = BUILD_ORDER_CATALOG[_mod.selectedBuildOrderID]
 	if type(buildOrder) ~= "table" then
 		BuildOrderStartup_ShowSelector(BUILD_ORDER_STARTUP_MISSING_SELECTION)
@@ -333,11 +243,12 @@ function BuildOrderStartup_Unpause()
 	return BuildOrderStartup_StartSelected(buildOrder)
 end
 
-function BuildOrderStartup_Cancel()
-	if not _mod.startupActive or _mod.startupScreen ~= "confirmation" then
+function BuildOrderStartup_ContinueWithoutSelection()
+	if not _mod.startupActive or _mod.startupScreen ~= "selector" then
 		return false
 	end
-	return BuildOrderStartup_ShowSelector(nil)
+	_mod.selectedBuildOrderID = nil
+	return BuildOrderStartup_ContinueWithoutBuildOrder(true)
 end
 
 function BuildOrderStartup_ContinueWithoutBuildOrder(confirmed)
@@ -345,18 +256,11 @@ function BuildOrderStartup_ContinueWithoutBuildOrder(confirmed)
 		or not _mod.startupAwaitingChoice then
 		return false
 	end
-	BuildOrderStartup_FinishUnpause()
+	BuildOrderStartup_FinishStartGame()
 	if _mod.simspeedEnabled then
 		Mod_StartSimspeedCycle()
 	end
 	return true
-end
-
-function BuildOrderStartup_ConfirmNoOrder()
-	if not _mod.startupActive or _mod.startupScreen ~= "confirmation" then
-		return false
-	end
-	return BuildOrderStartup_ContinueWithoutBuildOrder(true)
 end
 
 function BuildOrderStartup_HandleFallbackChoice(button)
@@ -381,7 +285,6 @@ function BuildOrderStartup_Stop()
 	_mod.startupAwaitingChoice = false
 	_mod.startupFallbackOpen = false
 	_mod.startupScreen = "hidden"
-	_mod.startupPriorSelectionID = nil
 	_mod.startupMessage = nil
 	_mod.compatibleBuildOrderIDs = {}
 	_mod.buildOrderStarted = false

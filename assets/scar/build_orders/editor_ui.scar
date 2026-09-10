@@ -1,4 +1,170 @@
 BUILD_ORDER_EDITOR_UI_NAME = "BuildOrderEditorUI"
+
+-- Diagnostic spike: keep the known-failing editor XAML below for comparison.
+-- This presenter grows the proven empty shell by one engine-sensitive feature
+-- at a time and deliberately avoids the original templates and editor fields.
+BUILD_ORDER_EDITOR_UI_PROBE_XAML = [[
+<Grid x:Name="BuildOrderWorkspaceProbe"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:esActions="clr-namespace:WPFGUI.Shared.Actions;assembly=EngineUI"
+      Width="545"
+      Height="300"
+      HorizontalAlignment="Center"
+      VerticalAlignment="Center"
+      Background="#F21B2638">
+	<Grid.Resources>
+		<DataTemplate x:Key="BuildOrderCardTemplate">
+			<TextBlock Foreground="#FFF4F1E8"
+			           FontSize="16"
+			           Text="{Binding [label]}" />
+		</DataTemplate>
+	</Grid.Resources>
+	<Border x:Name="BuildOrderSelectorFrame"
+	        Background="#F21B2638"
+	        BorderBrush="#FFC39A5A"
+	        BorderThickness="2">
+	<Border x:Name="BuildOrderSelectorInnerFrame"
+	        BorderBrush="#FF5E4A2A"
+	        BorderThickness="1">
+	<Grid x:Name="BuildOrderSelectorPane" Margin="28">
+		<Grid.RowDefinitions>
+			<RowDefinition Height="Auto" />
+			<RowDefinition Height="*" />
+			<RowDefinition Height="Auto" />
+		</Grid.RowDefinitions>
+		<TextBlock x:Name="BuildOrderSelectorTitle"
+		           Grid.Row="0"
+		           Margin="0,0,0,24"
+		           FontSize="24"
+		           FontWeight="Bold"
+		           Foreground="#FFF2E2B6"
+		           Text="Choose a Build Order" />
+		<StackPanel Grid.Row="1">
+			<Grid>
+				<ListBox x:Name="BuildOrderSelectorList"
+				         Background="Transparent"
+				         Foreground="#FFF4F1E8"
+				         BorderThickness="0"
+				         OverridesDefaultStyle="True"
+				         ItemTemplate="{StaticResource BuildOrderCardTemplate}"
+				         ItemsSource="{Binding [selector_options]}"
+				         SelectedIndex="{Binding [selected_index], Mode=OneWay}"
+				         ScrollViewer.VerticalScrollBarVisibility="Auto">
+					<ListBox.Template>
+						<ControlTemplate TargetType="{x:Type ListBox}">
+							<Border x:Name="BuildOrderListChrome"
+							        Background="Transparent"
+							        BorderThickness="0">
+								<ScrollViewer VerticalScrollBarVisibility="Auto">
+									<ItemsPresenter />
+								</ScrollViewer>
+							</Border>
+						</ControlTemplate>
+					</ListBox.Template>
+					<ListBox.ItemContainerStyle>
+						<Style TargetType="{x:Type ListBoxItem}">
+							<Setter Property="OverridesDefaultStyle" Value="True" />
+							<Setter Property="Template">
+								<Setter.Value>
+									<ControlTemplate TargetType="{x:Type ListBoxItem}">
+										<Border x:Name="BuildOrderCardChrome"
+										        Margin="0,0,0,4"
+										        Padding="12,10"
+										        Background="#FF182235"
+										        BorderBrush="#FF5E4A2A"
+										        BorderThickness="1">
+											<ContentPresenter Content="{TemplateBinding Content}"
+											                  ContentTemplate="{TemplateBinding ContentTemplate}" />
+										</Border>
+										<ControlTemplate.Triggers>
+											<Trigger Property="IsMouseOver" Value="True">
+												<Setter TargetName="BuildOrderCardChrome"
+												        Property="BorderBrush"
+												        Value="#FFC39A5A" />
+											</Trigger>
+											<Trigger Property="IsSelected" Value="True">
+												<Setter TargetName="BuildOrderCardChrome"
+												        Property="Background"
+												        Value="#FF176B8A" />
+												<Setter TargetName="BuildOrderCardChrome"
+												        Property="BorderBrush"
+												        Value="#FFF0D08A" />
+											</Trigger>
+										</ControlTemplate.Triggers>
+									</ControlTemplate>
+								</Setter.Value>
+							</Setter>
+						</Style>
+					</ListBox.ItemContainerStyle>
+				</ListBox>
+				<TextBlock x:Name="BuildOrderSelectorEmptyMessage"
+				           Foreground="#FFF4F1E8"
+				           IsHitTestVisible="False"
+				           Text="{Binding [empty_message]}"
+				           TextWrapping="Wrap" />
+			</Grid>
+		</StackPanel>
+		<StackPanel Grid.Row="2" Orientation="Horizontal">
+		<Button x:Name="BuildOrderSelectorStartGame"
+		        MinWidth="110"
+		        Padding="12,7"
+		        HorizontalAlignment="Left"
+		        Background="#FFD7A84A"
+		        Foreground="#FF172033"
+		        BorderBrush="#FFF0D08A"
+		        BorderThickness="1"
+		        FontWeight="Bold"
+		        OverridesDefaultStyle="True"
+		        Command="{Binding [commands][start_game]}"
+		        CommandParameter="{Binding SelectedItem[id], ElementName=BuildOrderSelectorList}"
+		        Content="Start Game">
+			<Button.Template>
+				<ControlTemplate TargetType="{x:Type Button}">
+					<Border x:Name="BuildOrderStartGameChrome"
+					        Padding="{TemplateBinding Padding}"
+					        Background="{TemplateBinding Background}"
+					        BorderBrush="{TemplateBinding BorderBrush}"
+					        BorderThickness="{TemplateBinding BorderThickness}">
+						<ContentPresenter Content="{TemplateBinding Content}"
+						                  HorizontalAlignment="Center"
+						                  VerticalAlignment="Center" />
+					</Border>
+				</ControlTemplate>
+			</Button.Template>
+		</Button>
+		<Button x:Name="BuildOrderSelectorContinueWithout"
+		        MinWidth="180"
+		        Margin="12,0,0,0"
+		        Padding="12,7"
+		        Background="#FF182235"
+		        Foreground="#FFF2E2B6"
+		        BorderBrush="#FFC39A5A"
+		        BorderThickness="1"
+		        FontWeight="Bold"
+		        OverridesDefaultStyle="True"
+		        Command="{Binding [commands][continue_without]}"
+		        Content="Continue Without Build Order">
+			<Button.Template>
+				<ControlTemplate TargetType="{x:Type Button}">
+					<Border Padding="{TemplateBinding Padding}"
+					        Background="{TemplateBinding Background}"
+					        BorderBrush="{TemplateBinding BorderBrush}"
+					        BorderThickness="{TemplateBinding BorderThickness}">
+						<ContentPresenter Content="{TemplateBinding Content}"
+						                  HorizontalAlignment="Center"
+						                  VerticalAlignment="Center" />
+					</Border>
+				</ControlTemplate>
+			</Button.Template>
+		</Button>
+		</StackPanel>
+	</Grid>
+	</Border>
+	</Border>
+</Grid>
+]]
+
 BUILD_ORDER_EDITOR_UI_RESOURCES = { "food", "wood", "gold", "stone" }
 BUILD_ORDER_EDITOR_UI_LIVE_LISTS = {
 	live_building = "buildings",
@@ -1324,6 +1490,14 @@ function BuildOrderEditorUI_InvokeCallback(key, first, second, third)
 	return true
 end
 
+function BuildOrderEditorUI_DispatchStartGame(parameter)
+	return BuildOrderEditorUI_InvokeCallback("start_game", parameter)
+end
+
+function BuildOrderEditorUI_DispatchContinueWithout(parameter)
+	return BuildOrderEditorUI_InvokeCallback("continue_without", parameter)
+end
+
 function BuildOrderEditorUI_CommitDrag(parameter)
 	local sourcePath = BUILD_ORDER_EDITOR_UI_STATE.drag_source_path
 	local targetPath = BUILD_ORDER_EDITOR_UI_STATE.drag_target_path
@@ -1410,6 +1584,13 @@ function BuildOrderEditorUI_CreateCommands()
 	}
 end
 
+function BuildOrderEditorUI_CreateProbeCommands()
+	return {
+		start_game = UI_CreateCommand("BuildOrderEditorUI_DispatchStartGame"),
+		continue_without = UI_CreateCommand("BuildOrderEditorUI_DispatchContinueWithout"),
+	}
+end
+
 function BuildOrderEditorUI_SelectorOptions(model, commands)
 	local options = {}
 	local source = model.orders or model.options or {}
@@ -1417,20 +1598,11 @@ function BuildOrderEditorUI_SelectorOptions(model, commands)
 		if type(order) == "table" then
 			local id = order.id or ""
 			local label = order.label or order.title or id
-			local idFallback = order.id_fallback
-			if type(idFallback) ~= "string" then
-				idFallback = id
-			end
 			table.insert(options, {
 				id = id,
 				value = id,
 				label = label,
-				id_fallback = idFallback,
 				selected = order.selected == true,
-				selected_visibility = BuildOrderEditorUI_Visibility(order.selected == true),
-				edit_enabled = order.editable ~= false,
-				select_command = commands.select,
-				edit_command = commands.edit,
 			})
 		end
 	end
@@ -1581,17 +1753,52 @@ function BuildOrderEditorUI_Refresh()
 	return BUILD_ORDER_EDITOR_UI_STATE.view_model
 end
 
-function BuildOrderEditorUI_CreatePresenter()
-	if BUILD_ORDER_EDITOR_UI_STATE.commands == nil then
-		BUILD_ORDER_EDITOR_UI_STATE.commands = BuildOrderEditorUI_CreateCommands()
-	end
-	BUILD_ORDER_EDITOR_UI_STATE.view_model = BuildOrderEditorUI_BuildViewModel(
+function BuildOrderEditorUI_BuildProbeViewModel(screen, model)
+	model = type(model) == "table" and model or {}
+	local commands = BUILD_ORDER_EDITOR_UI_STATE.commands or {}
+	local options = BuildOrderEditorUI_SelectorOptions(model, commands)
+	return {
+		selector_visible = screen == "selector",
+		selector_options = options,
+		selected_index = -1,
+		empty_message = #options == 0 and "No build orders for this civilization" or "",
+		commands = commands,
+	}
+end
+
+function BuildOrderEditorUI_RefreshProbe()
+	local nextViewModel = BuildOrderEditorUI_BuildProbeViewModel(
 		BUILD_ORDER_EDITOR_UI_STATE.screen,
+		BUILD_ORDER_EDITOR_UI_STATE.model
+	)
+	if type(BUILD_ORDER_EDITOR_UI_STATE.view_model) ~= "table" then
+		BUILD_ORDER_EDITOR_UI_STATE.view_model = nextViewModel
+	else
+		for key, value in pairs(nextViewModel) do
+			BUILD_ORDER_EDITOR_UI_STATE.view_model[key] = value
+		end
+	end
+	print("BuildOrderTrace: ui refresh screen=" .. tostring(BUILD_ORDER_EDITOR_UI_STATE.screen)
+		.. " selector=" .. tostring(BUILD_ORDER_EDITOR_UI_STATE.view_model.selector_visible)
+		.. " editor=" .. tostring(BUILD_ORDER_EDITOR_UI_STATE.view_model.editor_visible)
+		.. " created=" .. tostring(BUILD_ORDER_EDITOR_UI_STATE.created))
+	if BUILD_ORDER_EDITOR_UI_STATE.created then
+		print("BuildOrderTrace: ui set-context begin name=" .. BUILD_ORDER_EDITOR_UI_NAME)
+		UI_SetDataContext(BUILD_ORDER_EDITOR_UI_NAME, BUILD_ORDER_EDITOR_UI_STATE.view_model)
+		print("BuildOrderTrace: ui set-context end")
+	end
+	return BUILD_ORDER_EDITOR_UI_STATE.view_model
+end
+
+function BuildOrderEditorUI_CreatePresenter()
+	BUILD_ORDER_EDITOR_UI_STATE.commands = BuildOrderEditorUI_CreateProbeCommands()
+	BUILD_ORDER_EDITOR_UI_STATE.view_model = BuildOrderEditorUI_BuildProbeViewModel(
+		"selector",
 		BUILD_ORDER_EDITOR_UI_STATE.model
 	)
 	UI_AddChild("ScarDefault", "XamlPresenter", BUILD_ORDER_EDITOR_UI_NAME, {
 		IsHitTestVisible = true,
-		Xaml = BUILD_ORDER_EDITOR_UI_XAML,
+		Xaml = BUILD_ORDER_EDITOR_UI_PROBE_XAML,
 		DataContext = UI_CreateDataContext(BUILD_ORDER_EDITOR_UI_STATE.view_model),
 	})
 end
@@ -1611,46 +1818,69 @@ function BuildOrderEditorUI_EnsureCreated()
 end
 
 function BuildOrderEditorUI_SetScreen(screen, model)
-	if screen ~= "hidden" and not BuildOrderEditorUI_EnsureCreated() then
-		return false
+	if screen == "selector" then
+		return BuildOrderEditorUI_ShowSelector(model)
 	end
-	BUILD_ORDER_EDITOR_UI_STATE.screen = screen
-	BUILD_ORDER_EDITOR_UI_STATE.model = type(model) == "table" and model or {}
-	BuildOrderEditorUI_ClearDrag()
-	if BUILD_ORDER_EDITOR_UI_STATE.created then
-		BuildOrderEditorUI_Refresh()
+	if screen == "editor" then
+		return BuildOrderEditorUI_ShowEditor(model)
 	end
-	return true
+	if screen == "hidden" then
+		return BuildOrderEditorUI_Hide()
+	end
+	return false
 end
 
 function BuildOrderEditorUI_ShowSelector(model)
-	return BuildOrderEditorUI_SetScreen("selector", model)
+	BUILD_ORDER_EDITOR_UI_STATE.screen = "selector"
+	BUILD_ORDER_EDITOR_UI_STATE.model = type(model) == "table" and model or {}
+	BuildOrderEditorUI_ClearDrag()
+	if not BuildOrderEditorUI_EnsureCreated() then
+		return false
+	end
+	BuildOrderEditorUI_RefreshProbe()
+	return true
 end
 
 function BuildOrderEditorUI_ShowEditor(model)
-	return BuildOrderEditorUI_SetScreen("editor", model)
+	print("BuildOrderTrace: ui show-editor enter created="
+		.. tostring(BUILD_ORDER_EDITOR_UI_STATE.created)
+		.. " screen=" .. tostring(BUILD_ORDER_EDITOR_UI_STATE.screen))
+	if not BUILD_ORDER_EDITOR_UI_STATE.created then
+		return false
+	end
+	BUILD_ORDER_EDITOR_UI_STATE.screen = "editor"
+	BUILD_ORDER_EDITOR_UI_STATE.model = type(model) == "table" and model or {}
+	BuildOrderEditorUI_RefreshProbe()
+	print("BuildOrderTrace: ui show-editor result=true")
+	return true
 end
 
 function BuildOrderEditorUI_ShowNoSelectionConfirmation(model)
-	return BuildOrderEditorUI_SetScreen("confirmation", model)
+	return false
 end
 
 function BuildOrderEditorUI_Hide()
-	return BuildOrderEditorUI_SetScreen("hidden", {})
+	if BUILD_ORDER_EDITOR_UI_STATE.created then
+		UI_Remove(BUILD_ORDER_EDITOR_UI_NAME)
+		BUILD_ORDER_EDITOR_UI_STATE.created = false
+		BUILD_ORDER_EDITOR_UI_STATE.screen = "hidden"
+		BUILD_ORDER_EDITOR_UI_STATE.view_model = nil
+		return true
+	end
+	return false
 end
 
 function BuildOrderEditorUI_SetCallbacks(callbacks)
 	BUILD_ORDER_EDITOR_UI_STATE.callbacks = type(callbacks) == "table" and callbacks or {}
-	BUILD_ORDER_EDITOR_UI_STATE.commands = nil
-	if BUILD_ORDER_EDITOR_UI_STATE.created then
-		BUILD_ORDER_EDITOR_UI_STATE.commands = BuildOrderEditorUI_CreateCommands()
-		BuildOrderEditorUI_Refresh()
-	end
 end
 
 function BuildOrderEditorUI_Stop()
-	BuildOrderEditorUI_Hide()
+	if BUILD_ORDER_EDITOR_UI_STATE.created then
+		UI_Remove(BUILD_ORDER_EDITOR_UI_NAME)
+	end
 	BuildOrderEditorUI_ClearDrag()
+	BUILD_ORDER_EDITOR_UI_STATE.created = false
+	BUILD_ORDER_EDITOR_UI_STATE.screen = "hidden"
 	BUILD_ORDER_EDITOR_UI_STATE.callbacks = {}
 	BUILD_ORDER_EDITOR_UI_STATE.commands = nil
 	BUILD_ORDER_EDITOR_UI_STATE.model = {}
