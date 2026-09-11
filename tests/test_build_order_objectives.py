@@ -2,13 +2,19 @@ import re
 import unittest
 from pathlib import Path
 
+from tests.scar_runtime import ScarRuntime
+
 
 ROOT = Path(__file__).resolve().parents[1]
 ENGINE_PATH = ROOT / "assets" / "scar" / "build_orders" / "objective_engine.scar"
 MAIN_PATH = ROOT / "assets" / "scar" / "winconditions" / "Macro Trainer.scar"
+LOCALIZATION_PATH = ROOT / "assets" / "scar" / "build_orders" / "localization.scar"
 IMPORT_PATTERN = re.compile(r'^\s*import\("([^"]+)"\)', re.MULTILINE)
 
 FAKE_HANDLER_FIXTURE = '''local fakeHandler = {
+    formatTitle = function(check, context)
+        return Loc_FormatText("$fake:1", Loc_FormatInteger(check.payload.count))
+    end,
     activate = function(check, objectiveID, context)
         BuildOrder_NotifyComplete(check.id)
     end,
@@ -107,17 +113,19 @@ class BuildOrderObjectiveContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.engine = ENGINE_PATH.read_text(encoding="utf-8")
+        cls.localization = LOCALIZATION_PATH.read_text(encoding="utf-8")
         cls.main = MAIN_PATH.read_text(encoding="utf-8")
 
     def assert_order(self, body: str, first: str, second: str) -> None:
         self.assertLess(body.index(first), body.index(second))
 
-    def test_main_loads_generated_catalog_before_objective_engine(self) -> None:
-        generated = 'import("generated/build_orders.scar")'
+    def test_main_loads_datastore_catalog_before_objective_engine(self) -> None:
+        datastore = 'import("build_orders/datastore.scar")'
         engine = 'import("build_orders/objective_engine.scar")'
-        self.assertIn(generated, self.main)
+        self.assertNotIn('import("generated/build_orders.scar")', self.main)
+        self.assertIn(datastore, self.main)
         self.assertIn(engine, self.main)
-        self.assertLess(self.main.index(generated), self.main.index(engine))
+        self.assertLess(self.main.index(datastore), self.main.index(engine))
 
     def test_packaged_import_graph_loads_units_handler_once_after_engine(self) -> None:
         root = "winconditions/Macro Trainer.scar"
@@ -188,11 +196,11 @@ class BuildOrderObjectiveContractTests(unittest.TestCase):
         self.assertIn("local faction = Player_GetRaceName(player)", activate)
         self.assertRegex(
             activate,
-            r"Obj_Create\(\s*player,\s*step\.title,\s*Loc_Empty\(\),\s*\"\",\s*DT_PRIMARY_DEFAULT,\s*faction,\s*OT_Primary,\s*0,\s*\"buildOrderStep\"\s*\)",
+            r"Obj_Create\(\s*player,\s*BuildOrder_StepTitle\(step, stepIndex\),\s*Loc_Empty\(\),\s*\"\",\s*DT_PRIMARY_DEFAULT,\s*faction,\s*OT_Primary,\s*0,\s*\"buildOrderStep\"\s*\)",
         )
         self.assertRegex(
             activate,
-            r"Obj_Create\(\s*player,\s*check\.title,\s*Loc_Empty\(\),\s*\"\",\s*DT_SECONDARY_DEFAULT,\s*faction,\s*OT_Secondary,\s*primaryID,\s*\"buildOrderCheck\"\s*\)",
+            r"Obj_Create\(\s*player,\s*BuildOrder_CheckTitle\(check, handler\),\s*Loc_Empty\(\),\s*\"\",\s*DT_SECONDARY_DEFAULT,\s*faction,\s*OT_Secondary,\s*primaryID,\s*\"buildOrderCheck\"\s*\)",
         )
         self.assertNotIn("Player_GetID", activate)
         self.assertNotIn("player.id", activate)
@@ -215,6 +223,97 @@ class BuildOrderObjectiveContractTests(unittest.TestCase):
         self.assertNotIn("DT_SECONDARY_WARNING", self.engine)
         self.assertNotIn("OT_Warning", self.engine)
 
+    def objective_runtime(self):
+        runtime = ScarRuntime(self.localization + "\n" + self.engine + "\n" + FAKE_HANDLER_FIXTURE)
+        runtime.globals["Loc_FormatText"] = lambda key, *values: (key, *values)
+        runtime.globals["Loc_FormatInteger"] = lambda value: ("integer", value)
+        runtime.globals["LOC"] = lambda value: ("literal", value)
+        runtime.globals["print"] = lambda *_arguments: None
+        runtime.globals["tostring"] = str
+        return runtime
+
+    def test_step_titles_are_generated_or_wrapped_at_runtime(self) -> None:
+        runtime = self.objective_runtime()
+
+        self.assertEqual(
+            runtime.call("BuildOrder_StepTitle", {"title": None}, 4),
+            ("$dfb5645698a84afb91cf7a2dfb0f4a4e:144", ("integer", 4)),
+        )
+        self.assertEqual(
+            runtime.call("BuildOrder_StepTitle", {"title": "Opening"}, 4),
+            ("$dfb5645698a84afb91cf7a2dfb0f4a4e:143", ("literal", "Opening")),
+        )
+
+    def test_activation_dispatches_child_title_to_registered_formatter(self) -> None:
+        runtime = self.objective_runtime()
+        objectives = []
+
+        def create_objective(*arguments):
+            objectives.append(arguments)
+            return len(objectives)
+
+        runtime.globals["Loc_Empty"] = lambda: ""
+        runtime.globals["Player_GetRaceName"] = lambda _player: "abbasid"
+        runtime.globals["Obj_Create"] = create_objective
+        runtime.globals["Obj_SetState"] = lambda *_arguments: None
+        runtime.globals["Obj_SetVisible"] = lambda *_arguments: None
+        runtime.globals["Obj_Delete"] = lambda *_arguments: None
+        for name in (
+            "DT_PRIMARY_DEFAULT",
+            "DT_SECONDARY_DEFAULT",
+            "OT_Primary",
+            "OT_Secondary",
+            "OS_Incomplete",
+            "OS_Complete",
+        ):
+            runtime.globals[name] = name
+
+        runtime.call(
+            "BuildOrder_Start",
+            {
+                "civ": "abbasid",
+                "steps": [
+                    {
+                        "checks": [
+                            {
+                                "id": "test:1:1",
+                                "kind": "fake",
+                                "optional": True,
+                                "payload": {"count": 6},
+                            }
+                        ],
+                    }
+                ],
+            },
+            "local-player",
+        )
+
+        self.assertEqual(
+            [arguments[1] for arguments in objectives],
+            [
+                ("$dfb5645698a84afb91cf7a2dfb0f4a4e:144", ("integer", 1)),
+                ("$fake:1", ("integer", 6)),
+            ],
+        )
+
+    def test_missing_formatter_uses_unavailable_title_and_logs_diagnostic(self) -> None:
+        runtime = self.objective_runtime()
+        messages = []
+        runtime.globals["print"] = messages.append
+
+        self.assertEqual(
+            runtime.call(
+                "BuildOrder_CheckTitle",
+                {"id": "test:1:1", "kind": "future", "optional": False, "payload": {}},
+                None,
+            ),
+            "$dfb5645698a84afb91cf7a2dfb0f4a4e:147",
+        )
+        self.assertEqual(
+            messages,
+            ["BuildOrder: no title formatter for future (check test:1:1)"],
+        )
+
     def test_handlers_receive_stable_ids_after_all_child_objectives_exist(self) -> None:
         activate = function_body(self.engine, "BuildOrder_ActivateStep")
         self.assertIn("childByCheckID[checkID] = child", activate)
@@ -226,8 +325,11 @@ class BuildOrderObjectiveContractTests(unittest.TestCase):
         self.assertIn('tostring(stepIndex) .. ":" .. tostring(checkIndex)', activate)
         self.assertRegex(
             activate,
-            r"check\s*=\s*\{\s*id\s*=\s*checkID,\s*kind\s*=\s*check\.kind,\s*title\s*=\s*check\.title,\s*optional\s*=\s*check\.optional,\s*payload\s*=\s*check\.payload,\s*\}",
+            r"check\s*=\s*\{\s*id\s*=\s*checkID,\s*kind\s*=\s*check\.kind,\s*optional\s*=\s*check\.optional,\s*payload\s*=\s*check\.payload,\s*\}",
         )
+        synthesized = re.search(r"check\s*=\s*\{(.*?)\n\s*\}", activate, re.DOTALL)
+        self.assertIsNotNone(synthesized)
+        self.assertNotIn("title", synthesized.group(1))
         self.assertNotIn("check.id = checkID", activate)
 
     def test_missing_handler_leaves_child_pending_and_completion_latches(self) -> None:
@@ -381,6 +483,10 @@ class BuildOrderObjectiveContractTests(unittest.TestCase):
 
     def test_fake_handler_fixture_exercises_public_lifecycle_without_shipping_one(self) -> None:
         self.assertIn("BuildOrder_RegisterHandler(\"fake\", fakeHandler)", FAKE_HANDLER_FIXTURE)
+        self.assertIn(
+            'Loc_FormatText("$fake:1", Loc_FormatInteger(check.payload.count))',
+            FAKE_HANDLER_FIXTURE,
+        )
         self.assertIn("BuildOrder_NotifyComplete(check.id)", FAKE_HANDLER_FIXTURE)
         self.assertNotIn('BuildOrder_RegisterHandler("fake"', self.engine)
         self.assertIn("BuildOrder_RegisterHandler", self.engine)

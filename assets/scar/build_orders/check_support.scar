@@ -1,0 +1,47 @@
+function BuildOrder_BlueprintsEqual(left, right)
+	return left ~= nil and right ~= nil
+		and left.PropertyBagGroupID == right.PropertyBagGroupID
+		and left.PropertyBagGroupModPackID == right.PropertyBagGroupModPackID
+		and left.PropertyBagGroupType == right.PropertyBagGroupType
+end
+
+function BuildOrder_MatchesAnyBlueprint(pbgs, pbg)
+	if pbgs == nil then
+		return false
+	end
+
+	for _, candidate in ipairs(pbgs) do
+		if BuildOrder_BlueprintsEqual(candidate, pbg) then
+			return true
+		end
+	end
+	return false
+end
+
+function BuildOrder_ResolveBlueprints(ids, resolver)
+	local pbgs = {}
+	for _, id in ipairs(ids) do
+		table.insert(pbgs, resolver(id))
+	end
+	return pbgs
+end
+
+function BuildOrder_ResolvePayloadBlueprints(payload, resolver)
+	if payload.id ~= nil then
+		return BuildOrder_ResolveBlueprints({payload.id}, resolver)
+	end
+	return BuildOrder_ResolveBlueprints(payload.oneof, resolver)
+end
+
+function BuildOrder_GetExecuterOwner(context)
+	if context == nil or context.executer == nil then
+		return nil
+	end
+	if context.executer.PlayerID ~= nil then
+		return context.executer
+	end
+	if context.executer.EntityID ~= nil then
+		return Entity_GetPlayerOwner(context.executer)
+	end
+	return nil
+end

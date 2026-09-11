@@ -2,12 +2,35 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from tools.build_orders.compiler import BuildOrderValidationError, compile_directory
+from tools.build_orders.compiler import (
+    CHECK_COMPILERS,
+    CHECK_FIELDS,
+    BuildOrderValidationError,
+    compile_directory,
+)
 from tools.build_orders.identities import IdentityCatalog, SquadFamilyIdentity
 from tools.build_orders.model import BuildOrder, Catalog, CheckDescriptor, Step, normalize_id
 
 
 class BuildOrderCompilerTests(unittest.TestCase):
+    def test_check_compiler_registry_covers_documented_fields(self) -> None:
+        self.assertEqual(
+            set(CHECK_COMPILERS),
+            {
+                "vils",
+                "resources",
+                "rallypoint",
+                "built",
+                "age_up",
+                "upgrades",
+                "produce",
+                "buildings",
+                "units",
+                "hints",
+            },
+        )
+        self.assertEqual(CHECK_FIELDS, set(CHECK_COMPILERS))
+
     def setUp(self) -> None:
         self.identities = IdentityCatalog(
             {
@@ -100,27 +123,62 @@ steps:
         self.assertEqual(payloads[1]["ids"], ["unit_scout_1_eng"])
         self.assertEqual(payloads[2]["ids"], ["unit_scout_1_eng"])
         self.assertEqual(payloads[3]["id"], "upgrade_wheelbarrow_eng")
-        self.assertEqual(payloads[4]["id"], "building_landmark_age2_eng")
+        self.assertEqual(
+            payloads[4],
+            {"id": "building_landmark_age2_eng", "trigger": "construction"},
+        )
 
-    def test_age_up_category_depends_on_civilization(self) -> None:
+    def test_age_up_category_and_trigger_depend_on_civilization(self) -> None:
         english = self.compile_age("english", "council_hall")
         abbasid = self.compile_age("abbasid", "economic_wing")
-        self.assertEqual(english.payload["id"], "building_landmark_age2_eng")
-        self.assertEqual(abbasid.payload["id"], "upgrade_add_economy_wing")
+        self.assertEqual(
+            english.payload,
+            {"id": "building_landmark_age2_eng", "trigger": "construction"},
+        )
+        self.assertEqual(
+            abbasid.payload,
+            {"id": "upgrade_add_economy_wing", "trigger": "upgrade"},
+        )
 
-    def test_resolves_oneof_in_order_and_preserves_human_readable_title(self) -> None:
+    def test_future_civilization_age_up_defaults_to_construction_trigger(self) -> None:
+        identities = IdentityCatalog(
+            {
+                "future_civilization": {
+                    "entity": {"future_landmark": "building_future_landmark"},
+                    "upgrade": {},
+                },
+            },
+            {},
+        )
+
+        check = self.compile(
+            {
+                "future.yaml": "civ: future_civilization\ntitle: Future\nsteps:\n  - age_up: {id: future_landmark}\n",
+            },
+            identities=identities,
+        ).build_orders[0].steps[0].checks[0]
+
+        self.assertEqual(
+            check.payload,
+            {"id": "building_future_landmark", "trigger": "construction"},
+        )
+
+    def test_resolves_oneof_in_order_without_assembling_a_title(self) -> None:
         check = self.compile({"order.yaml": """civ: english
 title: Choice
 steps:
   - built: [{oneof: [stable, archery_range]}]
 """}).build_orders[0].steps[0].checks[0]
         self.assertEqual(
-            check.payload["oneof"],
-            ["building_stable_eng", "building_archery_range_eng"],
+            check.payload,
+            {
+                "oneof": ["building_stable_eng", "building_archery_range_eng"],
+                "count": 1,
+            },
         )
-        self.assertEqual(check.title, "Build stable or archery range")
+        self.assertFalse(hasattr(check, "title"))
 
-    def test_family_ids_drive_squad_titles_and_payloads(self) -> None:
+    def test_family_ids_drive_canonical_payloads_without_titles(self) -> None:
         checks = self.compile({"order.yaml": """civ: english
 title: Readable IDs
 steps:
@@ -131,16 +189,6 @@ steps:
     units: [{id: spearman_2, count: 3}]
 """}).build_orders[0].steps[0].checks
 
-        self.assertEqual(
-            [check.title for check in checks],
-            [
-                "Build palace of swabia 3",
-                "Age Up: council hall 2",
-                "Queue wheelbarrow 1 for research",
-                "Constantly produce villager",
-                "Have 3 active spearman",
-            ],
-        )
         self.assertEqual(
             [check.payload["id"] for check in checks[:3]],
             [
@@ -153,6 +201,7 @@ steps:
             checks[3].payload["ids"],
             ["unit_villager_1_eng", "unit_villager_2_eng"],
         )
+        self.assertFalse(any(hasattr(check, "title") for check in checks))
         self.assertEqual(
             checks[4].payload["ids"],
             ["unit_spearman_1_eng", "unit_spearman_2_eng"],
@@ -183,19 +232,17 @@ steps:
         self.assertEqual(checks[1].payload, expected_produce_payload)
         self.assertEqual(checks[2].payload, expected_units_payload)
         self.assertEqual(checks[3].payload, expected_units_payload)
-        self.assertEqual(
-            [check.title for check in checks],
-            ["Queue 2 spearmen", "Queue 2 spearmen", "Have 2 active spearman", "Have 2 active spearman"],
-        )
-
-    def test_produce_title_retains_numeric_family_id_suffix(self) -> None:
+    def test_numeric_family_id_resolves_to_canonical_payload(self) -> None:
         check = self.compile({"order.yaml": """civ: english
 title: Numeric family
 steps:
   - produce: [{id: siege_tank_2, queued: true}]
 """}).build_orders[0].steps[0].checks[0]
 
-        self.assertEqual(check.title, "Queue 1 siege tank 2")
+        self.assertEqual(check.kind, "produce")
+        self.assertEqual(check.payload["count"], 1)
+        self.assertTrue(check.payload["queued"])
+        self.assertFalse(hasattr(check, "title"))
 
     def test_rejects_capability_and_reports_catalog_context(self) -> None:
         self.assert_invalid(
@@ -227,7 +274,19 @@ steps:
 
     def test_compiles_single_mapping_with_canonical_immutable_model(self) -> None:
         catalog = self.compile({"opening.yaml": """civ: English\ntitle: 2 TC\nsteps:\n  - title: Opening\n    vils:\n      food: 7\n"""})
-        self.assertEqual(catalog, Catalog((BuildOrder("english-2-tc", "English", "2 TC", (Step("Opening", (CheckDescriptor("vils", "Assign 7 food", False, {"food": 7}),)),)),)))
+        self.assertEqual(
+            catalog,
+            Catalog(
+                (
+                    BuildOrder(
+                        "english-2-tc",
+                        "English",
+                        "2 TC",
+                        (Step("Opening", (CheckDescriptor("vils", False, {"food": 7}),)),),
+                    ),
+                )
+            ),
+        )
         with self.assertRaises(Exception):
             catalog.build_orders[0].title = "changed"
 
@@ -273,14 +332,13 @@ steps:
             (
                 CheckDescriptor(
                     "vils",
-                    "Assign 7 food | 3 gold | 4 wood | 2 stone",
                     False,
                     {"food": 7, "gold": 3, "wood": 4, "stone": 2},
                 ),
             ),
         )
 
-    def test_vils_title_uses_assign_prefix_and_keeps_no_collect_title(self) -> None:
+    def test_vils_threshold_and_no_collect_checks_are_semantic_only(self) -> None:
         catalog = self.compile({"vils.yaml": """civ: English
 title: Villager titles
 steps:
@@ -288,8 +346,15 @@ steps:
 """})
 
         self.assertEqual(
-            [check.title for check in catalog.build_orders[0].steps[0].checks],
-            ["Assign 1 food | 1 wood", "No gold villagers"],
+            catalog.build_orders[0].steps[0].checks,
+            (
+                CheckDescriptor("vils", False, {"food": 1, "wood": 1}),
+                CheckDescriptor(
+                    "vils",
+                    False,
+                    {"resource": "gold", "no_collect": True},
+                ),
+            ),
         )
 
     def test_compiles_list_documents_yaml_and_yml_in_sorted_file_order(self) -> None:
@@ -359,14 +424,13 @@ steps:
             {"id": "upgrade_horticulture_eng", "queued": False},
         )
 
-    def test_compiles_age_up_presentation_suffixes_in_stable_order(self) -> None:
+    def test_compiles_age_up_semantic_payload_in_stable_order(self) -> None:
         catalog = self.compile({"age-up.yaml": """civ: English
 title: Age Up
 steps:
   - age_up: {oneof: [council_hall, town_center], vils: 4, location: gold}
 """})
         check = catalog.build_orders[0].steps[0].checks[0]
-        self.assertEqual(check.title, "Age Up: council hall or town center")
         self.assertFalse(check.optional)
         self.assertEqual(
             check.payload,
@@ -374,10 +438,12 @@ steps:
                 "oneof": ["building_landmark_age2_eng", "building_town_center_eng"],
                 "vils": 4,
                 "location": "gold",
+                "trigger": "construction",
             },
         )
+        self.assertFalse(hasattr(check, "title"))
 
-    def test_formats_built_titles_from_count_choice_and_presentation_hints(self) -> None:
+    def test_compiles_built_count_choice_and_semantic_hints(self) -> None:
         catalog = self.compile({"built.yaml": """civ: English
 title: Built titles
 steps:
@@ -396,15 +462,24 @@ steps:
 """})
         checks = catalog.build_orders[0].steps[0].checks
         self.assertEqual(
-            [check.title for check in checks],
+            [check.payload for check in checks],
             [
-                "Build barracks",
-                "Build 2 house",
-                "Build 2 barracks",
-                "Build 2 stable or archery range",
-                "Build 2 outpost",
+                {"id": "building_barracks_eng", "count": 1},
+                {"id": "building_house_eng", "count": 2},
+                {"id": "building_barracks_eng", "count": 2},
+                {
+                    "oneof": ["building_stable_eng", "building_archery_range_eng"],
+                    "count": 2,
+                },
+                {
+                    "id": "building_outpost_eng",
+                    "count": 2,
+                    "vils": 3,
+                    "location": "wood",
+                },
             ],
         )
+        self.assertFalse(any(hasattr(check, "title") for check in checks))
 
     def test_rejects_invalid_extended_built_and_upgrade_fields(self) -> None:
         self.assert_invalid("civ: english\ntitle: x\nsteps:\n  - built: [{id: town_center, count: 0}]\n", "file.yaml: steps[0].built[0].count: must be a positive integer")

@@ -5,10 +5,11 @@ This guide explains how to add a production check to the GRI-83 build-order obje
 ## Data Flow
 
 1. `tools/build_orders/compiler.py` converts one YAML check into one or more `CheckDescriptor` values.
-2. `tools/build_orders/emitters.py` writes those descriptors into `generated/build_orders.scar` with a stable check ID, localized title, optional flag, and typed payload.
-3. `BuildOrder_ActivateStep` creates every child objective and then calls the registered handler's `activate` function.
-4. The handler observes the engine-provided `context.localPlayer` and `context.civ`, then reports state through the engine.
-5. Before step transition or game shutdown, the engine calls `deactivate` and then deletes the objective hierarchy.
+2. The datastore compiler serializes those descriptors with a stable check ID, literal title, optional flag, and typed payload.
+3. The mod loads the compiled catalog from `macroTrainerBuildOrders.rlt`.
+4. `BuildOrder_ActivateStep` creates every child objective and then calls the registered handler's `activate` function.
+5. The handler observes the engine-provided `context.localPlayer` and `context.civ`, then reports state through the engine.
+6. Before step transition or game shutdown, the engine calls `deactivate` and then deletes the objective hierarchy.
 
 ## Handler Shape
 
@@ -111,7 +112,7 @@ The compiler, not the runtime handler, owns:
 
 The runtime handler owns only the gameplay predicate and its lifecycle. Do not parse presentation text to recover an ID or count.
 
-For every compiler change, test the exact descriptor sequence, title, optional flag, and payload. For every emitter change, test the exact SCAR representation and localization output.
+For every compiler change, test the exact descriptor sequence, title, optional flag, payload, and datastore round trip.
 
 ## Static Validation
 

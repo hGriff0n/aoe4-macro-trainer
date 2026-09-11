@@ -4,10 +4,36 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from tools.build_orders.compiler import compile_directory
+from tests.scar_runtime import ScarRuntime
 
 
 ROOT = Path(__file__).resolve().parents[1]
 UPGRADES = ROOT / "assets" / "scar" / "build_orders" / "checks" / "upgrades.scar"
+LOC = {
+    "optional": "$dfb5645698a84afb91cf7a2dfb0f4a4e:146",
+    "research": "$dfb5645698a84afb91cf7a2dfb0f4a4e:162",
+    "queueResearch": "$dfb5645698a84afb91cf7a2dfb0f4a4e:163",
+}
+
+
+def formatter_runtime(source: str) -> tuple[ScarRuntime, list[tuple[str, str]]]:
+    registration_stub = "function BuildOrder_RegisterHandler(kind, handler)\nend"
+    executable_source = source.replace("local function ", "function ")
+    runtime = ScarRuntime(registration_stub + "\n" + executable_source)
+    calls = []
+
+    def game_name(kind, identifier, _context):
+        calls.append((kind, identifier))
+        return "Wheelbarrow"
+
+    runtime.globals["BuildOrder_GameName"] = game_name
+    runtime.globals["Loc_FormatText"] = lambda key, *values: (key, *values)
+    runtime.globals["BuildOrder_FormattedArgument"] = lambda value: (
+        "literal",
+        f"ansi:{value!r}",
+    )
+    runtime.globals["BUILD_ORDER_LOC_KEYS"] = runtime.table(LOC)
+    return runtime, calls
 
 
 def function_body(source: str, name: str) -> str:
@@ -27,7 +53,7 @@ class BuildOrderUpgradeCompilerTests(unittest.TestCase):
             path.write_text(yaml, encoding="utf-8")
             return compile_directory(path.parent).build_orders[0].steps[0].checks
 
-    def test_presents_completed_optional_and_queued_upgrade_checks(self) -> None:
+    def test_compiles_completed_optional_and_queued_upgrade_semantics(self) -> None:
         checks = self.compile("""civ: English
 title: Upgrade presentation
 steps:
@@ -40,13 +66,14 @@ steps:
 """)
 
         self.assertEqual(
-            [(check.title, check.optional, check.payload) for check in checks],
+            [(check.kind, check.optional, check.payload) for check in checks],
             [
-                ("Research wheelbarrow", False, {"id": "upgrade_unit_town_center_wheelbarrow_1", "queued": False}),
-                ("[Optional] Research horticulture", True, {"id": "upgrade_econ_resource_food_harvest_rate_2", "queued": False}),
-                ("Queue fitted leatherwork for research", False, {"id": "upgrade_melee_armor_i", "queued": True}),
+                ("upgrades", False, {"id": "upgrade_unit_town_center_wheelbarrow_1", "queued": False}),
+                ("upgrades", True, {"id": "upgrade_econ_resource_food_harvest_rate_2", "queued": False}),
+                ("upgrades", False, {"id": "upgrade_melee_armor_i", "queued": True}),
             ],
         )
+        self.assertFalse(hasattr(checks[0], "title"))
 
 
 class BuildOrderUpgradeHandlerContractTests(unittest.TestCase):
@@ -58,6 +85,37 @@ class BuildOrderUpgradeHandlerContractTests(unittest.TestCase):
         self.assertIn('BuildOrder_RegisterHandler("upgrades", {', self.source)
         self.assertIn("UPGRADES_STATE[check.id]", self.source)
         self.assertIn("UPGRADES_STATE[check.id] = nil", self.source)
+        self.assertIn("formatTitle = Upgrades_FormatTitle", self.source)
+
+    def test_formatter_selects_queue_copy_and_wraps_only_optional_upgrades(self) -> None:
+        runtime, calls = formatter_runtime(self.source)
+
+        research = runtime.call(
+            "Upgrades_FormatTitle",
+            {"optional": False, "payload": {"id": "wheelbarrow", "queued": False}},
+            {},
+        )
+        queued = runtime.call(
+            "Upgrades_FormatTitle",
+            {"optional": False, "payload": {"id": "wheelbarrow", "queued": True}},
+            {},
+        )
+        optional = runtime.call(
+            "Upgrades_FormatTitle",
+            {"optional": True, "payload": {"id": "wheelbarrow", "queued": False}},
+            {},
+        )
+
+        self.assertEqual(research, (LOC["research"], "Wheelbarrow"))
+        self.assertEqual(queued, (LOC["queueResearch"], "Wheelbarrow"))
+        self.assertEqual(
+            optional,
+            (
+                LOC["optional"],
+                ("literal", f"ansi:{(LOC['research'], 'Wheelbarrow')!r}"),
+            ),
+        )
+        self.assertEqual(calls, [("upgrade", "wheelbarrow")] * 3)
 
     def test_completed_research_queries_stored_player_before_canonical_upgrade(self) -> None:
         completed = self.source[self.source.index("local function Upgrades_IsCompletedResearch"):self.source.index("local function Upgrades_HasQueuedResearch")]
@@ -73,7 +131,7 @@ class BuildOrderUpgradeHandlerContractTests(unittest.TestCase):
         queued = function_body(self.source, "Upgrades_HasQueuedResearch")
 
         self.assertIn("upgrade = BP_GetUpgradeBlueprint(check.payload.id)", activate)
-        self.assertIn("Upgrades_PBGsEqual(context.upgrade, state.upgrade)", callback)
+        self.assertIn("BuildOrder_BlueprintsEqual(context.upgrade, state.upgrade)", callback)
         self.assertIn("state.upgrade", queued)
         self.assertNotIn("BP_GetUpgradeBlueprint", callback)
         self.assertNotIn("BP_GetUpgradeBlueprint", queued)
@@ -84,7 +142,7 @@ class BuildOrderUpgradeHandlerContractTests(unittest.TestCase):
         self.assertIn("Entity_GetPlayerOwner(entity) == state.player", scan)
         self.assertIn("Entity_GetProductionQueueSize(entity)", scan)
         self.assertIn("Entity_GetProductionQueueItemType(entity, index)", scan)
-        self.assertIn("Upgrades_PBGsEqual(Entity_GetProductionQueueItem(entity, index), state.upgrade)", scan)
+        self.assertIn("BuildOrder_BlueprintsEqual(Entity_GetProductionQueueItem(entity, index), state.upgrade)", scan)
         self.assertIn("PITEM_Upgrade", scan)
         self.assertIn("PITEM_PlayerUpgrade", scan)
 
@@ -103,14 +161,10 @@ class BuildOrderUpgradeHandlerContractTests(unittest.TestCase):
         self.assertNotIn("Rule_Remove(Upgrades_Poll)", self.source)
 
     def test_completion_event_filters_polymorphic_owner_before_canonical_upgrade(self) -> None:
-        owner = function_body(self.source, "Upgrades_GetExecuterOwner")
-        self.assertIn("context.executer.PlayerID", owner)
-        self.assertIn("context.executer.EntityID", owner)
-        self.assertIn("Entity_GetPlayerOwner(context.executer)", owner)
-
         callback = function_body(self.source, "Upgrades_OnUpgradeComplete")
         owner_match = "owner ~= state.player"
-        upgrade_match = "Upgrades_PBGsEqual(context.upgrade, state.upgrade)"
+        upgrade_match = "BuildOrder_BlueprintsEqual(context.upgrade, state.upgrade)"
+        self.assertIn("BuildOrder_GetExecuterOwner(context)", callback)
         self.assertIn(owner_match, callback)
         self.assertIn(upgrade_match, callback)
         self.assertLess(callback.index(owner_match), callback.index(upgrade_match))

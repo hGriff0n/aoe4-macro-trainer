@@ -2,10 +2,34 @@ import re
 import unittest
 from pathlib import Path
 
+from tests.scar_runtime import ScarRuntime
+
 
 ROOT = Path(__file__).resolve().parents[1]
 VILS_PATH = ROOT / "assets" / "scar" / "build_orders" / "checks" / "vils.scar"
 MAIN_PATH = ROOT / "assets" / "scar" / "winconditions" / "Macro Trainer.scar"
+LOCALIZATION_PATH = ROOT / "assets" / "scar" / "build_orders" / "localization.scar"
+LOC = {
+    "food": "$dfb5645698a84afb91cf7a2dfb0f4a4e:148",
+    "gold": "$dfb5645698a84afb91cf7a2dfb0f4a4e:149",
+    "wood": "$dfb5645698a84afb91cf7a2dfb0f4a4e:150",
+    "allocation": "$dfb5645698a84afb91cf7a2dfb0f4a4e:152",
+    "allocationJoin": "$dfb5645698a84afb91cf7a2dfb0f4a4e:153",
+    "assign": "$dfb5645698a84afb91cf7a2dfb0f4a4e:156",
+    "noCollect": "$dfb5645698a84afb91cf7a2dfb0f4a4e:157",
+}
+
+
+def formatter_runtime(source: str) -> ScarRuntime:
+    registration_stub = "function BuildOrder_RegisterHandler(kind, handler)\nend"
+    localization = LOCALIZATION_PATH.read_text(encoding="utf-8")
+    runtime = ScarRuntime(registration_stub + "\n" + localization + "\n" + source)
+    runtime.globals["Loc_FormatText"] = lambda key, *values: (key, *values)
+    runtime.globals["Loc_Empty"] = lambda: ()
+    runtime.globals["Loc_ToAnsi"] = lambda value: f"ansi:{value!r}"
+    runtime.globals["Loc_FormatInteger"] = lambda value: ("integer", value)
+    runtime.globals["LOC"] = lambda value: ("literal", value)
+    return runtime
 
 
 def function_body(source: str, name: str) -> str:
@@ -35,6 +59,39 @@ class BuildOrderVilsContractTests(unittest.TestCase):
         self.assertIn('BuildOrder_RegisterHandler("vils", {', self.source)
         self.assertIn("activate = Vils_Activate", self.source)
         self.assertIn("deactivate = Vils_Deactivate", self.source)
+        self.assertIn("formatTitle = Vils_FormatTitle", self.source)
+
+    def test_formatter_orders_and_joins_allocation_fragments(self) -> None:
+        runtime = formatter_runtime(self.source)
+        food = (LOC["allocation"], ("integer", 6), LOC["food"])
+        gold = (LOC["allocation"], ("integer", 3), LOC["gold"])
+
+        self.assertEqual(
+            runtime.call(
+                "Vils_FormatTitle",
+                {"payload": {"gold": 3, "food": 6}},
+                {},
+            ),
+            (
+                LOC["assign"],
+                (
+                    "literal",
+                    f"ansi:{(LOC['allocationJoin'], ('literal', f'ansi:{food!r}'), ('literal', f'ansi:{gold!r}'))!r}",
+                ),
+            ),
+        )
+
+    def test_formatter_uses_no_collect_template_before_allocations(self) -> None:
+        runtime = formatter_runtime(self.source)
+
+        self.assertEqual(
+            runtime.call(
+                "Vils_FormatTitle",
+                {"payload": {"resource": "wood", "no_collect": True}},
+                {},
+            ),
+            (LOC["noCollect"], LOC["wood"]),
+        )
 
     def test_activation_stores_the_context_local_player_per_check(self) -> None:
         activate = function_body(self.source, "Vils_Activate")

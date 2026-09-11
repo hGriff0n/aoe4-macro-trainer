@@ -1,0 +1,121 @@
+BUILD_ORDER_LOC_KEYS = {
+	rawText = "$dfb5645698a84afb91cf7a2dfb0f4a4e:143",
+	step = "$dfb5645698a84afb91cf7a2dfb0f4a4e:144",
+	hint = "$dfb5645698a84afb91cf7a2dfb0f4a4e:145",
+	optional = "$dfb5645698a84afb91cf7a2dfb0f4a4e:146",
+	unavailable = "$dfb5645698a84afb91cf7a2dfb0f4a4e:147",
+	allocation = "$dfb5645698a84afb91cf7a2dfb0f4a4e:152",
+	allocationJoin = "$dfb5645698a84afb91cf7a2dfb0f4a4e:153",
+	orJoin = "$dfb5645698a84afb91cf7a2dfb0f4a4e:154",
+	collect = "$dfb5645698a84afb91cf7a2dfb0f4a4e:155",
+	assign = "$dfb5645698a84afb91cf7a2dfb0f4a4e:156",
+	noCollect = "$dfb5645698a84afb91cf7a2dfb0f4a4e:157",
+	rally = "$dfb5645698a84afb91cf7a2dfb0f4a4e:158",
+	buildOne = "$dfb5645698a84afb91cf7a2dfb0f4a4e:159",
+	buildMany = "$dfb5645698a84afb91cf7a2dfb0f4a4e:160",
+	ageUp = "$dfb5645698a84afb91cf7a2dfb0f4a4e:161",
+	research = "$dfb5645698a84afb91cf7a2dfb0f4a4e:162",
+	queueResearch = "$dfb5645698a84afb91cf7a2dfb0f4a4e:163",
+	produce = "$dfb5645698a84afb91cf7a2dfb0f4a4e:164",
+	queueProduce = "$dfb5645698a84afb91cf7a2dfb0f4a4e:165",
+	constantProduce = "$dfb5645698a84afb91cf7a2dfb0f4a4e:166",
+	activeUnits = "$dfb5645698a84afb91cf7a2dfb0f4a4e:167",
+}
+
+BUILD_ORDER_RESOURCE_KEYS = {
+	food = "$dfb5645698a84afb91cf7a2dfb0f4a4e:148",
+	gold = "$dfb5645698a84afb91cf7a2dfb0f4a4e:149",
+	wood = "$dfb5645698a84afb91cf7a2dfb0f4a4e:150",
+	stone = "$dfb5645698a84afb91cf7a2dfb0f4a4e:151",
+}
+
+function BuildOrder_RawText(text)
+	return Loc_FormatText(BUILD_ORDER_LOC_KEYS.rawText, LOC(text))
+end
+
+function BuildOrder_FormattedArgument(value)
+	return LOC(Loc_ToAnsi(value))
+end
+
+function BuildOrder_JoinLocalized(values, separatorKey)
+	if #values == 0 then
+		return Loc_Empty()
+	end
+	local result = values[1]
+	for index = 2, #values do
+		result = Loc_FormatText(
+			separatorKey,
+			BuildOrder_FormattedArgument(result),
+			BuildOrder_FormattedArgument(values[index])
+		)
+	end
+	return result
+end
+
+function BuildOrder_ResourceName(resource)
+	local name = BUILD_ORDER_RESOURCE_KEYS[resource]
+	if name ~= nil then
+		return name
+	end
+	return BuildOrder_RawText(tostring(resource))
+end
+
+function BuildOrder_GameName(kind, id, context)
+	local uiInfo = nil
+	if kind == "entity" then
+		local found, pbg = pcall(BP_GetEntityBlueprint, id)
+		if found and pbg ~= nil then
+			local resolved, value = pcall(BP_GetEntityUIInfo, pbg)
+			if resolved then
+				uiInfo = value
+			end
+		end
+	elseif kind == "squad" then
+		local found, pbg = pcall(BP_GetSquadBlueprint, id)
+		if found and pbg ~= nil then
+			local resolved, value = pcall(
+				BP_GetSquadUIInfo,
+				pbg,
+				Player_GetRace(context.localPlayer)
+			)
+			if resolved then
+				uiInfo = value
+			end
+		end
+	elseif kind == "upgrade" then
+		local found, pbg = pcall(BP_GetUpgradeBlueprint, id)
+		if found and pbg ~= nil then
+			local resolved, value = pcall(BP_GetUpgradeUIInfo, pbg)
+			if resolved then
+				uiInfo = value
+			end
+		end
+	end
+	if uiInfo ~= nil and uiInfo.screenName ~= nil then
+		return uiInfo.screenName
+	end
+	print("BuildOrder: missing localized " .. tostring(kind) .. " name for " .. tostring(id))
+	return BuildOrder_RawText(tostring(id))
+end
+
+function BuildOrder_TargetNames(payload, kind, context)
+	local names = {}
+	local joined = false
+	if payload.id ~= nil then
+		table.insert(names, BuildOrder_GameName(kind, payload.id, context))
+	elseif payload.oneof ~= nil then
+		joined = true
+		for _, id in ipairs(payload.oneof) do
+			table.insert(names, BuildOrder_GameName(kind, id, context))
+		end
+	end
+	local result = BuildOrder_JoinLocalized(names, BUILD_ORDER_LOC_KEYS.orJoin)
+	if joined then
+		return BuildOrder_FormattedArgument(result)
+	end
+	return result
+end
+
+function BuildOrder_FirstSquadName(payload, context)
+	return BuildOrder_GameName("squad", payload.ids[1], context)
+end

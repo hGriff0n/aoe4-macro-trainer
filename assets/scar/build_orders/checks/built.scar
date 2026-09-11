@@ -1,32 +1,16 @@
 BUILT_STATE = {}
 BUILT_EVENT_REGISTERED = false
 
-function Built_BlueprintsEqual(left, right)
-	return left.PropertyBagGroupID == right.PropertyBagGroupID
-		and left.PropertyBagGroupModPackID == right.PropertyBagGroupModPackID
-		and left.PropertyBagGroupType == right.PropertyBagGroupType
-end
-
-function Built_ResolvePBGs(payload)
-	local pbgs = {}
-	if payload.id ~= nil then
-		table.insert(pbgs, BP_GetEntityBlueprint(payload.id))
-		return pbgs
+function Built_FormatTitle(check, context)
+	local names = BuildOrder_TargetNames(check.payload, "entity", context)
+	if check.payload.count == 1 then
+		return Loc_FormatText(BUILD_ORDER_LOC_KEYS.buildOne, names)
 	end
-
-	for _, candidate in ipairs(payload.oneof) do
-		table.insert(pbgs, BP_GetEntityBlueprint(candidate))
-	end
-	return pbgs
-end
-
-function Built_MatchesPBG(pbgs, pbg)
-	for _, candidate in ipairs(pbgs) do
-		if Built_BlueprintsEqual(candidate, pbg) then
-			return true
-		end
-	end
-	return false
+	return Loc_FormatText(
+		BUILD_ORDER_LOC_KEYS.buildMany,
+		Loc_FormatInteger(check.payload.count),
+		names
+	)
 end
 
 function Built_OnConstructionComplete(context)
@@ -40,7 +24,7 @@ function Built_OnConstructionComplete(context)
 		if state ~= nil and state.remaining > 0 then
 			if context.player == state.player then
 				local entityID = context.entity.EntityID
-				if state.seen[entityID] ~= true and Built_MatchesPBG(state.pbgs, context.pbg) then
+				if state.seen[entityID] ~= true and BuildOrder_MatchesAnyBlueprint(state.pbgs, context.pbg) then
 					state.seen[entityID] = true
 					state.remaining = state.remaining - 1
 					if state.remaining == 0 then
@@ -67,7 +51,7 @@ function Built_SnapshotEntity(groupID, entityIndex, entity)
 		if Entity_GetPlayerOwner(entity) == state.player then
 			if Entity_IsBuilding(entity) and Entity_GetBuildingProgress(entity) >= 1.0 then
 				local blueprint = Entity_GetBlueprint(entity)
-				if Built_MatchesPBG(state.pbgs, blueprint) then
+				if BuildOrder_MatchesAnyBlueprint(state.pbgs, blueprint) then
 					state.seen[Entity_GetID(entity)] = true
 				end
 			end
@@ -86,7 +70,7 @@ function Built_Activate(check, objectiveID, context)
 		player = player,
 		objectiveID = objectiveID,
 		payload = check.payload,
-		pbgs = Built_ResolvePBGs(check.payload),
+		pbgs = BuildOrder_ResolvePayloadBlueprints(check.payload, BP_GetEntityBlueprint),
 		remaining = check.payload.count,
 		seen = {},
 	}
@@ -108,6 +92,7 @@ function Built_Deactivate(check, objectiveID, context)
 end
 
 BuildOrder_RegisterHandler("built", {
+	formatTitle = Built_FormatTitle,
 	activate = Built_Activate,
 	deactivate = Built_Deactivate,
 })

@@ -2,24 +2,21 @@ UPGRADES_STATE = {}
 UPGRADES_EVENTS_REGISTERED = false
 UPGRADES_RECONCILIATION_PENDING = false
 
-function Upgrades_PBGsEqual(left, right)
-	return left ~= nil and right ~= nil
-		and left.PropertyBagGroupID == right.PropertyBagGroupID
-		and left.PropertyBagGroupModPackID == right.PropertyBagGroupModPackID
-		and left.PropertyBagGroupType == right.PropertyBagGroupType
-end
-
-local function Upgrades_GetExecuterOwner(context)
-	if context == nil or context.executer == nil then
-		return nil
+function Upgrades_FormatTitle(check, context)
+	local name = BuildOrder_GameName("upgrade", check.payload.id, context)
+	local title = nil
+	if check.payload.queued then
+		title = Loc_FormatText(BUILD_ORDER_LOC_KEYS.queueResearch, name)
+	else
+		title = Loc_FormatText(BUILD_ORDER_LOC_KEYS.research, name)
 	end
-	if context.executer.PlayerID ~= nil then
-		return context.executer
+	if check.optional then
+		return Loc_FormatText(
+			BUILD_ORDER_LOC_KEYS.optional,
+			BuildOrder_FormattedArgument(title)
+		)
 	end
-	if context.executer.EntityID ~= nil then
-		return Entity_GetPlayerOwner(context.executer)
-	end
-	return nil
+	return title
 end
 
 local function Upgrades_IsCompletedResearch(state)
@@ -35,7 +32,7 @@ local function Upgrades_HasQueuedResearch(state)
 			for index = 0, Entity_GetProductionQueueSize(entity) - 1 do
 				local itemType = Entity_GetProductionQueueItemType(entity, index)
 				if (itemType == PITEM_Upgrade or itemType == PITEM_PlayerUpgrade)
-					and Upgrades_PBGsEqual(Entity_GetProductionQueueItem(entity, index), state.upgrade) then
+					and BuildOrder_BlueprintsEqual(Entity_GetProductionQueueItem(entity, index), state.upgrade) then
 					return true
 				end
 			end
@@ -97,13 +94,13 @@ function Upgrades_OnUpgradeStart(context)
 		return
 	end
 
-	local owner = Upgrades_GetExecuterOwner(context)
+	local owner = BuildOrder_GetExecuterOwner(context)
 	BuildOrder_BeginCheckUpdates()
 	for _, state in pairs(UPGRADES_STATE) do
 		if state ~= nil and state.completed == false and state.queued then
 			if owner ~= state.player then
 				-- Never allow opponent research to satisfy a local-player objective.
-			elseif Upgrades_PBGsEqual(context.upgrade, state.upgrade) then
+			elseif BuildOrder_BlueprintsEqual(context.upgrade, state.upgrade) then
 				Upgrades_SetCheckComplete(state, true)
 			end
 		end
@@ -116,13 +113,13 @@ function Upgrades_OnUpgradeCancelled(context)
 		return
 	end
 
-	local owner = Upgrades_GetExecuterOwner(context)
+	local owner = BuildOrder_GetExecuterOwner(context)
 	local shouldReconcile = false
 	for _, state in pairs(UPGRADES_STATE) do
 		if state ~= nil and state.completed == false and state.queued then
 			if owner ~= state.player then
 				-- Never allow opponent research to alter a local-player objective.
-			elseif Upgrades_PBGsEqual(context.upgrade, state.upgrade) then
+			elseif BuildOrder_BlueprintsEqual(context.upgrade, state.upgrade) then
 				state.cancelPending = true
 				shouldReconcile = true
 			end
@@ -138,13 +135,13 @@ function Upgrades_OnUpgradeComplete(context)
 		return
 	end
 
-	local owner = Upgrades_GetExecuterOwner(context)
+	local owner = BuildOrder_GetExecuterOwner(context)
 	BuildOrder_BeginCheckUpdates()
 	for _, state in pairs(UPGRADES_STATE) do
 		if state ~= nil and state.completed == false then
 			if owner ~= state.player then
 				-- Never allow opponent research to satisfy a local-player objective.
-			elseif Upgrades_PBGsEqual(context.upgrade, state.upgrade) then
+			elseif BuildOrder_BlueprintsEqual(context.upgrade, state.upgrade) then
 				Upgrades_Complete(state)
 			end
 		end
@@ -212,6 +209,7 @@ local function Upgrades_Deactivate(check, objectiveID, context)
 end
 
 BuildOrder_RegisterHandler("upgrades", {
+	formatTitle = Upgrades_FormatTitle,
 	activate = Upgrades_Activate,
 	deactivate = Upgrades_Deactivate,
 })

@@ -1,1 +1,1 @@
-"""YAML build-order compiler and generated asset emitters."""
+"""YAML build-order compiler and datastore tooling."""

@@ -2,9 +2,41 @@ import re
 import unittest
 from pathlib import Path
 
+from tests.scar_runtime import ScarRuntime
+
 
 ROOT = Path(__file__).resolve().parents[1]
 BUILT_PATH = ROOT / "assets" / "scar" / "build_orders" / "checks" / "built.scar"
+LOC = {
+    "orJoin": "$dfb5645698a84afb91cf7a2dfb0f4a4e:154",
+    "buildOne": "$dfb5645698a84afb91cf7a2dfb0f4a4e:159",
+    "buildMany": "$dfb5645698a84afb91cf7a2dfb0f4a4e:160",
+}
+
+
+def formatter_runtime(source: str) -> tuple[ScarRuntime, list[tuple[str, tuple[str, ...]]]]:
+    registration_stub = "function BuildOrder_RegisterHandler(kind, handler)\nend"
+    runtime = ScarRuntime(registration_stub + "\n" + source)
+    calls = []
+    names = {
+        "barracks": "Barracks",
+        "stable": "Stable",
+        "archery_range": "Archery Range",
+    }
+
+    def target_names(payload, kind, _context):
+        if payload["oneof"] is not None:
+            ids = tuple(payload["oneof"].array())
+            calls.append((kind, ids))
+            return (LOC["orJoin"], *(names[value] for value in ids))
+        calls.append((kind, (payload["id"],)))
+        return names[payload["id"]]
+
+    runtime.globals["BuildOrder_TargetNames"] = target_names
+    runtime.globals["Loc_FormatText"] = lambda key, *values: (key, *values)
+    runtime.globals["Loc_FormatInteger"] = lambda value: ("integer", value)
+    runtime.globals["BUILD_ORDER_LOC_KEYS"] = runtime.table(LOC)
+    return runtime, calls
 
 
 def function_body(source: str, name: str) -> str:
@@ -30,6 +62,34 @@ class BuiltCheckContractTests(unittest.TestCase):
         self.assertIn("BUILT_STATE[check.id]", activate)
         self.assertIn("remaining = check.payload.count", activate)
         self.assertIn("seen = {}", activate)
+        self.assertIn("formatTitle = Built_FormatTitle", self.source)
+
+    def test_formatter_selects_single_counted_and_ordered_oneof_titles(self) -> None:
+        runtime, calls = formatter_runtime(self.source)
+
+        single = runtime.call(
+            "Built_FormatTitle", {"payload": {"id": "barracks", "count": 1}}, {}
+        )
+        counted = runtime.call(
+            "Built_FormatTitle", {"payload": {"id": "barracks", "count": 2}}, {}
+        )
+        oneof = runtime.call(
+            "Built_FormatTitle",
+            {"payload": {"oneof": ["stable", "archery_range"], "count": 1}},
+            {},
+        )
+
+        self.assertEqual(single, (LOC["buildOne"], "Barracks"))
+        self.assertEqual(counted, (LOC["buildMany"], ("integer", 2), "Barracks"))
+        self.assertEqual(oneof, (LOC["buildOne"], (LOC["orJoin"], "Stable", "Archery Range")))
+        self.assertEqual(
+            calls,
+            [
+                ("entity", ("barracks",)),
+                ("entity", ("barracks",)),
+                ("entity", ("stable", "archery_range")),
+            ],
+        )
 
     def test_registers_only_the_construction_complete_event_once(self) -> None:
         register = function_body(self.source, "Built_EnsureEventRegistered")
@@ -48,12 +108,11 @@ class BuiltCheckContractTests(unittest.TestCase):
     def test_checks_owner_before_blueprint_and_accepts_id_or_oneof(self) -> None:
         callback = function_body(self.source, "Built_OnConstructionComplete")
         owner = "context.player == state.player"
-        blueprint = "Built_MatchesPBG(state.pbgs, context.pbg)"
+        blueprint = "BuildOrder_MatchesAnyBlueprint(state.pbgs, context.pbg)"
         self.assertIn(owner, callback)
         self.assertIn(blueprint, callback)
         self.assertLess(callback.index(owner), callback.index(blueprint))
-        matcher = function_body(self.source, "Built_MatchesPBG")
-        self.assertIn("ipairs(pbgs)", matcher)
+        self.assertIn("BuildOrder_MatchesAnyBlueprint", self.source)
 
     def test_completion_event_batches_updates_around_state_traversal(self) -> None:
         callback = function_body(self.source, "Built_OnConstructionComplete")
@@ -63,22 +122,22 @@ class BuiltCheckContractTests(unittest.TestCase):
         self.assertLess(callback.index("pairs(BUILT_STATE)"), callback.index("BuildOrder_EndCheckUpdates()"))
 
     def test_resolves_and_compares_the_complete_canonical_pbg_tuple(self) -> None:
-        resolve = function_body(self.source, "Built_ResolvePBGs")
-        self.assertIn("BP_GetEntityBlueprint(payload.id)", resolve)
-        self.assertIn("BP_GetEntityBlueprint(candidate)", resolve)
-
-        equal = function_body(self.source, "Built_BlueprintsEqual")
-        self.assertIn("PropertyBagGroupID", equal)
-        self.assertIn("PropertyBagGroupModPackID", equal)
-        self.assertIn("PropertyBagGroupType", equal)
+        activate = function_body(self.source, "Built_Activate")
+        self.assertIn(
+            "BuildOrder_ResolvePayloadBlueprints(check.payload, BP_GetEntityBlueprint)",
+            activate,
+        )
 
     def test_resolves_entity_blueprints_only_during_activation(self) -> None:
         activate = function_body(self.source, "Built_Activate")
-        self.assertIn("pbgs = Built_ResolvePBGs(check.payload)", activate)
+        self.assertIn(
+            "pbgs = BuildOrder_ResolvePayloadBlueprints(check.payload, BP_GetEntityBlueprint)",
+            activate,
+        )
 
         callback = function_body(self.source, "Built_OnConstructionComplete")
         self.assertNotIn("BP_GetEntityBlueprint", callback)
-        self.assertIn("Built_MatchesPBG(state.pbgs, context.pbg)", callback)
+        self.assertIn("BuildOrder_MatchesAnyBlueprint(state.pbgs, context.pbg)", callback)
 
     def test_only_matching_human_completed_buildings_decrement_and_latch(self) -> None:
         callback = function_body(self.source, "Built_OnConstructionComplete")
