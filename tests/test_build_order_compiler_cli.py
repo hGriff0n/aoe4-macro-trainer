@@ -1,3 +1,4 @@
+import json
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -13,6 +14,7 @@ from tools.build_orders.compiler import (
 )
 from tools.build_orders.datastore import load_datastore, write_datastore
 from tools.build_orders.model import BuildOrder, Catalog, CheckDescriptor, Step
+from tests.build_order_import_fixtures import OVERLAY_BUILD
 
 
 def yaml_order(civ: str, title: str, hint: str = "Scout") -> str:
@@ -155,6 +157,36 @@ class CompilerCommandTests(unittest.TestCase):
         self.assertNotIn('title = "Step 1"', text)
         self.assertNotIn("[HINT] Keep producing", text)
         self.assertNotIn("Assign 7 food", text)
+
+    def test_import_file_stores_compiled_order_by_default(self) -> None:
+        source = self.root / "2 TC.bo"
+        source.write_text(json.dumps(OVERLAY_BUILD), encoding="utf-8")
+
+        result, output, error = self.run_command(
+            ["import", "--file", str(source), "--profile", "123"]
+        )
+
+        self.assertEqual((result, error), (0, ""))
+        stored = load_datastore(self.datastore)
+        self.assertEqual([order.id for order in stored.build_orders], ["templar-2-tc"])
+        self.assertIn("Stored imported build order templar-2-tc", output)
+
+    def test_import_replaces_matching_id_and_preserves_unrelated_orders(self) -> None:
+        stale = compiled_order("templar-2-tc", "templar", "Stale", "stale")
+        unrelated = compiled_order("english-opening", "english", "Opening", "scout")
+        write_datastore(self.datastore, Catalog((stale, unrelated)))
+        source = self.root / "2 TC.bo"
+        source.write_text(json.dumps(OVERLAY_BUILD), encoding="utf-8")
+
+        result, _, error = self.run_command(["import", "--file", str(source)])
+
+        self.assertEqual((result, error), (0, ""))
+        stored = load_datastore(self.datastore)
+        self.assertEqual(
+            [order.id for order in stored.build_orders],
+            ["english-opening", "templar-2-tc"],
+        )
+        self.assertEqual(stored.build_orders[1].title, "2 TC")
 
     def test_list_has_stable_columns_and_id_sorted_rows(self) -> None:
         write_datastore(

@@ -15,6 +15,12 @@ from .identities import (
     IdentityCatalogError,
     normalize_identity_id,
 )
+from .importer import (
+    ImportValidationError,
+    fetch_overlay_document,
+    read_overlay_file,
+    translate_overlay_document,
+)
 from .model import BuildOrder, Catalog, CheckDescriptor, Step, normalize_id
 from .profiles import ProfileResolutionError, resolve_datastore_path
 
@@ -805,7 +811,14 @@ def _parser() -> argparse.ArgumentParser:
     extract = commands.add_parser("extract", help="extract normalized YAML")
     extract.add_argument("ids", nargs="+")
     extract.add_argument("--output-dir", type=Path, default=Path.cwd())
-    for command in (build, listing, delete, extract):
+    import_command = commands.add_parser(
+        "import", help="import an RTS Overlay build order into the datastore"
+    )
+    source = import_command.add_mutually_exclusive_group(required=True)
+    source.add_argument("--file", type=Path, dest="import_file")
+    source.add_argument("--url", dest="import_url")
+    import_command.add_argument("--save_yaml", type=Path)
+    for command in (build, listing, delete, extract, import_command):
         command.add_argument("--profile")
     return parser
 
@@ -813,7 +826,7 @@ def _parser() -> argparse.ArgumentParser:
 def _forward_default_build(arguments: list[str]) -> list[str]:
     if not arguments:
         return ["build"]
-    if arguments[0] in {"-h", "--help", "build", "list", "delete", "extract"}:
+    if arguments[0] in {"-h", "--help", "build", "list", "delete", "extract", "import"}:
         return arguments
     return ["build", *arguments]
 
@@ -829,6 +842,18 @@ def main(argv: list[str] | None = None) -> int:
             merged = merge_catalog(existing, incoming)
             write_datastore(datastore_path, merged)
             print(f"Stored {len(incoming.build_orders)} build order(s) in {datastore_path}")
+        elif options.command == "import":
+            if options.import_file is not None:
+                source: Path | str = options.import_file
+                raw = read_overlay_file(options.import_file)
+            else:
+                source = options.import_url
+                raw = fetch_overlay_document(options.import_url)
+            translated = translate_overlay_document(raw, source)
+            incoming_order = compile_document(translated, source)
+            merged = merge_catalog(existing, Catalog((incoming_order,)))
+            write_datastore(datastore_path, merged)
+            print(f"Stored imported build order {incoming_order.id} in {datastore_path}")
         elif options.command == "list":
             _print_catalog(existing)
         elif options.command == "delete":
@@ -889,7 +914,7 @@ def main(argv: list[str] | None = None) -> int:
                         temp.unlink()
             print(f"Extracted {len(outputs)} build order(s) to {options.output_dir}")
         return 0
-    except BuildOrderValidationError as exc:
+    except (BuildOrderValidationError, ImportValidationError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     except (DatastoreError, ProfileResolutionError, IdentityCatalogError, OSError) as exc:

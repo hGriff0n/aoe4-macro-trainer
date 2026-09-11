@@ -11,7 +11,9 @@ from unittest import mock
 from urllib.error import HTTPError
 
 from tests.build_order_import_fixtures import OVERLAY_BUILD
+from tools.build_orders import compiler
 from tools.build_orders.compiler import compile_document
+from tools.build_orders.datastore import load_datastore
 from tools.build_orders.importer import (
     ImportValidationError,
     fetch_overlay_document,
@@ -54,7 +56,7 @@ class BuildOrderImporterTests(unittest.TestCase):
             )
             self.assertEqual(compile_document(translated, source).id, "templar-2-tc")
 
-    def test_url_import_fetches_fixed_overlay_endpoint_and_compiles_mapping(self) -> None:
+    def test_url_import_fetches_fixed_overlay_endpoint_and_stores_datastore(self) -> None:
         requested_urls = []
 
         class Response:
@@ -82,14 +84,28 @@ class BuildOrderImporterTests(unittest.TestCase):
                 return open_url(request, timeout)
 
         with tempfile.TemporaryDirectory() as temp:
-            with mock.patch(
-                "tools.build_orders.importer.build_overlay_opener",
-                return_value=Opener(),
+            datastore = Path(temp) / "profile" / "datastore" / "macroTrainerBuildOrders.rlt"
+            with (
+                mock.patch(
+                    "tools.build_orders.importer.build_overlay_opener",
+                    return_value=Opener(),
+                ),
+                mock.patch(
+                    "tools.build_orders.compiler.resolve_datastore_path",
+                    return_value=datastore,
+                ),
             ):
-                document = fetch_overlay_document(
-                    "https://aoe4guides.com/builds/nlxHE4i1PhNNXqD2XTAP"
+                result = compiler.main(
+                    [
+                        "import",
+                        "--url",
+                        "https://aoe4guides.com/builds/nlxHE4i1PhNNXqD2XTAP",
+                        "--profile",
+                        "123",
+                    ]
                 )
 
+            self.assertEqual(result, 0)
             self.assertEqual(
                 requested_urls,
                 [
@@ -99,9 +115,10 @@ class BuildOrderImporterTests(unittest.TestCase):
                     )
                 ],
             )
-            translated = translate_overlay_document(document, "sample.bo")
-            self.assertEqual(translated["steps"][0]["hints"][1], "Rally -> Gold")
-            self.assertEqual(compile_document(translated, "sample.bo").id, "templar-2-tc")
+            self.assertEqual(
+                [order.id for order in load_datastore(datastore).build_orders],
+                ["templar-2-tc"],
+            )
 
     def test_translated_mapping_compiles_without_a_yaml_round_trip(self) -> None:
         translated = translate_overlay_document(copy.deepcopy(OVERLAY_BUILD), "sample.bo")
