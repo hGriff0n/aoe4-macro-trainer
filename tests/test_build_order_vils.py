@@ -26,6 +26,7 @@ def formatter_runtime(source: str) -> ScarRuntime:
     runtime = ScarRuntime(registration_stub + "\n" + localization + "\n" + source)
     runtime.globals["Loc_FormatText"] = lambda key, *values: (key, *values)
     runtime.globals["Loc_Empty"] = lambda: ()
+    runtime.globals["Loc_ToAnsi"] = lambda value: f"ansi:{value!r}"
     return runtime
 
 
@@ -69,7 +70,10 @@ class BuildOrderVilsContractTests(unittest.TestCase):
                 {"payload": {"gold": 3, "food": 6}},
                 {},
             ),
-            (LOC["assign"], (LOC["allocationJoin"], food, gold)),
+            (
+                LOC["assign"],
+                f"ansi:{(LOC['allocationJoin'], f'ansi:{food!r}', f'ansi:{gold!r}')!r}",
+            ),
         )
 
     def test_formatter_uses_no_collect_template_before_allocations(self) -> None:

@@ -62,11 +62,15 @@ class BuildOrderLocalizationTests(unittest.TestCase):
             except Exception as error:
                 return LuaResults((False, str(error)))
 
+        def to_ansi(value):
+            self.loc_to_ansi_calls.append(value)
+            return f"ansi:{value!r}"
+
         self.runtime.globals.update(
             {
                 "Loc_FormatText": format_text,
                 "Loc_Empty": lambda: ("empty",),
-                "Loc_ToAnsi": lambda value: self.loc_to_ansi_calls.append(value),
+                "Loc_ToAnsi": to_ansi,
                 "pcall": pcall,
                 "print": self.logs.append,
                 "tostring": str,
@@ -107,6 +111,11 @@ class BuildOrderLocalizationTests(unittest.TestCase):
         )
 
     def test_join_localized_preserves_order_and_handles_empty_values(self) -> None:
+        first_join = (
+            f"{LOC_PREFIX}154",
+            "ansi:'first'",
+            "ansi:'second'",
+        )
         self.assertEqual(
             self.runtime.call(
                 "BuildOrder_JoinLocalized",
@@ -115,8 +124,8 @@ class BuildOrderLocalizationTests(unittest.TestCase):
             ),
             (
                 f"{LOC_PREFIX}154",
-                (f"{LOC_PREFIX}154", "first", "second"),
-                "third",
+                f"ansi:{first_join!r}",
+                "ansi:'third'",
             ),
         )
         self.assertEqual(
@@ -209,11 +218,7 @@ class BuildOrderLocalizationTests(unittest.TestCase):
 
         self.assertEqual(
             result,
-            (
-                f"{LOC_PREFIX}154",
-                "localized Stable",
-                "localized Archery Range",
-            ),
+            f"ansi:{(f'{LOC_PREFIX}154', "ansi:'localized Stable'", "ansi:'localized Archery Range'")!r}",
         )
         self.assertEqual(
             self.entity_ui_calls,

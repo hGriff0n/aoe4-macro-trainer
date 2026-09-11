@@ -33,13 +33,21 @@ function BuildOrder_RawText(text)
 	return Loc_FormatText(BUILD_ORDER_LOC_KEYS.rawText, text)
 end
 
+function BuildOrder_FormattedArgument(value)
+	return Loc_ToAnsi(value)
+end
+
 function BuildOrder_JoinLocalized(values, separatorKey)
 	if #values == 0 then
 		return Loc_Empty()
 	end
 	local result = values[1]
 	for index = 2, #values do
-		result = Loc_FormatText(separatorKey, result, values[index])
+		result = Loc_FormatText(
+			separatorKey,
+			BuildOrder_FormattedArgument(result),
+			BuildOrder_FormattedArgument(values[index])
+		)
 	end
 	return result
 end
@@ -92,14 +100,20 @@ end
 
 function BuildOrder_TargetNames(payload, kind, context)
 	local names = {}
+	local joined = false
 	if payload.id ~= nil then
 		table.insert(names, BuildOrder_GameName(kind, payload.id, context))
 	elseif payload.oneof ~= nil then
+		joined = true
 		for _, id in ipairs(payload.oneof) do
 			table.insert(names, BuildOrder_GameName(kind, id, context))
 		end
 	end
-	return BuildOrder_JoinLocalized(names, BUILD_ORDER_LOC_KEYS.orJoin)
+	local result = BuildOrder_JoinLocalized(names, BUILD_ORDER_LOC_KEYS.orJoin)
+	if joined then
+		return BuildOrder_FormattedArgument(result)
+	end
+	return result
 end
 
 function BuildOrder_FirstSquadName(payload, context)

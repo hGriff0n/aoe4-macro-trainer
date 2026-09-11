@@ -24,7 +24,9 @@ function Vils_FormatTitle(check, context)
 
 	return Loc_FormatText(
 		BUILD_ORDER_LOC_KEYS.assign,
-		BuildOrder_JoinLocalized(allocations, BUILD_ORDER_LOC_KEYS.allocationJoin)
+		BuildOrder_FormattedArgument(
+			BuildOrder_JoinLocalized(allocations, BUILD_ORDER_LOC_KEYS.allocationJoin)
+		)
 	)
 end
 
