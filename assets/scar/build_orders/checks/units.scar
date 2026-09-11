@@ -3,6 +3,14 @@ UNITS_POLLING = false
 UNITS_SCAN_STATE = nil
 UNITS_POLL_INTERVAL_SECONDS = 1
 
+function Units_FormatTitle(check, context)
+	return Loc_FormatText(
+		BUILD_ORDER_LOC_KEYS.activeUnits,
+		check.payload.count,
+		BuildOrder_FirstSquadName(check.payload, context)
+	)
+end
+
 function Units_ScanSquad(groupID, squadIndex, squad)
 	local state = UNITS_SCAN_STATE
 	if state == nil then
@@ -71,6 +79,7 @@ function Units_Deactivate(check, objectiveID, context)
 end
 
 BuildOrder_RegisterHandler("units", {
+	formatTitle = Units_FormatTitle,
 	activate = Units_Activate,
 	deactivate = Units_Deactivate,
 })

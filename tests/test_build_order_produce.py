@@ -3,10 +3,32 @@ import unittest
 from pathlib import Path
 
 from tools.build_orders.compiler import compile_directory
+from tests.scar_runtime import ScarRuntime
 
 
 ROOT = Path(__file__).resolve().parents[1]
 PRODUCE_HANDLER = ROOT / "assets" / "scar" / "build_orders" / "checks" / "produce.scar"
+LOC = {
+    "produce": "$dfb5645698a84afb91cf7a2dfb0f4a4e:164",
+    "queueProduce": "$dfb5645698a84afb91cf7a2dfb0f4a4e:165",
+    "constantProduce": "$dfb5645698a84afb91cf7a2dfb0f4a4e:166",
+}
+
+
+def formatter_runtime(source: str) -> tuple[ScarRuntime, list[str]]:
+    registration_stub = "function BuildOrder_RegisterHandler(kind, handler)\nend"
+    executable_source = source.replace("local function ", "function ")
+    runtime = ScarRuntime(registration_stub + "\n" + executable_source)
+    first_ids = []
+
+    def first_squad_name(payload, _context):
+        first_ids.append(payload["ids"][1])
+        return "Villager"
+
+    runtime.globals["BuildOrder_FirstSquadName"] = first_squad_name
+    runtime.globals["Loc_FormatText"] = lambda key, *values: (key, *values)
+    runtime.globals["BUILD_ORDER_LOC_KEYS"] = runtime.table(LOC)
+    return runtime, first_ids
 
 
 def function_body(source: str, name: str) -> str:
@@ -279,6 +301,41 @@ class ProduceHandlerContractTests(unittest.TestCase):
         self.assertIn("seen = {}", activate)
         self.assertNotIn("Player_GetSquads", self.source)
         self.assertNotIn("Produce_ScanNewSquads", self.source)
+        self.assertIn("formatTitle = Produce_FormatTitle", self.source)
+
+    def test_formatter_preserves_constant_over_queued_precedence_without_optional_copy(self) -> None:
+        runtime, first_ids = formatter_runtime(self.source)
+        ids = ["unit_villager_1_nomad_eng", "unit_villager_2_future"]
+
+        normal = runtime.call(
+            "Produce_FormatTitle",
+            {"optional": False, "payload": {"ids": ids, "count": 2}},
+            {},
+        )
+        queued = runtime.call(
+            "Produce_FormatTitle",
+            {"optional": False, "payload": {"ids": ids, "count": 2, "queued": True}},
+            {},
+        )
+        constant = runtime.call(
+            "Produce_FormatTitle",
+            {"optional": True, "payload": {"ids": ids, "count": 2, "constant": True}},
+            {},
+        )
+        constant_and_queued = runtime.call(
+            "Produce_FormatTitle",
+            {
+                "optional": True,
+                "payload": {"ids": ids, "count": 2, "constant": True, "queued": True},
+            },
+            {},
+        )
+
+        self.assertEqual(normal, (LOC["produce"], 2, "Villager"))
+        self.assertEqual(queued, (LOC["queueProduce"], 2, "Villager"))
+        self.assertEqual(constant, (LOC["constantProduce"], "Villager"))
+        self.assertEqual(constant_and_queued, (LOC["constantProduce"], "Villager"))
+        self.assertEqual(first_ids, [ids[0]] * 4)
 
     def test_resolves_every_family_blueprint_once_at_activation(self) -> None:
         activate = function_body(self.source, "Produce_Activate")

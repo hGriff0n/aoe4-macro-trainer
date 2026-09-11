@@ -5,10 +5,27 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from tools.build_orders.compiler import compile_directory
+from tests.scar_runtime import ScarRuntime
 
 
 ROOT = Path(__file__).resolve().parents[1]
 UNITS_HANDLER = ROOT / "assets" / "scar" / "build_orders" / "checks" / "units.scar"
+LOC = {"activeUnits": "$dfb5645698a84afb91cf7a2dfb0f4a4e:167"}
+
+
+def formatter_runtime(source: str) -> tuple[ScarRuntime, list[str]]:
+    registration_stub = "function BuildOrder_RegisterHandler(kind, handler)\nend"
+    runtime = ScarRuntime(registration_stub + "\n" + source)
+    first_ids = []
+
+    def first_squad_name(payload, _context):
+        first_ids.append(payload["ids"][1])
+        return "Spearman"
+
+    runtime.globals["BuildOrder_FirstSquadName"] = first_squad_name
+    runtime.globals["Loc_FormatText"] = lambda key, *values: (key, *values)
+    runtime.globals["BUILD_ORDER_LOC_KEYS"] = runtime.table(LOC)
+    return runtime, first_ids
 
 
 def function_body(source: str, name: str) -> str:
@@ -135,6 +152,24 @@ class UnitsHandlerContractTests(unittest.TestCase):
         )
         self.assertIn("Rule_AddInterval(Units_Poll", activate)
         self.assertIn("Units_Poll()", activate)
+        self.assertIn("formatTitle = Units_FormatTitle", self.source)
+
+    def test_formatter_uses_count_and_first_canonical_squad_name(self) -> None:
+        runtime, first_ids = formatter_runtime(self.source)
+
+        title = runtime.call(
+            "Units_FormatTitle",
+            {
+                "payload": {
+                    "ids": ["unit_spearman_2_eng", "unit_spearman_3_eng"],
+                    "count": 3,
+                }
+            },
+            {},
+        )
+
+        self.assertEqual(title, (LOC["activeUnits"], 3, "Spearman"))
+        self.assertEqual(first_ids, ["unit_spearman_2_eng"])
 
     def test_resolves_every_unit_family_blueprint_at_activation_not_each_poll(self) -> None:
         activate = function_body(self.source, "Units_Activate")
