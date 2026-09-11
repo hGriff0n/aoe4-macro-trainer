@@ -10,9 +10,9 @@ function Produce_FormatTitle(check, context)
 	if check.payload.constant then
 		return Loc_FormatText(BUILD_ORDER_LOC_KEYS.constantProduce, name)
 	elseif check.payload.queued then
-		return Loc_FormatText(BUILD_ORDER_LOC_KEYS.queueProduce, check.payload.count, name)
+		return Loc_FormatText(BUILD_ORDER_LOC_KEYS.queueProduce, Loc_ConvertNumber(check.payload.count), name)
 	end
-	return Loc_FormatText(BUILD_ORDER_LOC_KEYS.produce, check.payload.count, name)
+	return Loc_FormatText(BUILD_ORDER_LOC_KEYS.produce, Loc_ConvertNumber(check.payload.count), name)
 end
 
 function Produce_IsQueued(state)

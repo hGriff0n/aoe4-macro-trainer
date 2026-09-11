@@ -27,6 +27,7 @@ def formatter_runtime(source: str) -> tuple[ScarRuntime, list[str]]:
 
     runtime.globals["BuildOrder_FirstSquadName"] = first_squad_name
     runtime.globals["Loc_FormatText"] = lambda key, *values: (key, *values)
+    runtime.globals["Loc_ConvertNumber"] = lambda value: ("number", value)
     runtime.globals["BUILD_ORDER_LOC_KEYS"] = runtime.table(LOC)
     return runtime, first_ids
 
@@ -331,8 +332,8 @@ class ProduceHandlerContractTests(unittest.TestCase):
             {},
         )
 
-        self.assertEqual(normal, (LOC["produce"], 2, "Villager"))
-        self.assertEqual(queued, (LOC["queueProduce"], 2, "Villager"))
+        self.assertEqual(normal, (LOC["produce"], ("number", 2), "Villager"))
+        self.assertEqual(queued, (LOC["queueProduce"], ("number", 2), "Villager"))
         self.assertEqual(constant, (LOC["constantProduce"], "Villager"))
         self.assertEqual(constant_and_queued, (LOC["constantProduce"], "Villager"))
         self.assertEqual(first_ids, [ids[0]] * 4)

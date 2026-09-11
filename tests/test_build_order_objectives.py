@@ -13,7 +13,7 @@ IMPORT_PATTERN = re.compile(r'^\s*import\("([^"]+)"\)', re.MULTILINE)
 
 FAKE_HANDLER_FIXTURE = '''local fakeHandler = {
     formatTitle = function(check, context)
-        return Loc_FormatText("$fake:1", check.payload.count)
+        return Loc_FormatText("$fake:1", Loc_ConvertNumber(check.payload.count))
     end,
     activate = function(check, objectiveID, context)
         BuildOrder_NotifyComplete(check.id)
@@ -226,6 +226,7 @@ class BuildOrderObjectiveContractTests(unittest.TestCase):
     def objective_runtime(self):
         runtime = ScarRuntime(self.localization + "\n" + self.engine + "\n" + FAKE_HANDLER_FIXTURE)
         runtime.globals["Loc_FormatText"] = lambda key, *values: (key, *values)
+        runtime.globals["Loc_ConvertNumber"] = lambda value: ("number", value)
         runtime.globals["print"] = lambda *_arguments: None
         runtime.globals["tostring"] = str
         return runtime
@@ -235,7 +236,7 @@ class BuildOrderObjectiveContractTests(unittest.TestCase):
 
         self.assertEqual(
             runtime.call("BuildOrder_StepTitle", {"title": None}, 4),
-            ("$dfb5645698a84afb91cf7a2dfb0f4a4e:144", 4),
+            ("$dfb5645698a84afb91cf7a2dfb0f4a4e:144", ("number", 4)),
         )
         self.assertEqual(
             runtime.call("BuildOrder_StepTitle", {"title": "Opening"}, 4),
@@ -289,8 +290,8 @@ class BuildOrderObjectiveContractTests(unittest.TestCase):
         self.assertEqual(
             [arguments[1] for arguments in objectives],
             [
-                ("$dfb5645698a84afb91cf7a2dfb0f4a4e:144", 1),
-                ("$fake:1", 6),
+                ("$dfb5645698a84afb91cf7a2dfb0f4a4e:144", ("number", 1)),
+                ("$fake:1", ("number", 6)),
             ],
         )
 
@@ -481,7 +482,10 @@ class BuildOrderObjectiveContractTests(unittest.TestCase):
 
     def test_fake_handler_fixture_exercises_public_lifecycle_without_shipping_one(self) -> None:
         self.assertIn("BuildOrder_RegisterHandler(\"fake\", fakeHandler)", FAKE_HANDLER_FIXTURE)
-        self.assertIn('Loc_FormatText("$fake:1", check.payload.count)', FAKE_HANDLER_FIXTURE)
+        self.assertIn(
+            'Loc_FormatText("$fake:1", Loc_ConvertNumber(check.payload.count))',
+            FAKE_HANDLER_FIXTURE,
+        )
         self.assertIn("BuildOrder_NotifyComplete(check.id)", FAKE_HANDLER_FIXTURE)
         self.assertNotIn('BuildOrder_RegisterHandler("fake"', self.engine)
         self.assertIn("BuildOrder_RegisterHandler", self.engine)

@@ -34,6 +34,7 @@ def formatter_runtime(source: str) -> tuple[ScarRuntime, list[tuple[str, tuple[s
 
     runtime.globals["BuildOrder_TargetNames"] = target_names
     runtime.globals["Loc_FormatText"] = lambda key, *values: (key, *values)
+    runtime.globals["Loc_ConvertNumber"] = lambda value: ("number", value)
     runtime.globals["BUILD_ORDER_LOC_KEYS"] = runtime.table(LOC)
     return runtime, calls
 
@@ -79,7 +80,7 @@ class BuiltCheckContractTests(unittest.TestCase):
         )
 
         self.assertEqual(single, (LOC["buildOne"], "Barracks"))
-        self.assertEqual(counted, (LOC["buildMany"], 2, "Barracks"))
+        self.assertEqual(counted, (LOC["buildMany"], ("number", 2), "Barracks"))
         self.assertEqual(oneof, (LOC["buildOne"], (LOC["orJoin"], "Stable", "Archery Range")))
         self.assertEqual(
             calls,

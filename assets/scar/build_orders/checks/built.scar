@@ -6,7 +6,11 @@ function Built_FormatTitle(check, context)
 	if check.payload.count == 1 then
 		return Loc_FormatText(BUILD_ORDER_LOC_KEYS.buildOne, names)
 	end
-	return Loc_FormatText(BUILD_ORDER_LOC_KEYS.buildMany, check.payload.count, names)
+	return Loc_FormatText(
+		BUILD_ORDER_LOC_KEYS.buildMany,
+		Loc_ConvertNumber(check.payload.count),
+		names
+	)
 end
 
 function Built_OnConstructionComplete(context)

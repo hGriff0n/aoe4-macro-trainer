@@ -5,7 +5,7 @@ local RESOURCES_ACTIVE_COUNT = 0
 function Resources_FormatTitle(check, context)
 	return Loc_FormatText(
 		BUILD_ORDER_LOC_KEYS.collect,
-		check.payload.count,
+		Loc_ConvertNumber(check.payload.count),
 		BuildOrder_ResourceName(check.payload.resource)
 	)
 end

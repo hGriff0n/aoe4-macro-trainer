@@ -17,7 +17,7 @@ function BuildOrder_StepTitle(step, stepIndex)
 	if step.title ~= nil then
 		return BuildOrder_RawText(step.title)
 	end
-	return Loc_FormatText(BUILD_ORDER_LOC_KEYS.step, stepIndex)
+	return Loc_FormatText(BUILD_ORDER_LOC_KEYS.step, Loc_ConvertNumber(stepIndex))
 end
 
 function BuildOrder_CheckTitle(check, handler)
