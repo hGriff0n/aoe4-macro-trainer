@@ -1,4 +1,11 @@
 -- TEMPORARY: rally target classification is not yet reliable, so this handler auto-completes.
+function Rallypoint_FormatTitle(check, context)
+	return Loc_FormatText(
+		BUILD_ORDER_LOC_KEYS.rally,
+		BuildOrder_ResourceName(check.payload.resource)
+	)
+end
+
 local function Rallypoint_Activate(check, objectiveID, context)
 	if context.localPlayer == nil then
 		return
@@ -11,6 +18,7 @@ local function Rallypoint_Deactivate(check, objectiveID, context)
 end
 
 BuildOrder_RegisterHandler("rallypoint", {
+	formatTitle = Rallypoint_FormatTitle,
 	activate = Rallypoint_Activate,
 	deactivate = Rallypoint_Deactivate,
 })

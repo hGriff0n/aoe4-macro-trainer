@@ -2,6 +2,14 @@ local RESOURCES_STATE = {}
 local RESOURCES_POLL_INTERVAL_SECONDS = 1
 local RESOURCES_ACTIVE_COUNT = 0
 
+function Resources_FormatTitle(check, context)
+	return Loc_FormatText(
+		BUILD_ORDER_LOC_KEYS.collect,
+		check.payload.count,
+		BuildOrder_ResourceName(check.payload.resource)
+	)
+end
+
 function Resources_ResourceType(resource)
 	if resource == "food" then
 		return RT_Food
@@ -75,6 +83,7 @@ function Resources_Deactivate(check, objectiveID, context)
 end
 
 BuildOrder_RegisterHandler("resources", {
+	formatTitle = Resources_FormatTitle,
 	activate = Resources_Activate,
 	deactivate = Resources_Deactivate,
 })

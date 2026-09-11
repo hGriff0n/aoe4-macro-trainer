@@ -4,10 +4,24 @@ import unittest
 from pathlib import Path
 
 from tools.build_orders.compiler import compile_directory
+from tests.scar_runtime import ScarRuntime
 
 
 ROOT = Path(__file__).resolve().parents[1]
 RESOURCES_PATH = ROOT / "assets" / "scar" / "build_orders" / "checks" / "resources.scar"
+LOCALIZATION_PATH = ROOT / "assets" / "scar" / "build_orders" / "localization.scar"
+LOC = {
+    "gold": "$dfb5645698a84afb91cf7a2dfb0f4a4e:149",
+    "collect": "$dfb5645698a84afb91cf7a2dfb0f4a4e:155",
+}
+
+
+def formatter_runtime(source: str) -> ScarRuntime:
+    registration_stub = "function BuildOrder_RegisterHandler(kind, handler)\nend"
+    localization = LOCALIZATION_PATH.read_text(encoding="utf-8")
+    runtime = ScarRuntime(registration_stub + "\n" + localization + "\n" + source)
+    runtime.globals["Loc_FormatText"] = lambda key, *values: (key, *values)
+    return runtime
 
 
 def function_body(source: str, name: str) -> str:
@@ -57,6 +71,19 @@ class BuildOrderResourcesContractTests(unittest.TestCase):
         self.assertIn('BuildOrder_RegisterHandler("resources", {', self.source)
         self.assertIn("activate = Resources_Activate", self.source)
         self.assertIn("deactivate = Resources_Deactivate", self.source)
+        self.assertIn("formatTitle = Resources_FormatTitle", self.source)
+
+    def test_formatter_localizes_the_threshold_and_resource_name(self) -> None:
+        runtime = formatter_runtime(self.source)
+
+        self.assertEqual(
+            runtime.call(
+                "Resources_FormatTitle",
+                {"payload": {"resource": "gold", "count": 150}},
+                {},
+            ),
+            (LOC["collect"], 150, LOC["gold"]),
+        )
 
     def test_activation_keeps_one_local_player_state_and_evaluates_it_immediately(self) -> None:
         activate = function_body(self.source, "Resources_Activate")
