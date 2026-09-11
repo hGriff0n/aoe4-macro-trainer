@@ -227,6 +227,7 @@ class BuildOrderObjectiveContractTests(unittest.TestCase):
         runtime = ScarRuntime(self.localization + "\n" + self.engine + "\n" + FAKE_HANDLER_FIXTURE)
         runtime.globals["Loc_FormatText"] = lambda key, *values: (key, *values)
         runtime.globals["Loc_FormatInteger"] = lambda value: ("integer", value)
+        runtime.globals["LOC"] = lambda value: ("literal", value)
         runtime.globals["print"] = lambda *_arguments: None
         runtime.globals["tostring"] = str
         return runtime
@@ -240,7 +241,7 @@ class BuildOrderObjectiveContractTests(unittest.TestCase):
         )
         self.assertEqual(
             runtime.call("BuildOrder_StepTitle", {"title": "Opening"}, 4),
-            ("$dfb5645698a84afb91cf7a2dfb0f4a4e:143", "Opening"),
+            ("$dfb5645698a84afb91cf7a2dfb0f4a4e:143", ("literal", "Opening")),
         )
 
     def test_activation_dispatches_child_title_to_registered_formatter(self) -> None:

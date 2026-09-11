@@ -30,11 +30,11 @@ BUILD_ORDER_RESOURCE_KEYS = {
 }
 
 function BuildOrder_RawText(text)
-	return Loc_FormatText(BUILD_ORDER_LOC_KEYS.rawText, text)
+	return Loc_FormatText(BUILD_ORDER_LOC_KEYS.rawText, LOC(text))
 end
 
 function BuildOrder_FormattedArgument(value)
-	return Loc_ToAnsi(value)
+	return LOC(Loc_ToAnsi(value))
 end
 
 function BuildOrder_JoinLocalized(values, separatorKey)

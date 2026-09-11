@@ -28,7 +28,10 @@ def formatter_runtime(source: str) -> tuple[ScarRuntime, list[tuple[str, str]]]:
 
     runtime.globals["BuildOrder_GameName"] = game_name
     runtime.globals["Loc_FormatText"] = lambda key, *values: (key, *values)
-    runtime.globals["BuildOrder_FormattedArgument"] = lambda value: f"ansi:{value!r}"
+    runtime.globals["BuildOrder_FormattedArgument"] = lambda value: (
+        "literal",
+        f"ansi:{value!r}",
+    )
     runtime.globals["BUILD_ORDER_LOC_KEYS"] = runtime.table(LOC)
     return runtime, calls
 
@@ -107,7 +110,10 @@ class BuildOrderUpgradeHandlerContractTests(unittest.TestCase):
         self.assertEqual(queued, (LOC["queueResearch"], "Wheelbarrow"))
         self.assertEqual(
             optional,
-            (LOC["optional"], f"ansi:{(LOC['research'], 'Wheelbarrow')!r}"),
+            (
+                LOC["optional"],
+                ("literal", f"ansi:{(LOC['research'], 'Wheelbarrow')!r}"),
+            ),
         )
         self.assertEqual(calls, [("upgrade", "wheelbarrow")] * 3)
 

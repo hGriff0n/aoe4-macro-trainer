@@ -71,6 +71,7 @@ class BuildOrderLocalizationTests(unittest.TestCase):
                 "Loc_FormatText": format_text,
                 "Loc_Empty": lambda: ("empty",),
                 "Loc_ToAnsi": to_ansi,
+                "LOC": lambda value: ("literal", value),
                 "pcall": pcall,
                 "print": self.logs.append,
                 "tostring": str,
@@ -107,14 +108,14 @@ class BuildOrderLocalizationTests(unittest.TestCase):
     def test_raw_text_uses_the_generic_authored_text_slot(self) -> None:
         self.assertEqual(
             self.runtime.call("BuildOrder_RawText", "Авторский текст"),
-            (f"{LOC_PREFIX}143", "Авторский текст"),
+            (f"{LOC_PREFIX}143", ("literal", "Авторский текст")),
         )
 
     def test_join_localized_preserves_order_and_handles_empty_values(self) -> None:
         first_join = (
             f"{LOC_PREFIX}154",
-            "ansi:'first'",
-            "ansi:'second'",
+            ("literal", "ansi:'first'"),
+            ("literal", "ansi:'second'"),
         )
         self.assertEqual(
             self.runtime.call(
@@ -124,8 +125,8 @@ class BuildOrderLocalizationTests(unittest.TestCase):
             ),
             (
                 f"{LOC_PREFIX}154",
-                f"ansi:{first_join!r}",
-                "ansi:'third'",
+                ("literal", f"ansi:{first_join!r}"),
+                ("literal", "ansi:'third'"),
             ),
         )
         self.assertEqual(
@@ -203,7 +204,7 @@ class BuildOrderLocalizationTests(unittest.TestCase):
                         "building_missing",
                         {"localPlayer": "human"},
                     ),
-                    (f"{LOC_PREFIX}143", "building_missing"),
+                    (f"{LOC_PREFIX}143", ("literal", "building_missing")),
                 )
         self.assertEqual(len(self.logs), 2)
         self.assertTrue(all("building_missing" in message for message in self.logs))
@@ -218,7 +219,10 @@ class BuildOrderLocalizationTests(unittest.TestCase):
 
         self.assertEqual(
             result,
-            f"ansi:{(f'{LOC_PREFIX}154', "ansi:'localized Stable'", "ansi:'localized Archery Range'")!r}",
+            (
+                "literal",
+                f"ansi:{(f'{LOC_PREFIX}154', ('literal', "ansi:'localized Stable'"), ('literal', "ansi:'localized Archery Range'"))!r}",
+            ),
         )
         self.assertEqual(
             self.entity_ui_calls,

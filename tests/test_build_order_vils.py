@@ -28,6 +28,7 @@ def formatter_runtime(source: str) -> ScarRuntime:
     runtime.globals["Loc_Empty"] = lambda: ()
     runtime.globals["Loc_ToAnsi"] = lambda value: f"ansi:{value!r}"
     runtime.globals["Loc_FormatInteger"] = lambda value: ("integer", value)
+    runtime.globals["LOC"] = lambda value: ("literal", value)
     return runtime
 
 
@@ -73,7 +74,10 @@ class BuildOrderVilsContractTests(unittest.TestCase):
             ),
             (
                 LOC["assign"],
-                f"ansi:{(LOC['allocationJoin'], f'ansi:{food!r}', f'ansi:{gold!r}')!r}",
+                (
+                    "literal",
+                    f"ansi:{(LOC['allocationJoin'], ('literal', f'ansi:{food!r}'), ('literal', f'ansi:{gold!r}'))!r}",
+                ),
             ),
         )
 
