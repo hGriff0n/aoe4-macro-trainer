@@ -3,6 +3,10 @@ BUILDINGS_POLLING = false
 BUILDINGS_SCAN_STATE = nil
 BUILDINGS_POLL_INTERVAL_SECONDS = 1
 
+function Buildings_FormatTitle(check, context)
+	return BuildOrder_GameName("entity", check.payload.id, context)
+end
+
 function Buildings_BlueprintsEqual(left, right)
 	return left ~= nil and right ~= nil
 		and left.PropertyBagGroupID == right.PropertyBagGroupID
@@ -96,6 +100,7 @@ function Buildings_Deactivate(check, objectiveID, context)
 end
 
 BuildOrder_RegisterHandler("buildings", {
+	formatTitle = Buildings_FormatTitle,
 	activate = Buildings_Activate,
 	deactivate = Buildings_Deactivate,
 })

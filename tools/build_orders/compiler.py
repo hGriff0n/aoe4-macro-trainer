@@ -100,44 +100,6 @@ def _identity_category(kind: str, civ: str) -> str:
     return CHECK_ID_CATEGORIES[kind]
 
 
-def _humanize_identity_id(identifier: str) -> str:
-    return identifier.replace("_", " ")
-
-
-_PRODUCED_UNIT_SINGULAR_SUFFIX_PLURALS = {
-    "archer": "archers",
-    "spearman": "spearmen",
-    "man at arms": "men at arms",
-}
-_PRODUCED_UNIT_EXACT_PLURALS = {
-    "janissary": "janissaries",
-    "shaman": "shamans",
-}
-_PRODUCED_UNIT_ALREADY_PLURAL_SUFFIXES = (
-    "footmen",
-    "raiders",
-    "mercenaries",
-    "nest of bees",
-    "samurai",
-    "streltsy",
-)
-
-
-def _pluralize_unit(unit: str) -> str:
-    """Use only vetted official-catalog display inflections; unknown labels stay unchanged."""
-    exact = _PRODUCED_UNIT_EXACT_PLURALS.get(unit)
-    if exact is not None:
-        return exact
-    if any(unit == suffix or unit.endswith(f" {suffix}") for suffix in _PRODUCED_UNIT_ALREADY_PLURAL_SUFFIXES):
-        return unit
-    for singular, plural in _PRODUCED_UNIT_SINGULAR_SUFFIX_PLURALS.items():
-        if unit == singular:
-            return plural
-        if unit.endswith(f" {singular}"):
-            return f"{unit[: -len(singular)]}{plural}"
-    return unit
-
-
 def _resolve_identity_payload(
     payload: dict[str, object],
     *,
@@ -172,11 +134,10 @@ def _resolve_squad_family_payload(
     identities: IdentityCatalog,
     file: Path,
     path: str,
-) -> str:
+) -> None:
     author_id = payload.pop("id")
     family = identities.resolve_squad_family(civ, author_id)
     payload["ids"] = list(family.canonical_ids)
-    return family.family_id
 
 
 def _resource_checks(value: Any, file: Path, path: str) -> list[CheckDescriptor]:
@@ -187,8 +148,7 @@ def _resource_checks(value: Any, file: Path, path: str) -> list[CheckDescriptor]
         if resource not in RESOURCES:
             _error(file, item_path, "unsupported resource")
         number = _positive(count, file, item_path)
-        title = f"Collect at least {number} {resource}"
-        checks.append(CheckDescriptor("resources", title, False, {"resource": resource, "count": number}))
+        checks.append(CheckDescriptor("resources", False, {"resource": resource, "count": number}))
     if not checks:
         _error(file, path, "must not be empty")
     return checks
@@ -213,15 +173,14 @@ def _compile_vils(
             if resource not in RESOURCES:
                 _error(file, f"{path}.no_collect[{index}]", "unsupported resource")
             no_collect_checks.append(
-                CheckDescriptor("vils", f"No {resource} villagers", False, {"resource": resource, "no_collect": True})
+                CheckDescriptor("vils", False, {"resource": resource, "no_collect": True})
             )
     for resource in mapping:
         if resource not in RESOURCES and resource != "no_collect":
             _error(file, f"{path}.{resource}", "unsupported resource")
     checks: list[CheckDescriptor] = []
     if thresholds:
-        title = "Assign " + " | ".join(f"{count} {resource}" for resource, count in thresholds.items())
-        checks.append(CheckDescriptor("vils", title, False, thresholds))
+        checks.append(CheckDescriptor("vils", False, thresholds))
     checks.extend(no_collect_checks)
     if not checks:
         _error(file, path, "must not be empty")
@@ -251,7 +210,7 @@ def _compile_rallypoint(
         resource = _string(item, file, item_path)
         if resource not in RESOURCES:
             _error(file, item_path, "unsupported resource")
-        checks.append(CheckDescriptor("rallypoint", f"Rally to {resource}", False, {"resource": resource}))
+        checks.append(CheckDescriptor("rallypoint", False, {"resource": resource}))
     return checks
 
 
@@ -277,11 +236,6 @@ def _structure_checks(
             payload["vils"] = _positive(mapping["vils"], file, f"{item_path}.vils")
         if "location" in mapping:
             payload["location"] = _string(mapping["location"], file, f"{item_path}.location")
-        label = (
-            _humanize_identity_id(payload["id"])
-            if "id" in payload
-            else " or ".join(_humanize_identity_id(item) for item in payload["oneof"])
-        )
         _resolve_identity_payload(
             payload,
             kind=kind,
@@ -292,11 +246,7 @@ def _structure_checks(
         )
         if kind == "age_up":
             payload["trigger"] = _age_up_trigger(civ)
-            title = f"Age Up: {label}"
-        else:
-            count_label = "" if payload["count"] == 1 else f'{payload["count"]} '
-            title = f"Build {count_label}{label}"
-        result.append(CheckDescriptor(kind, title, False, dict(payload)))
+        result.append(CheckDescriptor(kind, False, dict(payload)))
     return result
 
 
@@ -350,11 +300,7 @@ def _compile_upgrades(
             file=file,
             path=item_path,
         )
-        label = _humanize_identity_id(identifier)
-        title = f"Queue {label} for research" if queued else f"Research {label}"
-        if optional:
-            title = f"[Optional] {title}"
-        result.append(CheckDescriptor("upgrades", title, optional, payload))
+        result.append(CheckDescriptor("upgrades", optional, payload))
     return result
 
 
@@ -395,9 +341,9 @@ def _resolve_counted_squad(
     identities: IdentityCatalog,
     file: Path,
     path: str,
-) -> str:
+) -> None:
     try:
-        return _resolve_squad_family_payload(
+        _resolve_squad_family_payload(
             payload,
             civ=civ,
             identities=identities,
@@ -424,7 +370,7 @@ def _compile_produce(
     for item_path, identifier, payload in _counted_identity_entries(
         value, file, path, ("constant", "queued")
     ):
-        family_id = _resolve_counted_squad(
+        _resolve_counted_squad(
             payload,
             kind="produce",
             identifier=identifier,
@@ -433,17 +379,8 @@ def _compile_produce(
             file=file,
             path=item_path,
         )
-        unit = _humanize_identity_id(family_id)
-        counted_unit = unit if payload["count"] == 1 else _pluralize_unit(unit)
-        optional = False
-        if payload.get("constant", False):
-            title = f"Constantly produce {unit}"
-            optional = True
-        elif payload.get("queued", False):
-            title = f"Queue {payload['count']} {counted_unit}"
-        else:
-            title = f"Produce {payload['count']} {counted_unit}"
-        result.append(CheckDescriptor("produce", title, optional, payload))
+        optional = payload.get("constant", False) is True
+        result.append(CheckDescriptor("produce", optional, payload))
     return result
 
 
@@ -464,7 +401,7 @@ def _compile_buildings(
             file=file,
             path=item_path,
         )
-        result.append(CheckDescriptor("buildings", _humanize_identity_id(identifier), False, payload))
+        result.append(CheckDescriptor("buildings", False, payload))
     return result
 
 
@@ -477,7 +414,7 @@ def _compile_units(
 ) -> list[CheckDescriptor]:
     result = []
     for item_path, identifier, payload in _counted_identity_entries(value, file, path):
-        family_id = _resolve_counted_squad(
+        _resolve_counted_squad(
             payload,
             kind="units",
             identifier=identifier,
@@ -486,8 +423,7 @@ def _compile_units(
             file=file,
             path=item_path,
         )
-        title = f"Have {payload['count']} active {_humanize_identity_id(family_id)}"
-        result.append(CheckDescriptor("units", title, False, payload))
+        result.append(CheckDescriptor("units", False, payload))
     return result
 
 
@@ -501,7 +437,7 @@ def _compile_hints(
     checks = []
     for index, item in enumerate(_list(value, file, path)):
         text = _string(item, file, f"{path}[{index}]")
-        checks.append(CheckDescriptor("hints", f"[HINT] {text}", True, {"text": text}))
+        checks.append(CheckDescriptor("hints", True, {"text": text}))
     return checks
 
 

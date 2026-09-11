@@ -1,6 +1,35 @@
 local VILS_STATE = {}
 local VILS_POLL_REGISTERED = false
 
+function Vils_FormatTitle(check, context)
+	if check.payload.no_collect == true then
+		return Loc_FormatText(
+			BUILD_ORDER_LOC_KEYS.noCollect,
+			BuildOrder_ResourceName(check.payload.resource)
+		)
+	end
+
+	local resourceOrder = { "food", "gold", "wood", "stone" }
+	local allocations = {}
+	for _, resource in ipairs(resourceOrder) do
+		local count = check.payload[resource]
+		if count ~= nil then
+			table.insert(allocations, Loc_FormatText(
+				BUILD_ORDER_LOC_KEYS.allocation,
+				Loc_FormatInteger(count),
+				BuildOrder_ResourceName(resource)
+			))
+		end
+	end
+
+	return Loc_FormatText(
+		BUILD_ORDER_LOC_KEYS.assign,
+		BuildOrder_FormattedArgument(
+			BuildOrder_JoinLocalized(allocations, BUILD_ORDER_LOC_KEYS.allocationJoin)
+		)
+	)
+end
+
 function Vils_CountOrZero(value)
 	if type(value) ~= "number" then
 		return 0
@@ -85,6 +114,7 @@ function Vils_Deactivate(check, objectiveID, context)
 end
 
 BuildOrder_RegisterHandler("vils", {
+	formatTitle = Vils_FormatTitle,
 	activate = Vils_Activate,
 	deactivate = Vils_Deactivate,
 })

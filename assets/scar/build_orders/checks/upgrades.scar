@@ -2,6 +2,23 @@ UPGRADES_STATE = {}
 UPGRADES_EVENTS_REGISTERED = false
 UPGRADES_RECONCILIATION_PENDING = false
 
+function Upgrades_FormatTitle(check, context)
+	local name = BuildOrder_GameName("upgrade", check.payload.id, context)
+	local title = nil
+	if check.payload.queued then
+		title = Loc_FormatText(BUILD_ORDER_LOC_KEYS.queueResearch, name)
+	else
+		title = Loc_FormatText(BUILD_ORDER_LOC_KEYS.research, name)
+	end
+	if check.optional then
+		return Loc_FormatText(
+			BUILD_ORDER_LOC_KEYS.optional,
+			BuildOrder_FormattedArgument(title)
+		)
+	end
+	return title
+end
+
 local function Upgrades_IsCompletedResearch(state)
 	return Player_HasUpgrade(state.player, state.upgrade)
 end
@@ -192,6 +209,7 @@ local function Upgrades_Deactivate(check, objectiveID, context)
 end
 
 BuildOrder_RegisterHandler("upgrades", {
+	formatTitle = Upgrades_FormatTitle,
 	activate = Upgrades_Activate,
 	deactivate = Upgrades_Deactivate,
 })

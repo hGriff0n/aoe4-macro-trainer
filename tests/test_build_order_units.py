@@ -5,10 +5,28 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from tools.build_orders.compiler import compile_directory
+from tests.scar_runtime import ScarRuntime
 
 
 ROOT = Path(__file__).resolve().parents[1]
 UNITS_HANDLER = ROOT / "assets" / "scar" / "build_orders" / "checks" / "units.scar"
+LOC = {"activeUnits": "$dfb5645698a84afb91cf7a2dfb0f4a4e:167"}
+
+
+def formatter_runtime(source: str) -> tuple[ScarRuntime, list[str]]:
+    registration_stub = "function BuildOrder_RegisterHandler(kind, handler)\nend"
+    runtime = ScarRuntime(registration_stub + "\n" + source)
+    first_ids = []
+
+    def first_squad_name(payload, _context):
+        first_ids.append(payload["ids"][1])
+        return "Spearman"
+
+    runtime.globals["BuildOrder_FirstSquadName"] = first_squad_name
+    runtime.globals["Loc_FormatText"] = lambda key, *values: (key, *values)
+    runtime.globals["Loc_FormatInteger"] = lambda value: ("integer", value)
+    runtime.globals["BUILD_ORDER_LOC_KEYS"] = runtime.table(LOC)
+    return runtime, first_ids
 
 
 def function_body(source: str, name: str) -> str:
@@ -106,15 +124,16 @@ class UnitsCompilerTests(unittest.TestCase):
             )
             return compile_directory(path.parent).build_orders[0].steps[0].checks
 
-    def test_renders_each_active_unit_threshold_with_its_exact_payload(self) -> None:
+    def test_compiles_each_active_unit_threshold_with_its_exact_payload(self) -> None:
         checks = self.compile("[{id: spearman_2, count: 3}, {id: longbowman_2}]")
         self.assertEqual(
-            [(check.title, check.optional, check.payload) for check in checks],
+            [(check.kind, check.optional, check.payload) for check in checks],
             [
-                ("Have 3 active spearman", False, {"ids": ["unit_spearman_2_eng", "unit_spearman_3_eng", "unit_spearman_4_eng"], "count": 3}),
-                ("Have 1 active longbowman", False, {"ids": ["unit_archer_2_eng", "unit_archer_3_eng", "unit_archer_4_eng"], "count": 1}),
+                ("units", False, {"ids": ["unit_spearman_2_eng", "unit_spearman_3_eng", "unit_spearman_4_eng"], "count": 3}),
+                ("units", False, {"ids": ["unit_archer_2_eng", "unit_archer_3_eng", "unit_archer_4_eng"], "count": 1}),
             ],
         )
+        self.assertFalse(hasattr(checks[0], "title"))
 
 
 class UnitsHandlerContractTests(unittest.TestCase):
@@ -134,6 +153,24 @@ class UnitsHandlerContractTests(unittest.TestCase):
         )
         self.assertIn("Rule_AddInterval(Units_Poll", activate)
         self.assertIn("Units_Poll()", activate)
+        self.assertIn("formatTitle = Units_FormatTitle", self.source)
+
+    def test_formatter_uses_count_and_first_canonical_squad_name(self) -> None:
+        runtime, first_ids = formatter_runtime(self.source)
+
+        title = runtime.call(
+            "Units_FormatTitle",
+            {
+                "payload": {
+                    "ids": ["unit_spearman_2_eng", "unit_spearman_3_eng"],
+                    "count": 3,
+                }
+            },
+            {},
+        )
+
+        self.assertEqual(title, (LOC["activeUnits"], ("integer", 3), "Spearman"))
+        self.assertEqual(first_ids, ["unit_spearman_2_eng"])
 
     def test_resolves_every_unit_family_blueprint_at_activation_not_each_poll(self) -> None:
         activate = function_body(self.source, "Units_Activate")

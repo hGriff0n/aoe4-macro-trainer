@@ -4,10 +4,25 @@ import unittest
 from pathlib import Path
 
 from tools.build_orders.compiler import compile_directory
+from tests.scar_runtime import ScarRuntime
 
 
 ROOT = Path(__file__).resolve().parents[1]
 RESOURCES_PATH = ROOT / "assets" / "scar" / "build_orders" / "checks" / "resources.scar"
+LOCALIZATION_PATH = ROOT / "assets" / "scar" / "build_orders" / "localization.scar"
+LOC = {
+    "gold": "$dfb5645698a84afb91cf7a2dfb0f4a4e:149",
+    "collect": "$dfb5645698a84afb91cf7a2dfb0f4a4e:155",
+}
+
+
+def formatter_runtime(source: str) -> ScarRuntime:
+    registration_stub = "function BuildOrder_RegisterHandler(kind, handler)\nend"
+    localization = LOCALIZATION_PATH.read_text(encoding="utf-8")
+    runtime = ScarRuntime(registration_stub + "\n" + localization + "\n" + source)
+    runtime.globals["Loc_FormatText"] = lambda key, *values: (key, *values)
+    runtime.globals["Loc_FormatInteger"] = lambda value: ("integer", value)
+    return runtime
 
 
 def function_body(source: str, name: str) -> str:
@@ -22,7 +37,7 @@ def function_body(source: str, name: str) -> str:
 
 
 class BuildOrderResourcesCompilerTests(unittest.TestCase):
-    def test_resources_descriptors_preserve_yaml_order_and_render_collection_titles(self) -> None:
+    def test_resources_descriptors_preserve_yaml_order_and_semantic_payloads(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             source = Path(temp) / "resources.yaml"
             source.write_text(
@@ -38,12 +53,13 @@ steps:
             checks = compile_directory(Path(temp)).build_orders[0].steps[0].checks
 
         self.assertEqual(
-            [(check.title, check.optional, check.payload) for check in checks],
+            [(check.kind, check.optional, check.payload) for check in checks],
             [
-                ("Collect at least 400 wood", False, {"resource": "wood", "count": 400}),
-                ("Collect at least 200 gold", False, {"resource": "gold", "count": 200}),
+                ("resources", False, {"resource": "wood", "count": 400}),
+                ("resources", False, {"resource": "gold", "count": 200}),
             ],
         )
+        self.assertFalse(hasattr(checks[0], "title"))
 
 
 class BuildOrderResourcesContractTests(unittest.TestCase):
@@ -56,6 +72,19 @@ class BuildOrderResourcesContractTests(unittest.TestCase):
         self.assertIn('BuildOrder_RegisterHandler("resources", {', self.source)
         self.assertIn("activate = Resources_Activate", self.source)
         self.assertIn("deactivate = Resources_Deactivate", self.source)
+        self.assertIn("formatTitle = Resources_FormatTitle", self.source)
+
+    def test_formatter_localizes_the_threshold_and_resource_name(self) -> None:
+        runtime = formatter_runtime(self.source)
+
+        self.assertEqual(
+            runtime.call(
+                "Resources_FormatTitle",
+                {"payload": {"resource": "gold", "count": 150}},
+                {},
+            ),
+            (LOC["collect"], ("integer", 150), LOC["gold"]),
+        )
 
     def test_activation_keeps_one_local_player_state_and_evaluates_it_immediately(self) -> None:
         activate = function_body(self.source, "Resources_Activate")

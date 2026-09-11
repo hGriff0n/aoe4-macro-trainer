@@ -1,5 +1,5 @@
 BUILD_ORDER_DATASTORE_ID = "macroTrainerBuildOrders"
-BUILD_ORDER_DATASTORE_SCHEMA_VERSION = 1
+BUILD_ORDER_DATASTORE_SCHEMA_VERSION = 2
 BUILD_ORDER_DATASTORE_ON_COMPLETE = nil
 BUILD_ORDER_DATASTORE_LOADING = false
 BUILD_ORDER_CATALOG = {}
@@ -12,9 +12,6 @@ function BuildOrderDatastore_IsValidCheck(check)
 		return false
 	end
 	if type(check.kind) ~= "string" or check.kind == "" then
-		return false
-	end
-	if type(check.title) ~= "string" or check.title == "" then
 		return false
 	end
 	if type(check.optional) ~= "boolean" then
@@ -30,7 +27,7 @@ function BuildOrderDatastore_IsValidStep(step)
 	if type(step) ~= "table" then
 		return false
 	end
-	if type(step.title) ~= "string" or step.title == "" then
+	if step.title ~= nil and (type(step.title) ~= "string" or step.title == "") then
 		return false
 	end
 	if type(step.checks) ~= "table" or #step.checks == 0 then

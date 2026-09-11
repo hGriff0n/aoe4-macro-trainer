@@ -5,6 +5,16 @@ PRODUCE_RECOUNT_RULE_ACTIVE = false
 PRODUCE_COMMAND_EVENT_REGISTERED = false
 PRODUCE_COMPLETION_EVENT_REGISTERED = false
 
+function Produce_FormatTitle(check, context)
+	local name = BuildOrder_FirstSquadName(check.payload, context)
+	if check.payload.constant then
+		return Loc_FormatText(BUILD_ORDER_LOC_KEYS.constantProduce, name)
+	elseif check.payload.queued then
+		return Loc_FormatText(BUILD_ORDER_LOC_KEYS.queueProduce, Loc_FormatInteger(check.payload.count), name)
+	end
+	return Loc_FormatText(BUILD_ORDER_LOC_KEYS.produce, Loc_FormatInteger(check.payload.count), name)
+end
+
 function Produce_IsQueued(state)
 	return state.payload.queued and state.payload.constant ~= true
 end
@@ -199,6 +209,7 @@ function Produce_Deactivate(check, objectiveID, context)
 end
 
 BuildOrder_RegisterHandler("produce", {
+	formatTitle = Produce_FormatTitle,
 	activate = Produce_Activate,
 	deactivate = Produce_Deactivate,
 })

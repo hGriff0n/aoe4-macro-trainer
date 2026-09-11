@@ -1,4 +1,3 @@
-import csv
 import re
 import unittest
 from pathlib import Path
@@ -9,10 +8,13 @@ from tests.scar_runtime import ScarRuntime
 ROOT = Path(__file__).resolve().parents[1]
 ENGINE_PATH = ROOT / "assets" / "scar" / "build_orders" / "objective_engine.scar"
 MAIN_PATH = ROOT / "assets" / "scar" / "winconditions" / "Macro Trainer.scar"
-LOCDB_PATH = ROOT / "assets" / "locdb" / "Macro Trainer_en.csv"
+LOCALIZATION_PATH = ROOT / "assets" / "scar" / "build_orders" / "localization.scar"
 IMPORT_PATTERN = re.compile(r'^\s*import\("([^"]+)"\)', re.MULTILINE)
 
 FAKE_HANDLER_FIXTURE = '''local fakeHandler = {
+    formatTitle = function(check, context)
+        return Loc_FormatText("$fake:1", Loc_FormatInteger(check.payload.count))
+    end,
     activate = function(check, objectiveID, context)
         BuildOrder_NotifyComplete(check.id)
     end,
@@ -111,6 +113,7 @@ class BuildOrderObjectiveContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.engine = ENGINE_PATH.read_text(encoding="utf-8")
+        cls.localization = LOCALIZATION_PATH.read_text(encoding="utf-8")
         cls.main = MAIN_PATH.read_text(encoding="utf-8")
 
     def assert_order(self, body: str, first: str, second: str) -> None:
@@ -193,11 +196,11 @@ class BuildOrderObjectiveContractTests(unittest.TestCase):
         self.assertIn("local faction = Player_GetRaceName(player)", activate)
         self.assertRegex(
             activate,
-            r"Obj_Create\(\s*player,\s*BuildOrder_ObjectiveTitle\(step\.title\),\s*Loc_Empty\(\),\s*\"\",\s*DT_PRIMARY_DEFAULT,\s*faction,\s*OT_Primary,\s*0,\s*\"buildOrderStep\"\s*\)",
+            r"Obj_Create\(\s*player,\s*BuildOrder_StepTitle\(step, stepIndex\),\s*Loc_Empty\(\),\s*\"\",\s*DT_PRIMARY_DEFAULT,\s*faction,\s*OT_Primary,\s*0,\s*\"buildOrderStep\"\s*\)",
         )
         self.assertRegex(
             activate,
-            r"Obj_Create\(\s*player,\s*BuildOrder_ObjectiveTitle\(check\.title\),\s*Loc_Empty\(\),\s*\"\",\s*DT_SECONDARY_DEFAULT,\s*faction,\s*OT_Secondary,\s*primaryID,\s*\"buildOrderCheck\"\s*\)",
+            r"Obj_Create\(\s*player,\s*BuildOrder_CheckTitle\(check, handler\),\s*Loc_Empty\(\),\s*\"\",\s*DT_SECONDARY_DEFAULT,\s*faction,\s*OT_Secondary,\s*primaryID,\s*\"buildOrderCheck\"\s*\)",
         )
         self.assertNotIn("Player_GetID", activate)
         self.assertNotIn("player.id", activate)
@@ -221,13 +224,27 @@ class BuildOrderObjectiveContractTests(unittest.TestCase):
         self.assertNotIn("OT_Warning", self.engine)
 
     def objective_runtime(self):
-        runtime = ScarRuntime(self.engine)
-        runtime.globals["LOC"] = lambda value: f"LOC: {value}"
+        runtime = ScarRuntime(self.localization + "\n" + self.engine + "\n" + FAKE_HANDLER_FIXTURE)
+        runtime.globals["Loc_FormatText"] = lambda key, *values: (key, *values)
+        runtime.globals["Loc_FormatInteger"] = lambda value: ("integer", value)
+        runtime.globals["LOC"] = lambda value: ("literal", value)
         runtime.globals["print"] = lambda *_arguments: None
         runtime.globals["tostring"] = str
         return runtime
 
-    def test_activation_uses_static_localization_keys_for_known_3tc_titles(self) -> None:
+    def test_step_titles_are_generated_or_wrapped_at_runtime(self) -> None:
+        runtime = self.objective_runtime()
+
+        self.assertEqual(
+            runtime.call("BuildOrder_StepTitle", {"title": None}, 4),
+            ("$dfb5645698a84afb91cf7a2dfb0f4a4e:144", ("integer", 4)),
+        )
+        self.assertEqual(
+            runtime.call("BuildOrder_StepTitle", {"title": "Opening"}, 4),
+            ("$dfb5645698a84afb91cf7a2dfb0f4a4e:143", ("literal", "Opening")),
+        )
+
+    def test_activation_dispatches_child_title_to_registered_formatter(self) -> None:
         runtime = self.objective_runtime()
         objectives = []
 
@@ -257,14 +274,12 @@ class BuildOrderObjectiveContractTests(unittest.TestCase):
                 "civ": "abbasid",
                 "steps": [
                     {
-                        "title": "Step 1",
                         "checks": [
                             {
-                                "id": "abbasid-3tc:1:1",
-                                "kind": "missing",
-                                "title": "Assign 6 food | 3 gold",
-                                "optional": False,
-                                "payload": {},
+                                "id": "test:1:1",
+                                "kind": "fake",
+                                "optional": True,
+                                "payload": {"count": 6},
                             }
                         ],
                     }
@@ -276,54 +291,28 @@ class BuildOrderObjectiveContractTests(unittest.TestCase):
         self.assertEqual(
             [arguments[1] for arguments in objectives],
             [
-                "$dfb5645698a84afb91cf7a2dfb0f4a4e:143",
-                "$dfb5645698a84afb91cf7a2dfb0f4a4e:150",
+                ("$dfb5645698a84afb91cf7a2dfb0f4a4e:144", ("integer", 1)),
+                ("$fake:1", ("integer", 6)),
             ],
         )
 
-    def test_unknown_objective_title_uses_nonfatal_loc_fallback(self) -> None:
-        runtime = self.objective_runtime()
-
-        self.assertEqual(
-            runtime.call("BuildOrder_ObjectiveTitle", "Future build-order title"),
-            "LOC: Future build-order title",
-        )
-
-    def test_objective_title_lookup_does_not_emit_diagnostics(self) -> None:
+    def test_missing_formatter_uses_unavailable_title_and_logs_diagnostic(self) -> None:
         runtime = self.objective_runtime()
         messages = []
         runtime.globals["print"] = messages.append
 
-        runtime.call("BuildOrder_ObjectiveTitle", "Step 1")
-        runtime.call("BuildOrder_ObjectiveTitle", "Step 2")
-
-        self.assertEqual(messages, [])
-
-    def test_static_3tc_objective_keys_resolve_to_the_original_text(self) -> None:
-        runtime = self.objective_runtime()
-        with LOCDB_PATH.open(encoding="utf-8-sig", newline="") as source:
-            entries = {row["ID"]: row["Text"] for row in csv.DictReader(source)}
-
-        expected = [
-            "Step 1", "Step 2", "Step 3", "Step 4", "Step 5", "Step 6", "Step 7",
-            "Assign 6 food | 3 gold", "[HINT] Starting vils to berries",
-            "Build mining camp", "Build house", "Assign 9 food | 3 gold",
-            "[HINT] Rallied food vils to sheep under TC", "Build house of wisdom",
-            "Age Up: economic wing", "Assign 4 food | 7 wood | 6 stone",
-            "Rally to stone", "Collect at least 150 gold",
-            "[HINT] Move gold vils to stone after collecting 150",
-            "Queue fresh foodstuffs for research", "Queue fertile crescent for research",
-            "Assign 4 food | 7 wood | 7 stone", "Rally to wood",
-            "[HINT] Build TC with stone vils", "Build town center",
-            "Assign 4 food | 11 wood | 7 stone", "Rally to food",
-            "Assign 6 food | 11 wood | 9 stone", "Build archery range",
-            "[HINT] Remacro for production/upgrades after starting construction of final TC",
-        ]
-        for text in expected:
-            with self.subTest(text=text):
-                key = runtime.call("BuildOrder_ObjectiveTitle", text)
-                identifier = key.rsplit(":", 1)[1]
-                self.assertEqual(entries.get(identifier), text)
+        self.assertEqual(
+            runtime.call(
+                "BuildOrder_CheckTitle",
+                {"id": "test:1:1", "kind": "future", "optional": False, "payload": {}},
+                None,
+            ),
+            "$dfb5645698a84afb91cf7a2dfb0f4a4e:147",
+        )
+        self.assertEqual(
+            messages,
+            ["BuildOrder: no title formatter for future (check test:1:1)"],
+        )
 
     def test_handlers_receive_stable_ids_after_all_child_objectives_exist(self) -> None:
         activate = function_body(self.engine, "BuildOrder_ActivateStep")
@@ -336,8 +325,11 @@ class BuildOrderObjectiveContractTests(unittest.TestCase):
         self.assertIn('tostring(stepIndex) .. ":" .. tostring(checkIndex)', activate)
         self.assertRegex(
             activate,
-            r"check\s*=\s*\{\s*id\s*=\s*checkID,\s*kind\s*=\s*check\.kind,\s*title\s*=\s*check\.title,\s*optional\s*=\s*check\.optional,\s*payload\s*=\s*check\.payload,\s*\}",
+            r"check\s*=\s*\{\s*id\s*=\s*checkID,\s*kind\s*=\s*check\.kind,\s*optional\s*=\s*check\.optional,\s*payload\s*=\s*check\.payload,\s*\}",
         )
+        synthesized = re.search(r"check\s*=\s*\{(.*?)\n\s*\}", activate, re.DOTALL)
+        self.assertIsNotNone(synthesized)
+        self.assertNotIn("title", synthesized.group(1))
         self.assertNotIn("check.id = checkID", activate)
 
     def test_missing_handler_leaves_child_pending_and_completion_latches(self) -> None:
@@ -491,6 +483,10 @@ class BuildOrderObjectiveContractTests(unittest.TestCase):
 
     def test_fake_handler_fixture_exercises_public_lifecycle_without_shipping_one(self) -> None:
         self.assertIn("BuildOrder_RegisterHandler(\"fake\", fakeHandler)", FAKE_HANDLER_FIXTURE)
+        self.assertIn(
+            'Loc_FormatText("$fake:1", Loc_FormatInteger(check.payload.count))',
+            FAKE_HANDLER_FIXTURE,
+        )
         self.assertIn("BuildOrder_NotifyComplete(check.id)", FAKE_HANDLER_FIXTURE)
         self.assertNotIn('BuildOrder_RegisterHandler("fake"', self.engine)
         self.assertIn("BuildOrder_RegisterHandler", self.engine)
