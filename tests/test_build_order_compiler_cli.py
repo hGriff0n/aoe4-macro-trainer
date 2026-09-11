@@ -133,6 +133,29 @@ class CompilerCommandTests(unittest.TestCase):
         self.assertEqual((forwarded_result, forwarded_error), (0, ""))
         self.assertEqual(self.datastore.read_bytes(), explicit)
 
+    def test_build_writes_runtime_localized_schema_v2_datastore(self) -> None:
+        source = self.root / "order.yaml"
+        source.write_text(
+            "civ: english\n"
+            "title: Runtime Localization\n"
+            "steps:\n"
+            "  - vils: {food: 7}\n"
+            "  - title: Opening\n"
+            "    hints: [Keep producing]\n",
+            encoding="utf-8",
+        )
+
+        result, _, error = self.run_command(["build", str(source), "--profile", "123"])
+
+        self.assertEqual((result, error), (0, ""))
+        text = self.datastore.read_text(encoding="utf-8")
+        self.assertIn("schema_version = 2", text)
+        self.assertIn('title = "Opening"', text)
+        self.assertIn('text = "Keep producing"', text)
+        self.assertNotIn('title = "Step 1"', text)
+        self.assertNotIn("[HINT] Keep producing", text)
+        self.assertNotIn("Assign 7 food", text)
+
     def test_list_has_stable_columns_and_id_sorted_rows(self) -> None:
         write_datastore(
             self.datastore,
