@@ -38,25 +38,25 @@ def _error(file: Path | str, path: str, message: str) -> None:
     raise BuildOrderValidationError(f"{file}: {path}: {message}")
 
 
-def _mapping(value: Any, file: Path, path: str) -> dict[str, Any]:
+def _mapping(value: Any, file: Path | str, path: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         _error(file, path, "must be a mapping")
     return value
 
 
-def _list(value: Any, file: Path, path: str) -> list[Any]:
+def _list(value: Any, file: Path | str, path: str) -> list[Any]:
     if not isinstance(value, list):
         _error(file, path, "must be a list")
     return value
 
 
-def _string(value: Any, file: Path, path: str) -> str:
+def _string(value: Any, file: Path | str, path: str) -> str:
     if not isinstance(value, str) or not value:
         _error(file, path, "must be a non-empty string")
     return value
 
 
-def _source_link(value: Any, file: Path, path: str) -> str:
+def _source_link(value: Any, file: Path | str, path: str) -> str:
     if not isinstance(value, str) or not value or any(character.isspace() for character in value):
         _error(file, path, "must be an absolute HTTP(S) URL")
     try:
@@ -472,7 +472,7 @@ def _check_descriptors(
     return compiler(value, file, path, civ, identities)
 
 
-def _compile_order(document: Any, file: Path, index: int | None, identities: IdentityCatalog) -> BuildOrder:
+def _compile_order(document: Any, file: Path | str, index: int | None, identities: IdentityCatalog) -> BuildOrder:
     base = "" if index is None else f"[{index}]."
     order = _mapping(document, file, base.rstrip("."))
     unknown = set(order) - {"civ", "title", "link", "steps"}
@@ -511,6 +511,16 @@ def _compile_order(document: Any, file: Path, index: int | None, identities: Ide
     if not compiled_steps:
         _error(file, f"{base}steps", "must not be empty")
     return BuildOrder(normalize_id(civ, title), civ, title, tuple(compiled_steps), link)
+
+
+def compile_document(
+    document: Any,
+    source: Path | str,
+    identities: IdentityCatalog | None = None,
+) -> BuildOrder:
+    if identities is None:
+        identities = IdentityCatalog.load(DEFAULT_IDENTITY_CATALOG)
+    return _compile_order(document, source, None, identities)
 
 
 def _compile_files(

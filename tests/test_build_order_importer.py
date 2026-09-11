@@ -2,85 +2,35 @@ import copy
 import json
 import tempfile
 import unittest
-from contextlib import redirect_stderr
 from http.client import IncompleteRead
-from io import BytesIO, StringIO
+from io import BytesIO
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from threading import Thread
 from unittest import mock
 from urllib.error import HTTPError
 
-import yaml
-
-from tools.build_orders import compiler
-from tools.build_orders.compiler import BuildOrderValidationError, compile_directory
-
-
-OVERLAY_BUILD = {
-    "description": "",
-    "civilization": "Knights Templar",
-    "name": "2 TC",
-    "author": "Perry",
-    "source": "https://aoe4guides.com/builds/nlxHE4i1PhNNXqD2XTAP",
-    "build_order": [
-        {
-            "age": 1,
-            "population_count": -1,
-            "time": "0:00",
-            "villager_count": 6,
-            "resources": {
-                "food": 6,
-                "wood": 0,
-                "gold": 0,
-                "stone": 0,
-                "builder": -1,
-            },
-            "notes": [
-                "6 @unit_worker/villager.webp@ on @resource/sheep.webp@",
-                "@resource/rally.webp@ -&gt; @resource/resource_gold.webp@",
-                "",
-            ],
-        },
-        {
-            "age": 2,
-            "population_count": -1,
-            "villager_count": -1,
-            "resources": {
-                "food": 0,
-                "wood": 0,
-                "gold": 0,
-                "stone": 0,
-                "builder": -1,
-            },
-            "notes": ["Build @building_economy/town-center.webp@"],
-        },
-    ],
-    "video": "",
-    "season": "Season 13",
-    "map": None,
-    "strategy": "Boom",
-}
+from tests.build_order_import_fixtures import OVERLAY_BUILD
+from tools.build_orders.compiler import compile_document
+from tools.build_orders.importer import (
+    ImportValidationError,
+    fetch_overlay_document,
+    read_overlay_file,
+    render_overlay_note,
+    translate_overlay_document,
+)
 
 
 class BuildOrderImporterTests(unittest.TestCase):
-    def test_file_import_emits_baseline_yaml_that_compiles(self) -> None:
-        compiler_main = getattr(compiler, "main", None)
-        if compiler_main is None:
-            self.fail("tools.build_orders.compiler.main is missing")
-
+    def test_file_import_translates_baseline_mapping_that_compiles(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             source = root / "2 TC.bo"
-            output = root / "templar_2tc.yaml"
             source.write_text(json.dumps(OVERLAY_BUILD), encoding="utf-8")
 
+            translated = translate_overlay_document(read_overlay_file(source), source)
             self.assertEqual(
-                compiler_main(["--import-file", str(source), "--output", str(output)]),
-                0,
-            )
-            self.assertEqual(
-                yaml.safe_load(output.read_text(encoding="utf-8")),
+                translated,
                 {
                     "civ": "templar",
                     "title": "2 TC",
@@ -102,12 +52,9 @@ class BuildOrderImporterTests(unittest.TestCase):
                     ],
                 },
             )
+            self.assertEqual(compile_document(translated, source).id, "templar-2-tc")
 
-            catalog = compile_directory(root)
-            self.assertEqual(len(catalog.build_orders), 1)
-            self.assertEqual(catalog.build_orders[0].id, "templar-2-tc")
-
-    def test_url_import_fetches_fixed_overlay_endpoint_and_emits_yaml(self) -> None:
+    def test_url_import_fetches_fixed_overlay_endpoint_and_compiles_mapping(self) -> None:
         requested_urls = []
 
         class Response:
@@ -135,25 +82,14 @@ class BuildOrderImporterTests(unittest.TestCase):
                 return open_url(request, timeout)
 
         with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp)
-            output = root / "templar_2tc.yaml"
             with mock.patch(
-                "tools.build_orders.compiler.build_overlay_opener",
+                "tools.build_orders.importer.build_overlay_opener",
                 return_value=Opener(),
             ):
-                try:
-                    result = compiler.main(
-                        [
-                            "--import-url",
-                            "https://aoe4guides.com/builds/nlxHE4i1PhNNXqD2XTAP",
-                            "--output",
-                            str(output),
-                        ]
-                    )
-                except SystemExit as exc:
-                    self.fail(f"compiler rejected URL import arguments: {exc}")
+                document = fetch_overlay_document(
+                    "https://aoe4guides.com/builds/nlxHE4i1PhNNXqD2XTAP"
+                )
 
-            self.assertEqual(result, 0)
             self.assertEqual(
                 requested_urls,
                 [
@@ -163,11 +99,18 @@ class BuildOrderImporterTests(unittest.TestCase):
                     )
                 ],
             )
-            self.assertEqual(
-                yaml.safe_load(output.read_text(encoding="utf-8"))["steps"][0]["hints"][1],
-                "Rally -> Gold",
-            )
-            self.assertEqual(compile_directory(root).build_orders[0].id, "templar-2-tc")
+            translated = translate_overlay_document(document, "sample.bo")
+            self.assertEqual(translated["steps"][0]["hints"][1], "Rally -> Gold")
+            self.assertEqual(compile_document(translated, "sample.bo").id, "templar-2-tc")
+
+    def test_translated_mapping_compiles_without_a_yaml_round_trip(self) -> None:
+        translated = translate_overlay_document(copy.deepcopy(OVERLAY_BUILD), "sample.bo")
+
+        order = compile_document(translated, "sample.bo")
+
+        self.assertEqual(order.id, "templar-2-tc")
+        self.assertEqual(order.civ, "templar")
+        self.assertEqual(order.steps[0].checks[0].kind, "vils")
 
     def test_maps_every_rts_overlay_civilization_to_catalog_id(self) -> None:
         expected = {
@@ -201,8 +144,8 @@ class BuildOrderImporterTests(unittest.TestCase):
                 document = copy.deepcopy(OVERLAY_BUILD)
                 document["civilization"] = display_name
                 try:
-                    translated = compiler.translate_overlay_document(document, "fixture.bo")
-                except BuildOrderValidationError as exc:
+                    translated = translate_overlay_document(document, "fixture.bo")
+                except ImportValidationError as exc:
                     self.fail(f"supported civilization was rejected: {exc}")
                 self.assertEqual(translated["civ"], catalog_id)
 
@@ -215,7 +158,7 @@ class BuildOrderImporterTests(unittest.TestCase):
             "@technology_templar/safe_passage.webp@"
         ]
 
-        translated = compiler.translate_overlay_document(document, "fixture.bo")
+        translated = translate_overlay_document(document, "fixture.bo")
 
         self.assertEqual(
             translated["steps"][0]["hints"],
@@ -232,7 +175,7 @@ class BuildOrderImporterTests(unittest.TestCase):
             "@custom/siege-workshop_mk2.webp@."
         ]
 
-        translated = compiler.translate_overlay_document(document, "fixture.bo")
+        translated = translate_overlay_document(document, "fixture.bo")
 
         self.assertEqual(
             translated["steps"][0]["hints"],
@@ -252,7 +195,7 @@ class BuildOrderImporterTests(unittest.TestCase):
             "@building_military/archery-range.webp@)"
         ]
 
-        translated = compiler.translate_overlay_document(document, "2 TC.bo")
+        translated = translate_overlay_document(document, "2 TC.bo")
 
         self.assertEqual(
             translated["steps"][0]["hints"],
@@ -301,13 +244,13 @@ class BuildOrderImporterTests(unittest.TestCase):
                 document = copy.deepcopy(OVERLAY_BUILD)
                 mutate(document)
                 try:
-                    compiler.translate_overlay_document(document, "fixture.bo")
-                except BuildOrderValidationError as caught:
+                    translate_overlay_document(document, "fixture.bo")
+                except ImportValidationError as caught:
                     self.assertEqual(str(caught), expected)
                 except Exception as exc:
                     self.fail(f"wrong exception type {type(exc).__name__}: {exc}")
                 else:
-                    self.fail("BuildOrderValidationError not raised")
+                    self.fail("ImportValidationError not raised")
 
     def test_validates_required_and_optional_overlay_metadata(self) -> None:
         cases = [
@@ -333,11 +276,11 @@ class BuildOrderImporterTests(unittest.TestCase):
                 document = copy.deepcopy(OVERLAY_BUILD)
                 mutate(document)
                 try:
-                    compiler.translate_overlay_document(document, "fixture.bo")
-                except BuildOrderValidationError as caught:
+                    translate_overlay_document(document, "fixture.bo")
+                except ImportValidationError as caught:
                     self.assertEqual(str(caught), expected)
                 else:
-                    self.fail("BuildOrderValidationError not raised")
+                    self.fail("ImportValidationError not raised")
 
     def test_url_import_rejects_untrusted_or_malformed_urls_before_network(self) -> None:
         invalid_urls = [
@@ -350,17 +293,17 @@ class BuildOrderImporterTests(unittest.TestCase):
 
         for url in invalid_urls:
             with self.subTest(url=url), mock.patch(
-                "tools.build_orders.compiler.build_overlay_opener",
+                "tools.build_orders.importer.build_overlay_opener",
                 side_effect=AssertionError("network must not be called"),
             ):
                 try:
-                    compiler.fetch_overlay_document(url)
-                except BuildOrderValidationError:
+                    fetch_overlay_document(url)
+                except ImportValidationError:
                     pass
                 except Exception as exc:
                     self.fail(f"wrong exception type {type(exc).__name__}: {exc}")
                 else:
-                    self.fail("BuildOrderValidationError not raised")
+                    self.fail("ImportValidationError not raised")
 
     def test_url_import_reports_not_found_without_using_blank_api_reason(self) -> None:
         page_url = "https://aoe4guides.com/builds/missing"
@@ -375,10 +318,10 @@ class BuildOrderImporterTests(unittest.TestCase):
 
         opener = mock.Mock()
         opener.open.side_effect = response
-        with mock.patch("tools.build_orders.compiler.build_overlay_opener", return_value=opener):
+        with mock.patch("tools.build_orders.importer.build_overlay_opener", return_value=opener):
             try:
-                compiler.fetch_overlay_document(page_url)
-            except BuildOrderValidationError as caught:
+                fetch_overlay_document(page_url)
+            except ImportValidationError as caught:
                 self.assertEqual(
                     str(caught),
                     f"{page_url}: aoe4guides build not found (HTTP 404)",
@@ -386,7 +329,7 @@ class BuildOrderImporterTests(unittest.TestCase):
             except Exception as exc:
                 self.fail(f"wrong exception type {type(exc).__name__}: {exc}")
             else:
-                self.fail("BuildOrderValidationError not raised")
+                self.fail("ImportValidationError not raised")
 
     def test_url_import_rejects_oversized_responses(self) -> None:
         page_url = "https://aoe4guides.com/builds/oversized"
@@ -403,9 +346,9 @@ class BuildOrderImporterTests(unittest.TestCase):
 
         opener = mock.Mock()
         opener.open.return_value = Response()
-        with mock.patch("tools.build_orders.compiler.build_overlay_opener", return_value=opener):
-            with self.assertRaises(BuildOrderValidationError) as caught:
-                compiler.fetch_overlay_document(page_url)
+        with mock.patch("tools.build_orders.importer.build_overlay_opener", return_value=opener):
+            with self.assertRaises(ImportValidationError) as caught:
+                fetch_overlay_document(page_url)
 
         self.assertEqual(
             str(caught.exception),
@@ -427,9 +370,9 @@ class BuildOrderImporterTests(unittest.TestCase):
 
         opener = mock.Mock()
         opener.open.return_value = Response()
-        with mock.patch("tools.build_orders.compiler.build_overlay_opener", return_value=opener):
-            with self.assertRaises(BuildOrderValidationError) as caught:
-                compiler.fetch_overlay_document(page_url)
+        with mock.patch("tools.build_orders.importer.build_overlay_opener", return_value=opener):
+            with self.assertRaises(ImportValidationError) as caught:
+                fetch_overlay_document(page_url)
 
         self.assertIn(
             f"{page_url}: aoe4guides returned non-UTF-8 data:",
@@ -451,36 +394,30 @@ class BuildOrderImporterTests(unittest.TestCase):
 
         opener = mock.Mock()
         opener.open.return_value = Response()
-        with mock.patch("tools.build_orders.compiler.build_overlay_opener", return_value=opener):
-            with self.assertRaises(BuildOrderValidationError) as caught:
-                compiler.fetch_overlay_document(page_url)
+        with mock.patch("tools.build_orders.importer.build_overlay_opener", return_value=opener):
+            with self.assertRaises(ImportValidationError) as caught:
+                fetch_overlay_document(page_url)
 
         self.assertIn(
             f"{page_url}: aoe4guides response was interrupted:",
             str(caught.exception),
         )
 
-    def test_cli_reports_import_errors_without_a_traceback(self) -> None:
+    def test_file_read_errors_preserve_the_source_path(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             missing = Path(temp) / "missing.bo"
-            output = Path(temp) / "output.yaml"
-            stderr = StringIO()
-            with redirect_stderr(stderr):
-                result = compiler.main(
-                    ["--import-file", str(missing), "--output", str(output)]
-                )
+            with self.assertRaises(ImportValidationError) as caught:
+                read_overlay_file(missing)
 
-        self.assertEqual(result, 1)
-        self.assertIn(f"error: {missing}: unable to read overlay JSON:", stderr.getvalue())
-        self.assertNotIn("Traceback", stderr.getvalue())
+        self.assertIn(f"{missing}: unable to read overlay JSON:", str(caught.exception))
 
     def test_remote_validation_errors_preserve_the_source_url(self) -> None:
         source_url = "https://aoe4guides.com/builds/nlxHE4i1PhNNXqD2XTAP"
         document = copy.deepcopy(OVERLAY_BUILD)
         document["civilization"] = 1
 
-        with self.assertRaises(BuildOrderValidationError) as caught:
-            compiler.translate_overlay_document(document, source_url)
+        with self.assertRaises(ImportValidationError) as caught:
+            translate_overlay_document(document, source_url)
 
         self.assertEqual(
             str(caught.exception),
@@ -488,9 +425,11 @@ class BuildOrderImporterTests(unittest.TestCase):
         )
 
     def test_overlay_http_opener_rejects_redirects_before_contacting_target(self) -> None:
-        opener_factory = getattr(compiler, "build_overlay_opener", None)
+        from tools.build_orders.importer import build_overlay_opener
+
+        opener_factory = build_overlay_opener
         if opener_factory is None:
-            self.fail("tools.build_orders.compiler.build_overlay_opener is missing")
+            self.fail("tools.build_orders.importer.build_overlay_opener is missing")
 
         target_hits = []
 
