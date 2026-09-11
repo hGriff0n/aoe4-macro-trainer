@@ -21,6 +21,7 @@ class BuildOrderHintsTests(unittest.TestCase):
         runtime = ScarRuntime(localization + "\n" + engine + "\n" + hints)
         messages = []
         runtime.globals["Loc_FormatText"] = lambda key, *values: (key, *values)
+        runtime.globals["LOC"] = lambda value: ("literal", value)
         runtime.globals["print"] = messages.append
         handler = runtime.globals["BUILD_ORDER_STATE"]["handlerMap"]["hints"]
 
@@ -30,7 +31,10 @@ class BuildOrderHintsTests(unittest.TestCase):
             handler,
         )
 
-        self.assertEqual(title, ("$dfb5645698a84afb91cf7a2dfb0f4a4e:145", "Scout"))
+        self.assertEqual(
+            title,
+            ("$dfb5645698a84afb91cf7a2dfb0f4a4e:145", ("literal", "Scout")),
+        )
         self.assertEqual(messages, [])
         self.assertIsNone(handler["activate"])
         self.assertIsNone(handler["deactivate"])
