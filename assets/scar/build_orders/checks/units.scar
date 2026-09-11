@@ -6,7 +6,7 @@ UNITS_POLL_INTERVAL_SECONDS = 1
 function Units_FormatTitle(check, context)
 	return Loc_FormatText(
 		BUILD_ORDER_LOC_KEYS.activeUnits,
-		Loc_ConvertNumber(check.payload.count),
+		Loc_FormatInteger(check.payload.count),
 		BuildOrder_FirstSquadName(check.payload, context)
 	)
 end

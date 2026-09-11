@@ -21,7 +21,7 @@ def formatter_runtime(source: str) -> ScarRuntime:
     localization = LOCALIZATION_PATH.read_text(encoding="utf-8")
     runtime = ScarRuntime(registration_stub + "\n" + localization + "\n" + source)
     runtime.globals["Loc_FormatText"] = lambda key, *values: (key, *values)
-    runtime.globals["Loc_ConvertNumber"] = lambda value: ("number", value)
+    runtime.globals["Loc_FormatInteger"] = lambda value: ("integer", value)
     return runtime
 
 
@@ -83,7 +83,7 @@ class BuildOrderResourcesContractTests(unittest.TestCase):
                 {"payload": {"resource": "gold", "count": 150}},
                 {},
             ),
-            (LOC["collect"], ("number", 150), LOC["gold"]),
+            (LOC["collect"], ("integer", 150), LOC["gold"]),
         )
 
     def test_activation_keeps_one_local_player_state_and_evaluates_it_immediately(self) -> None:

@@ -16,7 +16,7 @@ function Vils_FormatTitle(check, context)
 		if count ~= nil then
 			table.insert(allocations, Loc_FormatText(
 				BUILD_ORDER_LOC_KEYS.allocation,
-				Loc_ConvertNumber(count),
+				Loc_FormatInteger(count),
 				BuildOrder_ResourceName(resource)
 			))
 		end

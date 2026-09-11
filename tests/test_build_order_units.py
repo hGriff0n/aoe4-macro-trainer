@@ -24,7 +24,7 @@ def formatter_runtime(source: str) -> tuple[ScarRuntime, list[str]]:
 
     runtime.globals["BuildOrder_FirstSquadName"] = first_squad_name
     runtime.globals["Loc_FormatText"] = lambda key, *values: (key, *values)
-    runtime.globals["Loc_ConvertNumber"] = lambda value: ("number", value)
+    runtime.globals["Loc_FormatInteger"] = lambda value: ("integer", value)
     runtime.globals["BUILD_ORDER_LOC_KEYS"] = runtime.table(LOC)
     return runtime, first_ids
 
@@ -169,7 +169,7 @@ class UnitsHandlerContractTests(unittest.TestCase):
             {},
         )
 
-        self.assertEqual(title, (LOC["activeUnits"], ("number", 3), "Spearman"))
+        self.assertEqual(title, (LOC["activeUnits"], ("integer", 3), "Spearman"))
         self.assertEqual(first_ids, ["unit_spearman_2_eng"])
 
     def test_resolves_every_unit_family_blueprint_at_activation_not_each_poll(self) -> None:

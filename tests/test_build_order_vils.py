@@ -27,7 +27,7 @@ def formatter_runtime(source: str) -> ScarRuntime:
     runtime.globals["Loc_FormatText"] = lambda key, *values: (key, *values)
     runtime.globals["Loc_Empty"] = lambda: ()
     runtime.globals["Loc_ToAnsi"] = lambda value: f"ansi:{value!r}"
-    runtime.globals["Loc_ConvertNumber"] = lambda value: ("number", value)
+    runtime.globals["Loc_FormatInteger"] = lambda value: ("integer", value)
     return runtime
 
 
@@ -62,8 +62,8 @@ class BuildOrderVilsContractTests(unittest.TestCase):
 
     def test_formatter_orders_and_joins_allocation_fragments(self) -> None:
         runtime = formatter_runtime(self.source)
-        food = (LOC["allocation"], ("number", 6), LOC["food"])
-        gold = (LOC["allocation"], ("number", 3), LOC["gold"])
+        food = (LOC["allocation"], ("integer", 6), LOC["food"])
+        gold = (LOC["allocation"], ("integer", 3), LOC["gold"])
 
         self.assertEqual(
             runtime.call(

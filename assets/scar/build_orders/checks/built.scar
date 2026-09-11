@@ -8,7 +8,7 @@ function Built_FormatTitle(check, context)
 	end
 	return Loc_FormatText(
 		BUILD_ORDER_LOC_KEYS.buildMany,
-		Loc_ConvertNumber(check.payload.count),
+		Loc_FormatInteger(check.payload.count),
 		names
 	)
 end
