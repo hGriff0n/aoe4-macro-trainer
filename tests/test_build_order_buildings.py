@@ -3,11 +3,26 @@ import unittest
 from dataclasses import dataclass
 from pathlib import Path
 
+from tests.scar_runtime import ScarRuntime
+
 
 ROOT = Path(__file__).resolve().parents[1]
 SCAR_ROOT = ROOT / "assets" / "scar"
 BUILDINGS_HANDLER = SCAR_ROOT / "build_orders" / "checks" / "buildings.scar"
 MAIN_WINCONDITION = SCAR_ROOT / "winconditions" / "Macro Trainer.scar"
+
+
+def formatter_runtime(source: str) -> tuple[ScarRuntime, list[tuple[str, str]]]:
+    registration_stub = "function BuildOrder_RegisterHandler(kind, handler)\nend"
+    runtime = ScarRuntime(registration_stub + "\n" + source)
+    calls = []
+
+    def game_name(kind, identifier, _context):
+        calls.append((kind, identifier))
+        return "Town Center"
+
+    runtime.globals["BuildOrder_GameName"] = game_name
+    return runtime, calls
 
 
 def function_body(source: str, name: str) -> str:
@@ -106,6 +121,19 @@ class BuildingsHandlerContractTests(unittest.TestCase):
         self.assertTrue(BUILDINGS_HANDLER.exists(), "buildings handler is missing")
         self.assertIn('BuildOrder_RegisterHandler("buildings", {', self.source)
         self.assertIn('import("build_orders/checks/buildings.scar")', self.main_source)
+        self.assertIn("formatTitle = Buildings_FormatTitle", self.source)
+
+    def test_formatter_returns_the_localized_entity_name_without_count_copy(self) -> None:
+        runtime, calls = formatter_runtime(self.source)
+
+        title = runtime.call(
+            "Buildings_FormatTitle",
+            {"payload": {"id": "town_center", "count": 3}},
+            {},
+        )
+
+        self.assertEqual(title, "Town Center")
+        self.assertEqual(calls, [("entity", "town_center")])
 
     def test_every_advertised_nonoptional_kind_has_an_imported_handler(self) -> None:
         advertised = (

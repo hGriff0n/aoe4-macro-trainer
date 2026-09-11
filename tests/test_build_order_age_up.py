@@ -4,12 +4,31 @@ import unittest
 from pathlib import Path
 
 from tools.build_orders.compiler import BuildOrderValidationError, compile_directory
+from tests.scar_runtime import ScarRuntime
 
 
 ROOT = Path(__file__).resolve().parents[1]
 AGE_UP_HANDLER = ROOT / "assets" / "scar" / "build_orders" / "checks" / "age_up.scar"
 SCAR_ROOT = ROOT / "assets" / "scar"
 MAIN_WINCONDITION = SCAR_ROOT / "winconditions" / "Macro Trainer.scar"
+LOC = {"ageUp": "$dfb5645698a84afb91cf7a2dfb0f4a4e:161"}
+
+
+def formatter_runtime(source: str) -> tuple[ScarRuntime, list[tuple[str, str]]]:
+    registration_stub = "function BuildOrder_RegisterHandler(kind, handler)\nend"
+    executable_source = source.replace("local function ", "function ")
+    runtime = ScarRuntime(registration_stub + "\n" + executable_source)
+    calls = []
+    names = {"council_hall": "Council Hall", "economic_wing": "Economic Wing"}
+
+    def target_names(payload, kind, _context):
+        calls.append((kind, payload["id"]))
+        return names[payload["id"]]
+
+    runtime.globals["BuildOrder_TargetNames"] = target_names
+    runtime.globals["Loc_FormatText"] = lambda key, *values: (key, *values)
+    runtime.globals["BUILD_ORDER_LOC_KEYS"] = runtime.table(LOC)
+    return runtime, calls
 
 
 def function_body(source: str, name: str) -> str:
@@ -98,6 +117,25 @@ class AgeUpHandlerContractTests(unittest.TestCase):
         self.assertNotIn("AGE_UP_UPGRADE_CIVS", self.source)
         self.assertNotIn("unsupported", self.source)
         self.assertNotIn("capability", self.source)
+
+    def test_formatter_selects_entity_or_upgrade_names_from_the_trigger(self) -> None:
+        runtime, calls = formatter_runtime(self.source)
+
+        construction = runtime.call(
+            "AgeUp_FormatTitle",
+            {"payload": {"id": "council_hall", "trigger": "construction"}},
+            {},
+        )
+        upgrade = runtime.call(
+            "AgeUp_FormatTitle",
+            {"payload": {"id": "economic_wing", "trigger": "upgrade"}},
+            {},
+        )
+
+        self.assertEqual(construction, (LOC["ageUp"], "Council Hall"))
+        self.assertEqual(upgrade, (LOC["ageUp"], "Economic Wing"))
+        self.assertEqual(calls, [("entity", "council_hall"), ("upgrade", "economic_wing")])
+        self.assertIn("formatTitle = AgeUp_FormatTitle", self.source)
 
     def test_packaged_wincondition_reaches_age_up_handler_once_after_engine(self) -> None:
         graph = packaged_import_graph(MAIN_WINCONDITION)

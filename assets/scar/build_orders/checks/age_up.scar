@@ -3,6 +3,17 @@ AGE_UP_CONSTRUCTION_EVENTS = false
 AGE_UP_UPGRADE_EVENTS = false
 AGE_UP_SCAN_STATE = nil
 
+function AgeUp_FormatTitle(check, context)
+	local targetKind = "entity"
+	if check.payload.trigger == "upgrade" then
+		targetKind = "upgrade"
+	end
+	return Loc_FormatText(
+		BUILD_ORDER_LOC_KEYS.ageUp,
+		BuildOrder_TargetNames(check.payload, targetKind, context)
+	)
+end
+
 function AgeUp_CheckLandmarkEntity(group, index, entity)
 	local state = AGE_UP_SCAN_STATE
 	if state == nil then
@@ -177,6 +188,7 @@ local function AgeUp_Deactivate(check, objectiveID, context)
 end
 
 BuildOrder_RegisterHandler("age_up", {
+	formatTitle = AgeUp_FormatTitle,
 	activate = AgeUp_Activate,
 	deactivate = AgeUp_Deactivate,
 })

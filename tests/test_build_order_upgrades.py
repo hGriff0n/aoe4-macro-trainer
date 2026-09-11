@@ -4,10 +4,32 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from tools.build_orders.compiler import compile_directory
+from tests.scar_runtime import ScarRuntime
 
 
 ROOT = Path(__file__).resolve().parents[1]
 UPGRADES = ROOT / "assets" / "scar" / "build_orders" / "checks" / "upgrades.scar"
+LOC = {
+    "optional": "$dfb5645698a84afb91cf7a2dfb0f4a4e:146",
+    "research": "$dfb5645698a84afb91cf7a2dfb0f4a4e:162",
+    "queueResearch": "$dfb5645698a84afb91cf7a2dfb0f4a4e:163",
+}
+
+
+def formatter_runtime(source: str) -> tuple[ScarRuntime, list[tuple[str, str]]]:
+    registration_stub = "function BuildOrder_RegisterHandler(kind, handler)\nend"
+    executable_source = source.replace("local function ", "function ")
+    runtime = ScarRuntime(registration_stub + "\n" + executable_source)
+    calls = []
+
+    def game_name(kind, identifier, _context):
+        calls.append((kind, identifier))
+        return "Wheelbarrow"
+
+    runtime.globals["BuildOrder_GameName"] = game_name
+    runtime.globals["Loc_FormatText"] = lambda key, *values: (key, *values)
+    runtime.globals["BUILD_ORDER_LOC_KEYS"] = runtime.table(LOC)
+    return runtime, calls
 
 
 def function_body(source: str, name: str) -> str:
@@ -59,6 +81,31 @@ class BuildOrderUpgradeHandlerContractTests(unittest.TestCase):
         self.assertIn('BuildOrder_RegisterHandler("upgrades", {', self.source)
         self.assertIn("UPGRADES_STATE[check.id]", self.source)
         self.assertIn("UPGRADES_STATE[check.id] = nil", self.source)
+        self.assertIn("formatTitle = Upgrades_FormatTitle", self.source)
+
+    def test_formatter_selects_queue_copy_and_wraps_only_optional_upgrades(self) -> None:
+        runtime, calls = formatter_runtime(self.source)
+
+        research = runtime.call(
+            "Upgrades_FormatTitle",
+            {"optional": False, "payload": {"id": "wheelbarrow", "queued": False}},
+            {},
+        )
+        queued = runtime.call(
+            "Upgrades_FormatTitle",
+            {"optional": False, "payload": {"id": "wheelbarrow", "queued": True}},
+            {},
+        )
+        optional = runtime.call(
+            "Upgrades_FormatTitle",
+            {"optional": True, "payload": {"id": "wheelbarrow", "queued": False}},
+            {},
+        )
+
+        self.assertEqual(research, (LOC["research"], "Wheelbarrow"))
+        self.assertEqual(queued, (LOC["queueResearch"], "Wheelbarrow"))
+        self.assertEqual(optional, (LOC["optional"], (LOC["research"], "Wheelbarrow")))
+        self.assertEqual(calls, [("upgrade", "wheelbarrow")] * 3)
 
     def test_completed_research_queries_stored_player_before_canonical_upgrade(self) -> None:
         completed = self.source[self.source.index("local function Upgrades_IsCompletedResearch"):self.source.index("local function Upgrades_HasQueuedResearch")]

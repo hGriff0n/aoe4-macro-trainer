@@ -1,6 +1,14 @@
 BUILT_STATE = {}
 BUILT_EVENT_REGISTERED = false
 
+function Built_FormatTitle(check, context)
+	local names = BuildOrder_TargetNames(check.payload, "entity", context)
+	if check.payload.count == 1 then
+		return Loc_FormatText(BUILD_ORDER_LOC_KEYS.buildOne, names)
+	end
+	return Loc_FormatText(BUILD_ORDER_LOC_KEYS.buildMany, check.payload.count, names)
+end
+
 function Built_OnConstructionComplete(context)
 	if context == nil or context.player == nil or context.pbg == nil
 		or context.entity == nil or context.entity.EntityID == nil then
@@ -80,6 +88,7 @@ function Built_Deactivate(check, objectiveID, context)
 end
 
 BuildOrder_RegisterHandler("built", {
+	formatTitle = Built_FormatTitle,
 	activate = Built_Activate,
 	deactivate = Built_Deactivate,
 })

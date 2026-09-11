@@ -2,9 +2,40 @@ import re
 import unittest
 from pathlib import Path
 
+from tests.scar_runtime import ScarRuntime
+
 
 ROOT = Path(__file__).resolve().parents[1]
 BUILT_PATH = ROOT / "assets" / "scar" / "build_orders" / "checks" / "built.scar"
+LOC = {
+    "orJoin": "$dfb5645698a84afb91cf7a2dfb0f4a4e:154",
+    "buildOne": "$dfb5645698a84afb91cf7a2dfb0f4a4e:159",
+    "buildMany": "$dfb5645698a84afb91cf7a2dfb0f4a4e:160",
+}
+
+
+def formatter_runtime(source: str) -> tuple[ScarRuntime, list[tuple[str, tuple[str, ...]]]]:
+    registration_stub = "function BuildOrder_RegisterHandler(kind, handler)\nend"
+    runtime = ScarRuntime(registration_stub + "\n" + source)
+    calls = []
+    names = {
+        "barracks": "Barracks",
+        "stable": "Stable",
+        "archery_range": "Archery Range",
+    }
+
+    def target_names(payload, kind, _context):
+        if payload["oneof"] is not None:
+            ids = tuple(payload["oneof"].array())
+            calls.append((kind, ids))
+            return (LOC["orJoin"], *(names[value] for value in ids))
+        calls.append((kind, (payload["id"],)))
+        return names[payload["id"]]
+
+    runtime.globals["BuildOrder_TargetNames"] = target_names
+    runtime.globals["Loc_FormatText"] = lambda key, *values: (key, *values)
+    runtime.globals["BUILD_ORDER_LOC_KEYS"] = runtime.table(LOC)
+    return runtime, calls
 
 
 def function_body(source: str, name: str) -> str:
@@ -30,6 +61,34 @@ class BuiltCheckContractTests(unittest.TestCase):
         self.assertIn("BUILT_STATE[check.id]", activate)
         self.assertIn("remaining = check.payload.count", activate)
         self.assertIn("seen = {}", activate)
+        self.assertIn("formatTitle = Built_FormatTitle", self.source)
+
+    def test_formatter_selects_single_counted_and_ordered_oneof_titles(self) -> None:
+        runtime, calls = formatter_runtime(self.source)
+
+        single = runtime.call(
+            "Built_FormatTitle", {"payload": {"id": "barracks", "count": 1}}, {}
+        )
+        counted = runtime.call(
+            "Built_FormatTitle", {"payload": {"id": "barracks", "count": 2}}, {}
+        )
+        oneof = runtime.call(
+            "Built_FormatTitle",
+            {"payload": {"oneof": ["stable", "archery_range"], "count": 1}},
+            {},
+        )
+
+        self.assertEqual(single, (LOC["buildOne"], "Barracks"))
+        self.assertEqual(counted, (LOC["buildMany"], 2, "Barracks"))
+        self.assertEqual(oneof, (LOC["buildOne"], (LOC["orJoin"], "Stable", "Archery Range")))
+        self.assertEqual(
+            calls,
+            [
+                ("entity", ("barracks",)),
+                ("entity", ("barracks",)),
+                ("entity", ("stable", "archery_range")),
+            ],
+        )
 
     def test_registers_only_the_construction_complete_event_once(self) -> None:
         register = function_body(self.source, "Built_EnsureEventRegistered")
