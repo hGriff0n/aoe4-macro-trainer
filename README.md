@@ -27,7 +27,8 @@ datastore.
 
 URL import accepts HTTPS build-page and build-API URLs on `aoe4guides.com`.
 It extracts the build ID and requests the fixed overlay endpoint; it never
-fetches an arbitrary host supplied by the URL. The resulting YAML retains the
+fetches an arbitrary host supplied by the URL. The HTTP client rejects
+redirects; it never follows them. The resulting YAML retains the
 canonical source link for attribution. Ordinary builds remain offline because
 only the explicit import command accesses aoe4guides.
 
