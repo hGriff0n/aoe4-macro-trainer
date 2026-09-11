@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Any, Callable
 import sys
+from typing import Any, Callable
 from urllib.parse import urlsplit
 
 import yaml
