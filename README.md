@@ -7,6 +7,41 @@ Build-order YAML is compiled into the active Age of Empires IV player's datastor
 The `.aoe4mod` package contains the objective runtime but no bundled build-order
 catalog.
 
+### Importing RTS Overlay and aoe4guides build orders
+
+The build-order compiler can translate an RTS Overlay `.bo` JSON file or an
+aoe4guides build URL into authoritative Macro Trainer YAML and store the result
+in the player datastore. File and URL input are mutually exclusive:
+
+```powershell
+python -m tools.build_orders.compiler import --file "2 TC.bo"
+python -m tools.build_orders.compiler import --url "https://aoe4guides.com/builds/<id>"
+python -m tools.build_orders.compiler import --file "2 TC.bo" --save_yaml "2 TC.yaml"
+```
+
+Import replaces an existing order with the same generated ID, preserves
+unrelated datastore records, and accepts `--profile <id>` when the target
+profile cannot be selected automatically. `--save_yaml` is additional output;
+it writes the translated YAML while the imported order is still stored in the
+datastore.
+
+URL import accepts HTTPS build-page and build-API URLs on `aoe4guides.com`.
+It extracts the build ID and requests the fixed overlay endpoint; it never
+fetches an arbitrary host supplied by the URL. The HTTP client rejects
+redirects; it never follows them. The resulting YAML retains the
+canonical source link for attribution. Ordinary builds remain offline because
+only the explicit import command accesses aoe4guides.
+
+The baseline translation preserves source-step ordering. A step's timestamp is
+used as its title, positive food/gold/wood/stone allocations become a `vils`
+check, and non-empty notes become ordered hints after HTML entity decoding.
+RTS Overlay image tokens are rendered as readable labels, such as `Town Center`
+or `Gold`; unknown tokens fall back to a humanized filename. Zero allocations do
+not create checks. Age, population, total-villager, and builder fields are
+validated but are not converted into inferred actions. Arbitrary-language prose
+remains unchanged, and later reviewable translation passes may derive additional
+checks from it.
+
 Catalog regeneration is a developer-only operation:
 
 ```powershell

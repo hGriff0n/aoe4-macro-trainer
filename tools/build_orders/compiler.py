@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Any, Callable
 import sys
+from typing import Any, Callable
 from urllib.parse import urlsplit
 
 import yaml
@@ -14,6 +14,14 @@ from .identities import (
     IdentityCatalog,
     IdentityCatalogError,
     normalize_identity_id,
+)
+from .importer import (
+    ImportValidationError,
+    fetch_overlay_document,
+    read_overlay_file,
+    render_import_yaml,
+    translate_overlay_document,
+    write_import_yaml,
 )
 from .model import BuildOrder, Catalog, CheckDescriptor, Step, normalize_id
 from .profiles import ProfileResolutionError, resolve_datastore_path
@@ -38,25 +46,25 @@ def _error(file: Path | str, path: str, message: str) -> None:
     raise BuildOrderValidationError(f"{file}: {path}: {message}")
 
 
-def _mapping(value: Any, file: Path, path: str) -> dict[str, Any]:
+def _mapping(value: Any, file: Path | str, path: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         _error(file, path, "must be a mapping")
     return value
 
 
-def _list(value: Any, file: Path, path: str) -> list[Any]:
+def _list(value: Any, file: Path | str, path: str) -> list[Any]:
     if not isinstance(value, list):
         _error(file, path, "must be a list")
     return value
 
 
-def _string(value: Any, file: Path, path: str) -> str:
+def _string(value: Any, file: Path | str, path: str) -> str:
     if not isinstance(value, str) or not value:
         _error(file, path, "must be a non-empty string")
     return value
 
 
-def _source_link(value: Any, file: Path, path: str) -> str:
+def _source_link(value: Any, file: Path | str, path: str) -> str:
     if not isinstance(value, str) or not value or any(character.isspace() for character in value):
         _error(file, path, "must be an absolute HTTP(S) URL")
     try:
@@ -472,7 +480,7 @@ def _check_descriptors(
     return compiler(value, file, path, civ, identities)
 
 
-def _compile_order(document: Any, file: Path, index: int | None, identities: IdentityCatalog) -> BuildOrder:
+def _compile_order(document: Any, file: Path | str, index: int | None, identities: IdentityCatalog) -> BuildOrder:
     base = "" if index is None else f"[{index}]."
     order = _mapping(document, file, base.rstrip("."))
     unknown = set(order) - {"civ", "title", "link", "steps"}
@@ -511,6 +519,16 @@ def _compile_order(document: Any, file: Path, index: int | None, identities: Ide
     if not compiled_steps:
         _error(file, f"{base}steps", "must not be empty")
     return BuildOrder(normalize_id(civ, title), civ, title, tuple(compiled_steps), link)
+
+
+def compile_document(
+    document: Any,
+    source: Path | str,
+    identities: IdentityCatalog | None = None,
+) -> BuildOrder:
+    if identities is None:
+        identities = IdentityCatalog.load(DEFAULT_IDENTITY_CATALOG)
+    return _compile_order(document, source, None, identities)
 
 
 def _compile_files(
@@ -795,7 +813,14 @@ def _parser() -> argparse.ArgumentParser:
     extract = commands.add_parser("extract", help="extract normalized YAML")
     extract.add_argument("ids", nargs="+")
     extract.add_argument("--output-dir", type=Path, default=Path.cwd())
-    for command in (build, listing, delete, extract):
+    import_command = commands.add_parser(
+        "import", help="import an RTS Overlay build order into the datastore"
+    )
+    source = import_command.add_mutually_exclusive_group(required=True)
+    source.add_argument("--file", type=Path, dest="import_file")
+    source.add_argument("--url", dest="import_url")
+    import_command.add_argument("--save_yaml", type=Path)
+    for command in (build, listing, delete, extract, import_command):
         command.add_argument("--profile")
     return parser
 
@@ -803,7 +828,7 @@ def _parser() -> argparse.ArgumentParser:
 def _forward_default_build(arguments: list[str]) -> list[str]:
     if not arguments:
         return ["build"]
-    if arguments[0] in {"-h", "--help", "build", "list", "delete", "extract"}:
+    if arguments[0] in {"-h", "--help", "build", "list", "delete", "extract", "import"}:
         return arguments
     return ["build", *arguments]
 
@@ -819,6 +844,23 @@ def main(argv: list[str] | None = None) -> int:
             merged = merge_catalog(existing, incoming)
             write_datastore(datastore_path, merged)
             print(f"Stored {len(incoming.build_orders)} build order(s) in {datastore_path}")
+        elif options.command == "import":
+            if options.import_file is not None:
+                source: Path | str = options.import_file
+                raw = read_overlay_file(options.import_file)
+            else:
+                source = options.import_url
+                raw = fetch_overlay_document(options.import_url)
+            translated = translate_overlay_document(raw, source)
+            incoming_order = compile_document(translated, source)
+            merged = merge_catalog(existing, Catalog((incoming_order,)))
+            yaml_content = (
+                render_import_yaml(translated) if options.save_yaml is not None else None
+            )
+            write_datastore(datastore_path, merged)
+            if options.save_yaml is not None and yaml_content is not None:
+                write_import_yaml(options.save_yaml, yaml_content)
+            print(f"Stored imported build order {incoming_order.id} in {datastore_path}")
         elif options.command == "list":
             _print_catalog(existing)
         elif options.command == "delete":
@@ -879,7 +921,7 @@ def main(argv: list[str] | None = None) -> int:
                         temp.unlink()
             print(f"Extracted {len(outputs)} build order(s) to {options.output_dir}")
         return 0
-    except BuildOrderValidationError as exc:
+    except (BuildOrderValidationError, ImportValidationError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     except (DatastoreError, ProfileResolutionError, IdentityCatalogError, OSError) as exc:
