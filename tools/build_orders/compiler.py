@@ -19,7 +19,9 @@ from .importer import (
     ImportValidationError,
     fetch_overlay_document,
     read_overlay_file,
+    render_import_yaml,
     translate_overlay_document,
+    write_import_yaml,
 )
 from .model import BuildOrder, Catalog, CheckDescriptor, Step, normalize_id
 from .profiles import ProfileResolutionError, resolve_datastore_path
@@ -852,7 +854,12 @@ def main(argv: list[str] | None = None) -> int:
             translated = translate_overlay_document(raw, source)
             incoming_order = compile_document(translated, source)
             merged = merge_catalog(existing, Catalog((incoming_order,)))
+            yaml_content = (
+                render_import_yaml(translated) if options.save_yaml is not None else None
+            )
             write_datastore(datastore_path, merged)
+            if options.save_yaml is not None and yaml_content is not None:
+                write_import_yaml(options.save_yaml, yaml_content)
             print(f"Stored imported build order {incoming_order.id} in {datastore_path}")
         elif options.command == "list":
             _print_catalog(existing)

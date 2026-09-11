@@ -6,6 +6,8 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
+import yaml
+
 from tools.build_orders.compiler import (
     BuildOrderValidationError,
     compile_inputs,
@@ -14,6 +16,7 @@ from tools.build_orders.compiler import (
 )
 from tools.build_orders.datastore import load_datastore, write_datastore
 from tools.build_orders.model import BuildOrder, Catalog, CheckDescriptor, Step
+from tools.build_orders.importer import ImportValidationError
 from tests.build_order_import_fixtures import OVERLAY_BUILD
 
 
@@ -187,6 +190,61 @@ class CompilerCommandTests(unittest.TestCase):
             ["english-opening", "templar-2-tc"],
         )
         self.assertEqual(stored.build_orders[1].title, "2 TC")
+
+    def test_import_save_yaml_writes_translation_and_still_updates_datastore(self) -> None:
+        source = self.root / "2 TC.bo"
+        saved = self.root / "saved" / "two-tc.yaml"
+        source.write_text(json.dumps(OVERLAY_BUILD), encoding="utf-8")
+
+        result, _, error = self.run_command(
+            ["import", "--file", str(source), "--save_yaml", str(saved)]
+        )
+
+        self.assertEqual((result, error), (0, ""))
+        self.assertEqual(yaml.safe_load(saved.read_text(encoding="utf-8"))["title"], "2 TC")
+        self.assertEqual(load_datastore(self.datastore).build_orders[0].id, "templar-2-tc")
+
+    def test_invalid_import_replaces_neither_datastore_nor_saved_yaml(self) -> None:
+        write_datastore(
+            self.datastore,
+            Catalog((compiled_order("english-existing", "english", "Existing", "keep"),)),
+        )
+        before = self.datastore.read_bytes()
+        source = self.root / "bad.bo"
+        source.write_text("{}", encoding="utf-8")
+        saved = self.root / "saved.yaml"
+        saved.write_text("keep: me\n", encoding="utf-8")
+
+        result, _, error = self.run_command(
+            ["import", "--file", str(source), "--save_yaml", str(saved)]
+        )
+
+        self.assertEqual(result, 2)
+        self.assertIn("error:", error)
+        self.assertEqual(self.datastore.read_bytes(), before)
+        self.assertEqual(saved.read_text(encoding="utf-8"), "keep: me\n")
+
+    def test_yaml_render_failure_occurs_before_datastore_write(self) -> None:
+        existing = Catalog(
+            (compiled_order("english-existing", "english", "Existing", "keep"),)
+        )
+        write_datastore(self.datastore, existing)
+        before = self.datastore.read_bytes()
+        source = self.root / "2 TC.bo"
+        source.write_text(json.dumps(OVERLAY_BUILD), encoding="utf-8")
+
+        with patch(
+            "tools.build_orders.compiler.render_import_yaml",
+            side_effect=ImportValidationError("unable to render imported YAML"),
+        ):
+            result, _, error = self.run_command(
+                ["import", "--file", str(source), "--save_yaml", str(self.root / "out.yaml")]
+            )
+
+        self.assertEqual(result, 2)
+        self.assertIn("unable to render imported YAML", error)
+        self.assertEqual(self.datastore.read_bytes(), before)
+        self.assertFalse((self.root / "out.yaml").exists())
 
     def test_list_has_stable_columns_and_id_sorted_rows(self) -> None:
         write_datastore(

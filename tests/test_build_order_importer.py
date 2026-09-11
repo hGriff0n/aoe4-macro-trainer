@@ -20,6 +20,7 @@ from tools.build_orders.importer import (
     read_overlay_file,
     render_overlay_note,
     translate_overlay_document,
+    write_import_yaml,
 )
 
 
@@ -427,6 +428,18 @@ class BuildOrderImporterTests(unittest.TestCase):
                 read_overlay_file(missing)
 
         self.assertIn(f"{missing}: unable to read overlay JSON:", str(caught.exception))
+
+    def test_yaml_writer_cleans_temporary_file_when_replace_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            destination = Path(temp) / "order.yaml"
+            destination.write_text("keep: me\n", encoding="utf-8")
+
+            with mock.patch("pathlib.Path.replace", side_effect=OSError("blocked")):
+                with self.assertRaisesRegex(OSError, "blocked"):
+                    write_import_yaml(destination, "title: Imported\n")
+
+            self.assertEqual(destination.read_text(encoding="utf-8"), "keep: me\n")
+            self.assertFalse((Path(temp) / "order.yaml.tmp").exists())
 
     def test_remote_validation_errors_preserve_the_source_url(self) -> None:
         source_url = "https://aoe4guides.com/builds/nlxHE4i1PhNNXqD2XTAP"

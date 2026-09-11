@@ -10,6 +10,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
+import yaml
+
 from .identities import IdentityCatalog
 
 OVERLAY_CIVILIZATIONS = {
@@ -55,6 +57,24 @@ def read_overlay_file(path: Path) -> Any:
         return json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise ImportValidationError(f"{path}: unable to read overlay JSON: {exc}") from exc
+
+
+def render_import_yaml(document: dict[str, object]) -> str:
+    try:
+        return yaml.safe_dump(document, sort_keys=False, allow_unicode=True)
+    except yaml.YAMLError as exc:
+        raise ImportValidationError(f"unable to render imported YAML: {exc}") from exc
+
+
+def write_import_yaml(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(path.name + ".tmp")
+    try:
+        temporary.write_text(content, encoding="utf-8", newline="")
+        temporary.replace(path)
+    finally:
+        if temporary.exists():
+            temporary.unlink()
 
 
 def render_overlay_note(note: str) -> str:
