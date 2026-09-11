@@ -10,18 +10,20 @@ catalog.
 ### Importing RTS Overlay and aoe4guides build orders
 
 The build-order compiler can translate an RTS Overlay `.bo` JSON file or an
-aoe4guides build URL into authoritative Macro Trainer YAML. File and URL input
-are mutually exclusive and require an explicit output path:
+aoe4guides build URL into authoritative Macro Trainer YAML and store the result
+in the player datastore. File and URL input are mutually exclusive:
 
 ```powershell
-python -m tools.build_orders.compiler `
-  --import-file 'E:/path/to/2 TC.bo' `
-  --output 'build_orders/templar_2tc.yaml'
-
-python -m tools.build_orders.compiler `
-  --import-url 'https://aoe4guides.com/builds/nlxHE4i1PhNNXqD2XTAP' `
-  --output 'build_orders/templar_2tc.yaml'
+python -m tools.build_orders.compiler import --file "2 TC.bo"
+python -m tools.build_orders.compiler import --url "https://aoe4guides.com/builds/<id>"
+python -m tools.build_orders.compiler import --file "2 TC.bo" --save_yaml "2 TC.yaml"
 ```
+
+Import replaces an existing order with the same generated ID, preserves
+unrelated datastore records, and accepts `--profile <id>` when the target
+profile cannot be selected automatically. `--save_yaml` is additional output;
+it writes the translated YAML while the imported order is still stored in the
+datastore.
 
 URL import accepts HTTPS build-page and build-API URLs on `aoe4guides.com`.
 It extracts the build ID and requests the fixed overlay endpoint; it never
