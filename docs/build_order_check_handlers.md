@@ -4,56 +4,39 @@ This guide explains how to add a production check to the GRI-83 build-order obje
 
 ## Data Flow
 
-1. `tools/build_orders/compiler.py` converts one YAML check into one or more `CheckDescriptor` values.
-2. The datastore compiler serializes those descriptors with a stable check ID, literal title, optional flag, and typed payload.
-3. The mod loads the compiled catalog from `macroTrainerBuildOrders.rlt`.
-4. `BuildOrder_ActivateStep` creates every child objective and then calls the registered handler's `activate` function.
-5. The handler observes the engine-provided `context.localPlayer` and `context.civ`, then reports state through the engine.
-6. Before step transition or game shutdown, the engine calls `deactivate` and then deletes the objective hierarchy.
+The scar handler flow is controlled through `build_orders/objectives.scar`, specifically the `SetCurrentObjective`, `BuildOrder_Objectives_CheckCompletion`, and `CleanupCurrentObjective` functions.
 
-## Handler Shape
+1. Individual checks register their handles through the `BuildOrder_Objectives_RegisterCheckHandlers` function
+	- Each `BuildOrder_Check_{check}_Register` function must call this
+2. `SetCurrentObjective` is called to set up the next build order step
+	1. For each check, `GetCheckHandle` grabs the registered handles
+	2. `handles.activate` is called to setup the listeners/polling for that check. If `activate` returns False, then the check is skipped as the registration did not succeed
+	3. `handles.format_check_text` is called to get the formatted loc text
+	4. The AOE4 Objective object is created for the check sub objective
+2. `BuildOrder_Objectives_CheckCompletion` is called each tick to run any polling checks and check objective completion status
+	1. For each sub-objective, the check `poll_handle` is called if one is set. This returns whether the sub-objective is completed or not
+	2. For event-based checks, the objective's status is compared to `OS_Complete` instead
+	3. If all required sub-objectives are complete, then the engine marks the step objective complete and progresses to the next step via `BuildOrder_Objectives_NextStep`
+3. `BuildOrder_Objectives_NextStep` first cleans up the current objective and then tries to load the next step, unless the current objective is the last one in the build order.
+	1. `CleanupCurrentObjective` calls the `deactivate` handle for each check and deletes the objective hierarchy
+	2. If there is a next step in the build order, the engine repeats at `SetCurrentObjective`
+	3. Otherwise, `BuildOrder_Objectives_Stop` is called to disable the events and rules
 
-Place each handler in `assets/scar/build_orders/checks/<kind>.scar`:
+## New Handler Creation
 
-```lua
-local KIND_STATE = {}
+For adding a new check handler, you must:
 
-local function Kind_Activate(check, objectiveID, context)
-	local player = context.localPlayer
-	if player == nil then
-		return
-	end
-
-	KIND_STATE[check.id] = {
-		player = player,
-		objectiveID = objectiveID,
-		payload = check.payload,
-	}
-end
-
-local function Kind_Deactivate(check, objectiveID, context)
-	local state = KIND_STATE[check.id]
-	if state == nil then
-		return
-	end
-
-	-- Remove this check's rules, listeners, and temporary groups here.
-	KIND_STATE[check.id] = nil
-end
-
-BuildOrder_RegisterHandler("kind", {
-	activate = Kind_Activate,
-	deactivate = Kind_Deactivate,
-})
-```
-
-Use a per-check table keyed by `check.id`; one global Boolean or counter breaks steps containing multiple checks of the same kind. Prefix callbacks and rule names with the check kind and derive unique runtime names from the stable check ID when the SCAR API requires named rules.
+1. Copy `assets/scar/build_orders/checks/.template.scar` to `assets/scar/build_orders/checks/<kind>.scar`
+2. Replace `{check}` with `<kind>` in the new scar file
+3. Delete polling handle if check is implemented via event listeners
+	- Prefer using events over polling if possible
+4. Implement using other checks as examples if needed
+	- Make sure that the `Activate` and `Deactivate` handles still work if multiple checks of the same kind are registered in the same step
+5. Import new check in `assets/scar/build_orders/objectives.scar` and append `BuildOrder_Check_{check}_Register` to the `BuildOrder_Objectives_OnInit` function
 
 ## Human-Player Filter
 
-`context.localPlayer` is the authoritative gameplay player. Do not call `Game_GetLocalPlayer` inside a handler and do not search every player for a matching blueprint.
-
-`context.civ` is the authoritative normalized civilization ID for the selected build order. Use it for civilization-specific behavior such as choosing the appropriate event mechanism; do not derive it from an entity, the currently observed player race, or check payload data.
+`check.player` is the authoritative gameplay player. Do not call `Game_GetLocalPlayer` inside a handler and do not search every player for a matching blueprint.
 
 For polling:
 
@@ -71,6 +54,7 @@ For events:
 
 Every handler test includes an opponent event or opponent-owned matching entity and asserts that it cannot change the objective.
 
+<!-- TODO: Use for todo? -->
 ## Completion APIs
 
 Use the state-setting API for both latched and reversible checks:
@@ -80,8 +64,6 @@ BuildOrder_SetCheckComplete(check.id, predicateIsTrue)
 ```
 
 For a latched event counter, call it with `true` once the human player's counter reaches its threshold. For a reversible polling check, call it after each poll with the current predicate result. Repeating the current state is safe and must not replay completion effects.
-
-When a polling, event, or reconciliation callback traverses a handler state table and can report completion, wrap the traversal in `BuildOrder_BeginCheckUpdates()` and `BuildOrder_EndCheckUpdates()`. Nested batches are supported. The outermost end coalesces advancement to one attempt after traversal, so step cleanup cannot mutate the table under `pairs`. Validate callback context before beginning a batch and ensure every begun batch reaches its matching end; do not use deferred rules or rule ordering as an advancement barrier.
 
 `BuildOrder_NotifyComplete(check.id)` is retained for compatibility, but new handlers should prefer the explicit state API.
 
