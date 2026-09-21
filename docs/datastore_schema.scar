@@ -1,0 +1,66 @@
+LuaDataStore = {
+    datastoreId = {
+        schema_version = int,
+        build_orders = {
+            [id] = {
+                civ = string,
+                id = string,
+                title = string,
+                link = string?,
+                steps = [{
+                    title = string
+                    checks = [{
+                        id = string,
+                        kind = vils|hints|built|age_up|rallypoint|resources|upgrades|units|produce,
+                        optional = bool,
+                        payload = {
+                            -- vils
+                            food = int,
+                            gold = int,
+                            stone = int,
+                            wood = int,
+                            -- more?
+
+                            -- hints
+                            text = string
+
+                            -- built
+                            count = int,
+                            id = string
+                            vils = int,
+                            location = string,
+
+                            -- age_up
+                            trigger = string
+                            oneof = list[string]
+                            id = string
+                            vils = int
+                            -- more?
+
+                            -- rallypoint
+                            resource = string
+                            -- Maybe convert to "hint" for now?
+
+                            -- resources
+                            count = int,
+                            resource = string,
+
+                            -- upgrades
+                            id = string,
+                            queued = bool,
+
+                            -- units
+                            count = int,
+                            ids = [string],
+
+                            -- produce
+                            constant = bool,
+                            count = int,
+                            ids = [string],
+                        }
+                    }]
+                }]
+            }
+        }
+    }
+}

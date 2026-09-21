@@ -1,24 +1,57 @@
--- TEMPORARY: rally target classification is not yet reliable, so this handler auto-completes.
-function Rallypoint_FormatTitle(check, context)
-	return Loc_FormatText(
-		BUILD_ORDER_LOC_KEYS.rally,
-		BuildOrder_ResourceName(check.payload.resource)
-	)
+-----------------------------------------------------------------------
+-- Imports
+-----------------------------------------------------------------------
+
+
+-----------------------------------------------------------------------
+-- Data
+-----------------------------------------------------------------------
+
+_bo_rallypoint_data = {
+
+}
+
+local _RALLYPOINT_TEXT = "Rally new villagers to %s"
+
+-----------------------------------------------------------------------
+-- Helper Functions
+-----------------------------------------------------------------------
+
+-----------------------------------------------------------------------
+-- Mod Interface
+-----------------------------------------------------------------------
+
+function BuildOrder_Check_Rallypoint_Register()
+    BuildOrder_Objectives_RegisterCheckHandlers(
+        "rallypoint",
+        BuildOrder_Check_Rallypoint_Activate,
+        BuildOrder_Check_Rallypoint_Deactivate,
+        BuildOrder_Check_Rallypoint_GetText,
+        BuildOrder_Check_Rallypoint_Validate,
+        nil
+    )
 end
 
-local function Rallypoint_Activate(check, objectiveID, context)
-	if context.localPlayer == nil then
-		return
-	end
-
-	BuildOrder_SetCheckComplete(check.id, true)
+function BuildOrder_Check_Rallypoint_Validate(check)
+    local t = check.payload
+    return t.resource ~= nil
 end
 
-local function Rallypoint_Deactivate(check, objectiveID, context)
+-- TODO: Implement rallypoint check. For now, just auto-complete
+function BuildOrder_Check_Rallypoint_Activate(obj, player)
+    obj.completed = true
+    return true
 end
 
-BuildOrder_RegisterHandler("rallypoint", {
-	formatTitle = Rallypoint_FormatTitle,
-	activate = Rallypoint_Activate,
-	deactivate = Rallypoint_Deactivate,
-})
+function BuildOrder_Check_Rallypoint_Deactivate(obj)
+end
+
+function BuildOrder_Check_Rallypoint_GetText(obj)
+    return Loc_FormatText(_RALLYPOINT_TEXT,
+        BuildOrder_ResourceName(obj.check.payload.resource))
+end
+
+-----------------------------------------------------------------------
+-- Mod Implementation
+-----------------------------------------------------------------------
+

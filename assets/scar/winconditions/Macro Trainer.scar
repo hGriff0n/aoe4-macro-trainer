@@ -1,226 +1,87 @@
+
+import("simspeed/submod.scar")
+import("build_order/submod.scar")
+
+-- TODO: Figure out imports
+-- Builtin imports
+import("cardinal.scar")
+import("ScarUtil.scar")
+
+-- TODO: Are these builtin imports required
+-- import("gameplay/chi/current_dynasty_ui.scar")   -- For china ui
+-- import("gameplay/event_cues.scar")
+-- import("gameplay/currentageui.scar")
+-- import("winconditions/annihilation.scar")		-- player elimintation
+-- import("winconditions/elimination.scar")		    -- player quit?
+-- import("winconditions/surrender.scar")			-- playe surrender
+-- import("gameplay/score.scar")					-- Tracks player score
+-- import("gameplay/diplomacy.scar")				-- Manages Tribute
+
+-- TODO: Reworking local imports
+-- I think there was something in the chat logs about these imports needing to be in the top-level file?
+-- import("build_orders/datastore.scar")
+-- import("build_orders/localization.scar")
+-- import("build_orders/objective_engine.scar")
+-- import("build_orders/selector_ui.scar")
+-- import("build_orders/startup.scar")
+-- import("build_orders/check_support.scar")
+-- import("build_orders/checks/hints.scar")
+-- import("build_orders/checks/rallypoint.scar")
+-- import("build_orders/checks/resources.scar")
+-- import("build_orders/checks/upgrades.scar")
+-- import("build_orders/checks/units.scar")
+-- import("build_orders/checks/produce.scar")
+-- import("build_orders/checks/age_up.scar")
+-- import("build_orders/checks/built.scar")
+-- import("build_orders/checks/buildings.scar")
+-- import("build_orders/checks/vils.scar")
+
+
+
+
 -----------------------------------------------------------------------
--- Imported Scripts
+-- Modding Required Functions
 -----------------------------------------------------------------------
 
--- Import Utility Scripts
-import("cardinal.scar")							-- Contains sfx references, UI templates, and Civ/Age helper functions
-import("ScarUtil.scar")							-- Contains game helper functions
-import("build_orders/datastore.scar")
-import("build_orders/localization.scar")
-import("build_orders/objective_engine.scar")
-import("build_orders/checks/hints.scar")
-import("build_orders/check_support.scar")
-import("build_orders/checks/rallypoint.scar")
-import("build_orders/checks/resources.scar")
-import("build_orders/checks/upgrades.scar")
-import("build_orders/checks/units.scar")
-import("build_orders/checks/produce.scar")
-import("build_orders/checks/age_up.scar")
-import("build_orders/checks/built.scar")
-import("build_orders/checks/buildings.scar")
-import("build_orders/checks/vils.scar")
-
--- Import Gameplay Systems
-import("gameplay/score.scar")					-- Tracks player score
-import("gameplay/diplomacy.scar")				-- Manages Tribute
-
--- Import Win Conditions
-import("winconditions/annihilation.scar")		-- Support for eliminating a player when they can no longer fight or produce units
-import("winconditions/elimination.scar")		-- Support for player quitting or dropping (through pause menu or disconnection)
-import("winconditions/surrender.scar")			-- Support for player surrender (through pause menu)
-
--- Import UI Support
-import("gameplay/chi/current_dynasty_ui.scar")	-- Displays Chinese Dynasty UI
-import("gameplay/event_cues.scar")
-import("gameplay/currentageui.scar")
-
------------------------------------------------------------------------
--- Data
------------------------------------------------------------------------
-
--- Global data table that can be referenced in script functions (e.g. _mod.module = "Mod")
+-- Global data table that can be referenced in script functions
 _mod = {
 	module = "Mod",
-	phaseObjective = nil,
-	phaseStartTime = nil,
-	phaseDeadline = nil,
-	normalPhaseDuration = nil,
-	slowPhaseDuration = nil,
-	normalDurationSeconds = 45,
-	slowDurationSeconds = 15,
-	slowSimRate = 1,
-	selectedBuildOrderID = nil,
-	simspeedEnabled = true,
-	simspeedStarted = false,
-	startupStarted = false,
-	startupActive = false,
-	startupAwaitingChoice = false,
-	startupFallbackOpen = false,
-	startupScreen = "hidden",
-	startupPriorSelectionID = nil,
-	startupMessage = nil,
-	compatibleBuildOrderIDs = {},
-	buildOrderStarted = false,
-}
-
-NORMAL_SIM_RATE = 8
-NORMAL_PHASE_OBJECTIVE_TITLE = "$dfb5645698a84afb91cf7a2dfb0f4a4e:4"
-SLOW_PHASE_OBJECTIVE_TITLE = "$dfb5645698a84afb91cf7a2dfb0f4a4e:5"
-
-SLOW_SIM_RATES = {
-	slow_sim_rate_1 = 1,
-	slow_sim_rate_2 = 2,
-	slow_sim_rate_3 = 3,
-	slow_sim_rate_4 = 4,
-	slow_sim_rate_5 = 5,
-	slow_sim_rate_6 = 6,
-	slow_sim_rate_7 = 7,
 }
 
 -- Register the win condition (Some functions can be prepended with "Mod_" to be called automatically as part of the scripting framework)
 Core_RegisterModule(_mod.module)
 
------------------------------------------------------------------------
--- Scripting framework 
------------------------------------------------------------------------
-
--- Called during load as part of the game setup sequence
-function Mod_GetOptionEnumKey(option)
-	if type(option) ~= "table" or type(option.enum_items) ~= "table" then
-		return nil
-	end
-
-	if option.enum_value == nil then
-		return nil
-	end
-
-	for enumKey, enumValue in pairs(option.enum_items) do
-		if enumValue == option.enum_value then
-			return enumKey
-		end
-	end
-
-	return nil
-end
-
-function Mod_SetupSettings(options)
-	if type(options) ~= "table" or type(options.section_macro_trainer_settings) ~= "table" then
-		return
-	end
-
-	local settings = options.section_macro_trainer_settings
-	if settings.option_normal_duration_seconds ~= nil then
-		_mod.normalDurationSeconds = math.max(1, math.min(300, settings.option_normal_duration_seconds))
-	end
-	if settings.option_slow_duration_seconds ~= nil then
-		_mod.slowDurationSeconds = math.max(1, math.min(300, settings.option_slow_duration_seconds))
-	end
-	local slowSimRateKey = Mod_GetOptionEnumKey(settings.option_slow_sim_rate)
-	if SLOW_SIM_RATES[slowSimRateKey] ~= nil then
-		_mod.slowSimRate = SLOW_SIM_RATES[slowSimRateKey]
-	end
-	if settings.option_enable_simspeed_cycle ~= nil then
-		_mod.simspeedEnabled = settings.option_enable_simspeed_cycle
-	end
-end
-
--- Called before initialization, preceding other module OnInit functions
+-- Called before initialization (ie. before `OnInit`)
 function Mod_PreInit()
-	
+	-- TODO: Do I have to do this?
 	-- Enable Tribute UI
-	Core_CallDelegateFunctions("TributeEnabled", true)
-	
+	-- Core_CallDelegateFunctions("TributeEnabled", true)
 end
 
 -- Called on match initialization before handing control to the player
 function Mod_OnInit()
 	local options_selected = {}
+	-- TODO: Is this required
 	Setup_GetWinConditionOptions(options_selected)
-	Mod_SetupSettings(options_selected)
+	Slowdown_InitFromSettings(options_selected)
+	BuildOrder_OnInit()
 end
 
 -- Called after initialization is done when game is fading up from black
 function Mod_Start()
-	BuildOrderDatastore_Load(BuildOrderStartup_Start)
+	-- Because BuildOrder needs to spawn a "select build order" ui modal
+	-- It must run first and then call whatever other start hooks
+	BuildOrder_OnGameStart([Slowdown_Start])
 end
 
-function Mod_StartSimspeedCycle()
-	if _mod.simspeedStarted then
-		return
-	end
-
-	_mod.simspeedStarted = true
-	_mod.normalPhaseDuration = math.ceil(_mod.normalDurationSeconds)
-	_mod.slowPhaseDuration = math.ceil(_mod.slowDurationSeconds * _mod.slowSimRate / NORMAL_SIM_RATE)
-	Mod_StartPhase(NORMAL_PHASE_OBJECTIVE_TITLE, _mod.normalPhaseDuration, NORMAL_SIM_RATE, Mod_EnterSlowSpeed)
-end
-
-function Mod_EnterSlowSpeed()
-	if not _mod.simspeedStarted then
-		return
-	end
-	Mod_StartPhase(SLOW_PHASE_OBJECTIVE_TITLE, _mod.slowPhaseDuration, _mod.slowSimRate, Mod_EnterNormalSpeed)
-end
-
-function Mod_EnterNormalSpeed()
-	if not _mod.simspeedStarted then
-		return
-	end
-	Mod_StartPhase(NORMAL_PHASE_OBJECTIVE_TITLE, _mod.normalPhaseDuration, NORMAL_SIM_RATE, Mod_EnterSlowSpeed)
-end
-
-function Mod_ClearPhaseObjective()
-	if _mod.phaseObjective ~= nil then
-		Objective_StopTimer(_mod.phaseObjective)
-		Objective_Expire(_mod.phaseObjective, false, false)
-		_mod.phaseObjective = nil
-	end
-end
-
-function Mod_StopSimspeedCycle()
-	Rule_Remove(Mod_EnterSlowSpeed)
-	Rule_Remove(Mod_EnterNormalSpeed)
-	Mod_ClearPhaseObjective()
-	Misc_SetSimRate(NORMAL_SIM_RATE)
-	_mod.simspeedStarted = false
-end
-
-function Mod_StartPhase(title, phaseDuration, simRate, nextRule)
-	Mod_ClearPhaseObjective()
-	_mod.phaseStartTime = World_GetGameTime()
-	_mod.phaseDeadline = _mod.phaseStartTime + phaseDuration
-
-	local objective = {
-		Title = title,
-		Description = Loc_Empty(),
-		Type = OT_Information,
-	}
-
-	Objective_Register(objective)
-	Objective_Start(objective, false, false)
-	Objective_StartTimer(objective, COUNT_DOWN, phaseDuration, 0)
-	_mod.phaseObjective = objective
-
-	Misc_SetSimRate(simRate)
-	Rule_Remove(nextRule)
-	Rule_AddOneShot(nextRule, phaseDuration)
-end
-
-import("build_orders/selector_ui.scar")
-import("build_orders/startup.scar")
-
--- Called when Core_SetPlayerDefeated() is invoked. Signals that a player has been eliminated from play due to defeat.
+-- Called when Core_SetPlayerDefeated() is invoked.
+-- Signals that a player has been eliminated from play due to defeat.
 function Mod_OnPlayerDefeated(player, reason)
-	
-	
-	
 end
 
--- When a victory condition is met, a module must call Core_OnGameOver() in order to invoke this delegate and notify all modules that the match is about to end. Generally used for clean up (removal of rules, objectives, and UI elements specific to the module).
+-- Called by `Core_OnGameOver()` when that the match is about to end.
+-- Generally used for clean up of mod-specific elements
 function Mod_OnGameOver()
-	BuildOrderDatastore_Stop()
-	BuildOrderStartup_Stop()
-	BuildOrderSelectorUI_Stop()
 	BuildOrder_Stop()
-	Mod_StopSimspeedCycle()
+	Slowdown_Stop()
 end

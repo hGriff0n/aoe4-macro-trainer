@@ -1,6 +1,24 @@
-BUILD_ORDER_SELECTOR_UI_NAME = "BuildOrderSelectorUI"
+-----------------------------------------------------------------------
+-- Imports
+-----------------------------------------------------------------------
 
-BUILD_ORDER_SELECTOR_UI_XAML = [[
+
+-----------------------------------------------------------------------
+-- Data
+-----------------------------------------------------------------------
+
+_selector_data = {
+    created_ui = false,
+    model = nil,
+    view = nil,
+    commands = nil,
+    callbacks = {}
+}
+
+BUILD_ORDER_SELECTOR_UI_NAME = "BuildOrderSelectorUI"
+EMPTY_BO_LIST_MESSAGE = "No build orders for this civilization"
+
+BO_UI_XAML = [[
 <Grid x:Name="BuildOrderSelectorRoot"
       xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -147,112 +165,107 @@ BUILD_ORDER_SELECTOR_UI_XAML = [[
 </Grid>
 ]]
 
-BUILD_ORDER_SELECTOR_UI_STATE = {
-	created = false,
-	model = {},
-	view_model = nil,
-	callbacks = {},
-	commands = nil,
-}
+-----------------------------------------------------------------------
+-- Helper Functions
+-----------------------------------------------------------------------
 
-function BuildOrderSelectorUI_InvokeCallback(key, parameter)
+local function BuildOrderSelectorUI_InvokeCallback(key, parameter)
 	local callbackName = BUILD_ORDER_SELECTOR_UI_STATE.callbacks[key]
-	if type(callbackName) ~= "string" or type(_G[callbackName]) ~= "function" then
+	if type(callbackName) ~= "string" or
+       type(_G[callbackName]) ~= "function"
+    then
 		return false
 	end
 	_G[callbackName](parameter)
 	return true
 end
 
-function BuildOrderSelectorUI_DispatchStartGame(parameter)
+local function BuildOrderSelectorUI_DispatchStartGame(parameter)
 	return BuildOrderSelectorUI_InvokeCallback("start_game", parameter)
 end
 
-function BuildOrderSelectorUI_DispatchContinueWithout(parameter)
+local function BuildOrderSelectorUI_DispatchContinueWithout(parameter)
 	return BuildOrderSelectorUI_InvokeCallback("continue_without", parameter)
 end
 
-function BuildOrderSelectorUI_Options(model)
-	local options = {}
-	for _, order in ipairs(model.orders or {}) do
-		if type(order) == "table" then
-			table.insert(options, {
-				id = order.id or "",
-				label = order.label or order.title or order.id or "",
-				selected = order.selected == true,
-			})
-		end
-	end
-	return options
-end
+-----------------------------------------------------------------------
+-- Mod Interface
+-----------------------------------------------------------------------
 
-function BuildOrderSelectorUI_BuildViewModel(model)
-	model = type(model) == "table" and model or {}
-	local options = BuildOrderSelectorUI_Options(model)
-	return {
-		selector_options = options,
-		selected_index = -1,
-		empty_message = #options == 0 and "No build orders for this civilization" or "",
-		commands = BUILD_ORDER_SELECTOR_UI_STATE.commands or {},
-	}
-end
+function BuildOderSelectorUI_Show(model)
+    if not type(model) == "table" then
+        return false
+    end
 
-function BuildOrderSelectorUI_CreatePresenter()
-	BUILD_ORDER_SELECTOR_UI_STATE.commands = {
-		start_game = UI_CreateCommand("BuildOrderSelectorUI_DispatchStartGame"),
-		continue_without = UI_CreateCommand("BuildOrderSelectorUI_DispatchContinueWithout"),
-	}
-	BUILD_ORDER_SELECTOR_UI_STATE.view_model = BuildOrderSelectorUI_BuildViewModel(
-		BUILD_ORDER_SELECTOR_UI_STATE.model
-	)
-	UI_AddChild("ScarDefault", "XamlPresenter", BUILD_ORDER_SELECTOR_UI_NAME, {
-		IsHitTestVisible = true,
-		Xaml = BUILD_ORDER_SELECTOR_UI_XAML,
-		DataContext = UI_CreateDataContext(BUILD_ORDER_SELECTOR_UI_STATE.view_model),
-	})
-end
-
-function BuildOrderSelectorUI_EnsureCreated()
-	if BUILD_ORDER_SELECTOR_UI_STATE.created then
-		return true
-	end
-	local success = pcall(BuildOrderSelectorUI_CreatePresenter)
-	if not success then
-		BUILD_ORDER_SELECTOR_UI_STATE.view_model = nil
-		return false
-	end
-	BUILD_ORDER_SELECTOR_UI_STATE.created = true
-	return true
-end
-
-function BuildOrderSelectorUI_Show(model)
-	BUILD_ORDER_SELECTOR_UI_STATE.model = type(model) == "table" and model or {}
+    _selector_data.model = model
 	if not BuildOrderSelectorUI_EnsureCreated() then
 		return false
 	end
-	BUILD_ORDER_SELECTOR_UI_STATE.view_model = BuildOrderSelectorUI_BuildViewModel(
-		BUILD_ORDER_SELECTOR_UI_STATE.model
-	)
-	UI_SetDataContext(BUILD_ORDER_SELECTOR_UI_NAME, BUILD_ORDER_SELECTOR_UI_STATE.view_model)
-	return true
+
+    UI_SetDataContext(BUILD_ORDER_SELECTOR_UI_NAME, _selector_data.view)
+    return true
 end
 
-function BuildOrderSelectorUI_Hide()
-	if BUILD_ORDER_SELECTOR_UI_STATE.created then
-		UI_Remove(BUILD_ORDER_SELECTOR_UI_NAME)
-	end
-	BUILD_ORDER_SELECTOR_UI_STATE.created = false
-	BUILD_ORDER_SELECTOR_UI_STATE.model = {}
-	BUILD_ORDER_SELECTOR_UI_STATE.view_model = nil
-	BUILD_ORDER_SELECTOR_UI_STATE.commands = nil
-	return true
+function BuildOderSelectorUI_Hide()
+    if _selector_data.created_ui then
+        UI_Remove(BUILD_ORDER_SELECTOR_UI_NAME)
+    end
+
+    _selector_data.created_ui = false
+    _selector_data.model = nil
+    _selector_data.view = nil
+    _selector_data.commands = nil
+    return true
 end
 
 function BuildOrderSelectorUI_SetCallbacks(callbacks)
-	BUILD_ORDER_SELECTOR_UI_STATE.callbacks = type(callbacks) == "table" and callbacks or {}
+    if type(callbacks) == "table" and callbacks then
+        _selector_data.callbacks = callbacks
+    end
 end
 
 function BuildOrderSelectorUI_Stop()
 	BuildOrderSelectorUI_Hide()
-	BUILD_ORDER_SELECTOR_UI_STATE.callbacks = {}
+	_selector_data.callbacks = {}
+end
+
+-----------------------------------------------------------------------
+-- Mod Implementation
+-----------------------------------------------------------------------
+
+local function BuildOrderSelectorUI_CreatePresenter()
+    _selector_data.commands = {
+        start_game = UI_CreateCommand("BuildOrderSelectorUI_DispatchStartGame"),
+        continue_without = UI_CreateCommand("BuildOrderSelectorUI_DispatchContinueWithout"),
+    }
+
+    _selector_data.view = {
+        selector_options = _selector_data.model.orders,
+        selected_index = -1,
+        empty_message = #_selector_data.model.orders == 0
+            and EMPTY_BO_LIST_MESSAGE or "",
+        commands = _selector_data.commands
+    }
+	UI_AddChild(
+        "ScarDefault", "XamlPresenter", BUILD_ORDER_SELECTOR_UI_NAME,
+        {
+            IsHitTestVisible = true,
+            Xaml = BUILD_ORDER_SELECTOR_UI_XAML,
+		    DataContext = UI_CreateDataContext(_selector_data.view),
+	    })
+end
+
+function BuildOrderSelectorUI_EnsureCreated()
+    if _selector_data.created_ui then
+        return true
+    end
+
+    local success = pcall(BuildOrderSelectorUI_CreatePresenter)
+    if not success then
+        BuildOderSelectorUI_Hide()
+        return false
+    end
+
+    _selector_data.created_ui = true
+    return true
 end

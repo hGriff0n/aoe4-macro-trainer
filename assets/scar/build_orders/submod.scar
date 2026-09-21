@@ -1,0 +1,291 @@
+-----------------------------------------------------------------------
+-- Imports
+-----------------------------------------------------------------------
+import("build_order/localization.scar")
+import("build_order/objectives.scar")
+import("build_order/selector_ui.scar")
+
+import("build_orders/checks/hints.scar")
+import("build_orders/checks/rallypoint.scar")
+import("build_orders/checks/resources.scar")
+import("build_orders/checks/upgrades.scar")
+import("build_orders/checks/units.scar")
+import("build_orders/checks/produce.scar")
+import("build_orders/checks/age_up.scar")
+import("build_orders/checks/built.scar")
+import("build_orders/checks/buildings.scar")
+import("build_orders/checks/vils.scar")
+
+-----------------------------------------------------------------------
+-- Data
+-----------------------------------------------------------------------
+
+
+_buildorder_data = {
+	selectedBuildOrderID = nil,
+	startupStarted = false,
+	startupActive = false,
+	startupAwaitingChoice = false,
+	startupFallbackOpen = false,
+	startupScreen = "hidden",
+	startupPriorSelectionID = nil,
+	startupMessage = nil,
+	compatibleBuildOrderIDs = {},
+	buildOrderStarted = false,
+}
+
+BUILD_ORDER_STARTUP_CIV_ALIASES = {
+	abbasid = "abbasid",
+	abbasid_ha_01 = "abbasid",
+	ayyubid = "ayyubids",
+	ayyubid_cmp = "ayyubids",
+	byzantine = "byzantines",
+	byzantine_ha_mac = "macedonian_dynasty",
+	chinese_ha_01 = "zhu_xi",
+	chinese_ha_jin = "jin_dynasty",
+	english_ha_01 = "house_of_lancaster",
+	french_ha_01 = "jeanne_darc",
+	hre_ha_01 = "order_of_the_dragon",
+	japanese_ha_01 = "sengoku_daimyo",
+	malian = "malians",
+	mongol = "mongols",
+	mongol_ha_gol = "golden_horde",
+	ottoman = "ottomans",
+	sultanate_ha_tug = "tughlaq_dynasty",
+}
+
+local _SELECTOR_CALLBACKS = {
+    start_game = "BuildOrder_StartGame",
+    continue_without = "BuildOrder_ContinueWithoutBuildOrder",
+}
+
+BUILD_ORDER_DATASTORE_SCHEMA_VERSION = 2
+BUILD_ORDER_DATASTORE_ID = "macroTrainerBuildOrders"
+
+-----------------------------------------------------------------------
+-- Helper Functions
+-----------------------------------------------------------------------
+
+local function LoadDatastore(id)
+    Game_LoadTextDataStore(id, "")
+    return Game_RetrieveTableData(id, false)
+end
+
+local function SaveDatastore(id, bo_list)
+	Game_StoreTableData(id, {
+		schema_version = BUILD_ORDER_DATASTORE_SCHEMA_VERSION,
+		build_orders = bo_list
+	})
+	Game_SaveTextDataStore(id, "")
+end
+
+local function BuildBuildOrderOptionList()
+	local orders = {}
+	for _, bo in ipairs(_buildorder_data.build_order_options) do
+		table.insert(orders, {
+			id = bo.id,
+			label = bo.title,
+			selected = false,
+		})
+	end
+	return orders
+end
+
+local function CanonicalCivID(player)
+	local raceName = Player_GetRaceName(player)
+	local normalized = string.lower(raceName or "")
+	return BUILD_ORDER_STARTUP_CIV_ALIASES[normalized] or normalized
+end
+
+local function SpawnBuildOrderSelector(player)
+    if not _buildorder_data.waiting_selection then
+        return false
+    end
+
+    BuildOrderSelectorUI_SetCallbacks(_SELECTOR_CALLBACKS)
+
+    -- If there are no configured build orders for the player's civ,
+    -- a failure message is provided instead
+	return BuildOrderSelectorUI_Show({
+		current_civ = CanonicalCivID(player),
+		orders = BuildBuildOrderOptionList(),
+	})
+end
+
+-----------------------------------------------------------------------
+-- Mod Interface
+-----------------------------------------------------------------------
+
+function BuildOrder_OnInit()
+	BuildOrder_Objectives_OnInit()
+end
+
+function BuildOrder_OnGameStart(start_hooks)
+    if _buildorder_data.game_started then
+        return false
+    end
+
+    local bo_data = LoadDatastore(BUILD_ORDER_DATASTORE_ID)
+
+    -- Grabs the configured build orders that the player can use for their
+    -- current civilization to present for selection immediately on start
+    -- We cannot do this in the settings menu as those values are
+    -- populated without loading the mod's logic
+	local player = Game_GetLocalPlayer()
+    _buildorder_data.build_order_options =
+        FilterCompatibleBuildOrders(bo_data, player)
+    
+    -- Add rule to automatically pause the game on the next tick
+    -- We cannot pause immediately as the ui would otherwise not load
+	Rule_Remove(BuildOrder_PauseNextTick)
+	Rule_Add(BuildOrder_PauseNextTick)
+
+    -- Spawn the build order selection modal for user
+    _buildorder_data.waiting_selection = true
+	_buildorder_data.start_hooks = start_hooks
+    return SpawnBuildOrderSelector(player)
+end
+
+function BuildOrder_Stop()
+    if not _buildorder_data.game_started then
+        return false
+    end
+
+	BuildOrderSelectorUI_Stop()
+
+    _buildorder_data.game_started = false
+    _buildorder_data.waiting_selection = false
+    _buildorder_data.build_order_options = []
+	_buildorder_data.start_hooks = []
+	Rule_Remove(BuildOrderStartup_PauseNextTick)
+end
+
+-- I think this has to be part of the interface since it's used in rules?
+function BuildOrder_PauseNextTick()
+	Rule_RemoveMe()
+	if _buildorder_data.waiting_selection then
+		Misc_SetSimRate(0)
+	end
+end
+
+function BuildOrder_ContinueWithoutBuildOrder()
+	if not _buildorder_data.waiting_selection then
+		return false
+	end
+
+	FinishGameStart()
+	return true
+end
+
+function BuildOrder_ContinueWithBuildOrder(bo)
+	if not _buildorder_data.waiting_selection then
+		return false
+	end
+
+	if bo == nil then
+		return BuildOrder_ContinueWithoutBuildOrder()
+	end
+
+	BuildOrder_Objectives_Start(bo, Game_GetLocalPlayer())
+	FinishGameStart()
+	return true
+end
+
+function BuildOrder_StartGame(parameter)
+	if not _buildorder_data.waiting_selection then
+		return false
+	end
+
+	local selected = GetIdParameter(parameter)
+	if selected == nil then
+		return false
+	end
+
+	for _, bo in ipairs(_buildorder_data.build_order_options) do
+		if bo.id == selected then
+			return BuildOrder_ContinueWithBuildOrder(bo)
+		end
+	end
+	return BuildOrder_ContinueWithoutBuildOrder()
+end
+
+
+-----------------------------------------------------------------------
+-- Mod Implementation
+-----------------------------------------------------------------------
+
+local function AllItemsPassFilter(list, fn)
+	for _, item in ipairs(list) do
+		if not fn(item) then
+			return false
+		end
+	end
+	return true
+end
+
+local function IsCheckValid(check)
+	return type(check) == "table"
+	   and type(check.id) == "string" and check.id ~= ""
+	   and type(check.kind) == "string" and check.kind ~= ""
+	   and type(check.optional) == "boolean"
+	   and type(check.payload) == "table"
+	   and BuildOrder_Objectives_ValidateCheck(check)
+end
+
+local function IsValidBuildOrderStep(step)
+	return type(step) == "table"
+	   and step.title == nil or (type(step.title) and step.title ~= "")
+	   and type(step.checks) == "table" and #step.checks > 0
+	   and AllItemsPassFilter(step.checks, IsCheckValid)
+end
+
+local function IsValidBuildOrder(bo)
+	return type(bo) == "table"
+	   and type(bo.id) == "string"
+	   and bo.id ~= ""
+	   and type(bo.civ) == "string"
+	   and bo.civ ~= ""
+	   and type(bo.title) == "string"
+	   and bo.title ~= ""
+	   and type(bo.steps) == "table"
+	   and #bo.steps > 0
+	   and AllItemsPassFilter(bo.steps, IsValidBuildOrderStep)
+end
+
+function FilterCompatibleBuildOrders(bo_data, player)
+	local playerciv = CanonicalCivID(player)
+
+	local valid_bos = []
+	for id, bo in pairs(bo_data.build_orders) do
+		if string.lower(bo.civ) == playerciv and
+		   IsValidBuildOrder(id, bo)
+		then
+			valid_bos[#valid_bos + 1] = bo
+		end
+	end
+
+    return valid_bos
+end
+
+local function GetIdParameter(parameter)
+	if type(parameter) == "table" then
+		return parameter.id or parameter.value
+	end
+	if type(parameter) == "string" then
+		return parameter
+	end
+	return nil
+end
+
+local function FinishGameStart()
+	_buildorder_data.waiting_selection = false
+	Rule_Remove(BuildOrderStartup_PauseNextTick)
+	BuildOrderSelectorUI_Hide()
+	-- TODO: This should use a function from `simspeed`
+	Misc_SetSimRate(8)
+
+	-- TODO: Is there any state I need to pass through?
+	for _, hook in ipairs(_buildorder_data.start_hooks) do
+		hook()
+	end
+end

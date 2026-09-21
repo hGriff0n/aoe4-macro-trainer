@@ -1,7 +1,54 @@
-function Hints_FormatTitle(check, context)
-	return Loc_FormatText(BUILD_ORDER_LOC_KEYS.hint, LOC(check.payload.text))
+-----------------------------------------------------------------------
+-- Imports
+-----------------------------------------------------------------------
+
+
+-----------------------------------------------------------------------
+-- Data
+-----------------------------------------------------------------------
+
+_bo_hints_data = {
+
+}
+
+local _HINT_TEXT_FORMAT = "[HINT] %s"
+
+-----------------------------------------------------------------------
+-- Helper Functions
+-----------------------------------------------------------------------
+
+-----------------------------------------------------------------------
+-- Mod Interface
+-----------------------------------------------------------------------
+
+function BuildOrder_Check_Hints_Register()
+    BuildOrder_Objectives_RegisterCheckHandlers(
+        "hints",
+        BuildOrder_Check_Hints_Activate,
+        BuildOrder_Check_Hints_Deactivate,
+        BuildOrder_Check_Hints_GetText,
+        BuildOrder_Check_Hints_Validate,
+        nil
+    )
 end
 
-BuildOrder_RegisterHandler("hints", {
-	formatTitle = Hints_FormatTitle,
-})
+function BuildOrder_Check_Hints_Validate(check)
+    local t = check.payload
+    return t.text ~= nil
+end
+
+function BuildOrder_Check_Hints_Activate(obj, player)
+    return true
+end
+
+function BuildOrder_Check_Hints_Deactivate(obj)
+end
+
+function BuildOrder_Check_Hints_GetText(obj)
+    return Loc_FormatText(_HINT_TEXT_FORMAT, check.payload.text)
+end
+
+-----------------------------------------------------------------------
+-- Mod Implementation
+-----------------------------------------------------------------------
+

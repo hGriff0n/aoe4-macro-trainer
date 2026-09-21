@@ -1,85 +1,150 @@
-UNITS_STATE = {}
-UNITS_POLLING = false
-UNITS_SCAN_STATE = nil
-UNITS_POLL_INTERVAL_SECONDS = 1
+-----------------------------------------------------------------------
+-- Imports
+-----------------------------------------------------------------------
 
-function Units_FormatTitle(check, context)
-	return Loc_FormatText(
-		BUILD_ORDER_LOC_KEYS.activeUnits,
-		Loc_FormatInteger(check.payload.count),
-		BuildOrder_FirstSquadName(check.payload, context)
-	)
+
+-----------------------------------------------------------------------
+-- Data
+-----------------------------------------------------------------------
+
+_bo_units_data = {
+
+}
+
+ACTIVE_UNITS_FORMAT = ""
+
+-----------------------------------------------------------------------
+-- Helper Functions
+-----------------------------------------------------------------------
+
+-- Similar to built.scar/buildings.scar, but for units
+local function ResolveUnitPBGs(ids)
+    local pbgs = []
+    for _, id in ipairs(id) do
+        local found, pbg = BP_GetSquadBlueprint(id)
+        if found and pbg ~= nil then
+            pbgs[#pbgs + 1] = pbg
+        end
+    end
+    return pbgs
 end
 
-function Units_ScanSquad(groupID, squadIndex, squad)
-	local state = UNITS_SCAN_STATE
-	if state == nil then
-		return true
-	end
-	-- Player_GetSquads is player-scoped, but retain the owner guard for converted squads.
-	if Squad_GetPlayerOwner(squad) ~= state.player then
-		return false
-	end
-	if BuildOrder_MatchesAnyBlueprint(state.pbgs, Squad_GetBlueprint(squad)) == false then
-		return false
-	end
-	if Squad_IsAlive(squad) == false then
-		return false
-	end
-	state.count = state.count + 1
-	return false
+-- TODO: Same as built.scar
+local function PBGMatches(left, right)
+    return left ~= nil and right ~= nil
+		and left.PropertyBagGroupID == right.PropertyBagGroupID
+		and left.PropertyBagGroupModPackID == right.PropertyBagGroupModPackID
+		and left.PropertyBagGroupType == right.PropertyBagGroupType
 end
 
-function Units_Poll()
-	BuildOrder_BeginCheckUpdates()
-	for _, state in pairs(UNITS_STATE) do
-		state.count = 0
-		if state.pbgs ~= nil then
-			UNITS_SCAN_STATE = state
-			SGroup_ForEach(Player_GetSquads(state.player), Units_ScanSquad)
-		end
-		UNITS_SCAN_STATE = nil
-		BuildOrder_SetCheckComplete(state.checkID, state.count >= state.payload.count)
-	end
-	BuildOrder_EndCheckUpdates()
+local function MatchesAnyBlueprint(pbgs, blueprint)
+    if pbgs == nil then
+        return false
+    end
+
+    for _, pbg in ipairs(pbgs) do
+        if PBGMatches(pbg, blueprint) then
+            return true
+        end
+    end
+    return false
 end
 
-function Units_Activate(check, objectiveID, context)
-	local player = context.localPlayer
-	if player == nil then
-		return
-	end
-
-	UNITS_STATE[check.id] = {
-		checkID = check.id,
-		player = player,
-		objectiveID = objectiveID,
-		payload = check.payload,
-		pbgs = BuildOrder_ResolveBlueprints(check.payload.ids, BP_GetSquadBlueprint),
-		count = 0,
-	}
-	if UNITS_POLLING == false then
-		UNITS_POLLING = true
-		Rule_AddInterval(Units_Poll, UNITS_POLL_INTERVAL_SECONDS)
-	end
-	Units_Poll()
+-- Similar to built.scar/buildings.scar, but for units
+local function UnitName(unit, id)
+    if unit ~= nil and unit.pbgs ~= nil and #unit.pbgs > 0 then
+        local resolved, uiInfo = BP_GetSquadUIInfo(
+            unit.pbgs[1], Player_GetRace(unit.player))
+        if uiInfo ~= nil and uiInfo.screenName ~= nil then
+            return uiInfo.screenName
+        end
+    end
+    print("Missing localization string for " .. tostring(id))
+    return BuildOrder_RawText(tostring(id))
 end
 
-function Units_Deactivate(check, objectiveID, context)
-	local state = UNITS_STATE[check.id]
-	if state == nil then
-		return
-	end
+-----------------------------------------------------------------------
+-- Mod Interface
+-----------------------------------------------------------------------
 
-	UNITS_STATE[check.id] = nil
-	if next(UNITS_STATE) == nil and UNITS_POLLING then
-		Rule_Remove(Units_Poll)
-		UNITS_POLLING = false
-	end
+function BuildOrder_Check_Units_Register()
+    BuildOrder_Objectives_RegisterCheckHandlers(
+        "units",
+        BuildOrder_Check_Units_Activate,
+        BuildOrder_Check_Units_Deactivate,
+        BuildOrder_Check_Units_GetText,
+        BuildOrder_Check_Units_Validate,
+        BuildOrder_Check_Units_PollCompletion
+    )
 end
 
-BuildOrder_RegisterHandler("units", {
-	formatTitle = Units_FormatTitle,
-	activate = Units_Activate,
-	deactivate = Units_Deactivate,
-})
+function BuildOrder_Check_Units_Validate(check)
+    local t = check.payload
+    return t.ids ~= nil
+end
+
+function BuildOrder_Check_Units_Activate(obj, player)
+    if _bo_units_data.units[obj.check.id] ~= nil then
+        return false
+    end
+
+    local payload = obj.check.payload
+    local state = {
+        player = player,
+        pbgs = ResolveBlueprints(payload.ids),
+        minimum = payload.count ~= nil and payload.count or 0,
+    }
+
+    if #state.pbgs == 0 then
+        return false
+    end
+    _bo_units_data.units[obj.check.id] = state
+    return true
+end
+
+function BuildOrder_Check_Units_Deactivate(obj)
+    if _bo_units_data.units[obj.check.id] == nil then
+        return
+    end
+
+    _bo_units_data.units[obj.check.id] = nil
+end
+
+function BuildOrder_Check_Units_GetText(obj)
+    local payload = obj.check.payload
+    local unit_text = UnitName(
+        _bo_units_data.units[obj.check.id], payload.id
+    )
+    return Loc_FormatText(
+        ACTIVE_UNITS_FORMAT,
+        payload.count,
+        unit_text
+    )
+end
+
+-- TODO: Would be ideal if we could do all checks in one go
+function BuildOrder_Check_Units_PollCompletion(obj)
+    local state = _bo_units_data[obj.check.id]
+    if state == nil then
+        return false
+    end
+
+    local count = 0
+    SGroup_ForEach(
+        Player_GetSquads(state.player),
+        function(groupId, squadIndex, squad)
+            if Squad_GetPlayerOwner(squad) == state.player
+                and MatchesAnyBlueprint(
+                    state.pbgs, Squad_GetBlueprint(squad))
+                and Squad_IsAlive(squad)
+            then
+                count = count + 1
+            end
+        end
+    )
+    return count >= state.minimum
+end
+
+-----------------------------------------------------------------------
+-- Mod Implementation
+-----------------------------------------------------------------------

@@ -1,215 +1,278 @@
-PRODUCE_STATE = {}
-PRODUCE_QUEUE_STATE = nil
-PRODUCE_RECOUNT_PENDING = {}
-PRODUCE_RECOUNT_RULE_ACTIVE = false
-PRODUCE_COMMAND_EVENT_REGISTERED = false
-PRODUCE_COMPLETION_EVENT_REGISTERED = false
+-----------------------------------------------------------------------
+-- Imports
+-----------------------------------------------------------------------
 
-function Produce_FormatTitle(check, context)
-	local name = BuildOrder_FirstSquadName(check.payload, context)
-	if check.payload.constant then
-		return Loc_FormatText(BUILD_ORDER_LOC_KEYS.constantProduce, name)
-	elseif check.payload.queued then
-		return Loc_FormatText(BUILD_ORDER_LOC_KEYS.queueProduce, Loc_FormatInteger(check.payload.count), name)
-	end
-	return Loc_FormatText(BUILD_ORDER_LOC_KEYS.produce, Loc_FormatInteger(check.payload.count), name)
+
+-----------------------------------------------------------------------
+-- Data
+-----------------------------------------------------------------------
+
+_bo_produce_data = {
+    units = {},
+    num_build_listeners = false,
+    num_command_listeners = false
+}
+
+CONSTANT_PROD_FORMAT = "Constantly produce %s"
+QUEUE_UNIT_FORMAT = "Have %d %s queued"
+PROD_UNIT_FORMAT = "Produce at least %d %s"
+
+-----------------------------------------------------------------------
+-- Helper Functions
+-----------------------------------------------------------------------
+
+-- Similar to built.scar/buildings.scar, but for units
+local function ResolveUnitPBGs(ids)
+    local pbgs = []
+    for _, id in ipairs(id) do
+        local found, pbg = BP_GetSquadBlueprint(id)
+        if found and pbg ~= nil then
+            pbgs[#pbgs + 1] = pbg
+        end
+    end
+    return pbgs
 end
 
-function Produce_IsQueued(state)
-	return state.payload.queued and state.payload.constant ~= true
+-- TODO: Same as built.scar
+local function PBGMatches(left, right)
+    return left ~= nil and right ~= nil
+		and left.PropertyBagGroupID == right.PropertyBagGroupID
+		and left.PropertyBagGroupModPackID == right.PropertyBagGroupModPackID
+		and left.PropertyBagGroupType == right.PropertyBagGroupType
 end
 
-function Produce_ScanQueueEntity(groupID, entityIndex, entity)
-	local state = PRODUCE_QUEUE_STATE
-	if state == nil then
-		return true
-	end
-	if Entity_GetPlayerOwner(entity) ~= state.player then
-		return false
-	end
-	if Entity_HasProductionQueue(entity) == false then
-		return false
-	end
+local function MatchesAnyBlueprint(pbgs, blueprint)
+    if pbgs == nil then
+        return false
+    end
 
-	local queueSize = Entity_GetProductionQueueSize(entity)
-	for index = 0, queueSize - 1 do
-		if Entity_GetProductionQueueItemType(entity, index) == PITEM_Spawn
-			and BuildOrder_MatchesAnyBlueprint(state.pbgs, Entity_GetProductionQueueItem(entity, index)) then
-			state.queueCount = state.queueCount + 1
-		end
-	end
-	return false
+    for _, pbg in ipairs(pbgs) do
+        if PBGMatches(pbg, blueprint) then
+            return true
+        end
+    end
+    return false
 end
 
-local function Produce_QueueHasCount(state)
-	state.queueCount = 0
-	PRODUCE_QUEUE_STATE = state
-	EGroup_ForEach(Player_GetEntities(state.player), Produce_ScanQueueEntity)
-	PRODUCE_QUEUE_STATE = nil
-	return state.queueCount >= state.payload.count
+-- Similar to built.scar/buildings.scar, but for units
+local function UnitName(unit, id)
+    if unit ~= nil and unit.pbgs ~= nil and #unit.pbgs > 0 then
+        local resolved, uiInfo = BP_GetSquadUIInfo(
+            unit.pbgs[1], Player_GetRace(unit.player))
+        if uiInfo ~= nil and uiInfo.screenName ~= nil then
+            return uiInfo.screenName
+        end
+    end
+    print("Missing localization string for " .. tostring(id))
+    return BuildOrder_RawText(tostring(id))
 end
 
-function Produce_ReconcileQueuedNextTick()
-	Rule_RemoveMe()
-	PRODUCE_RECOUNT_RULE_ACTIVE = false
-
-	local pending = PRODUCE_RECOUNT_PENDING
-	PRODUCE_RECOUNT_PENDING = {}
-	BuildOrder_BeginCheckUpdates()
-	for _, state in pairs(PRODUCE_STATE) do
-		if state ~= nil and Produce_IsQueued(state) and pending[state.checkID] == true then
-			BuildOrder_SetCheckComplete(state.checkID, Produce_QueueHasCount(state))
-		end
-	end
-	BuildOrder_EndCheckUpdates()
+local function IsInvalidEvent(event)
+    return event == nil or event.player == nil or event.pbg == nil
+        or event.entity == nil or event.entity.EntityID = nil
 end
 
-function Produce_ScheduleQueueReconciliation(checkID)
-	if checkID == nil or PRODUCE_RECOUNT_PENDING[checkID] == true then
-		return
-	end
+-----------------------------------------------------------------------
+-- Mod Interface
+-----------------------------------------------------------------------
 
-	PRODUCE_RECOUNT_PENDING[checkID] = true
-	if PRODUCE_RECOUNT_RULE_ACTIVE == false then
-		PRODUCE_RECOUNT_RULE_ACTIVE = true
-		Rule_Add(Produce_ReconcileQueuedNextTick)
-	end
+function BuildOrder_Check_Produce_Register()
+    BuildOrder_Objectives_RegisterCheckHandlers(
+        "produce",
+        BuildOrder_Check_Produce_Activate,
+        BuildOrder_Check_Produce_Deactivate,
+        BuildOrder_Check_Produce_GetText,
+        BuildOrder_Check_Produce_Validate,
+        nil
+    )
 end
 
-function Produce_OnEntityCommandIssued(context)
-	if context == nil or context.entity == nil or context.entity.EntityID == nil then
-		return
-	end
-
-	local owner = Entity_GetPlayerOwner(context.entity)
-	if owner == nil then
-		return
-	end
-	if Entity_HasProductionQueue(context.entity) == false then
-		return
-	end
-
-	for _, state in pairs(PRODUCE_STATE) do
-		if state ~= nil and Produce_IsQueued(state) and owner == state.player then
-			Produce_ScheduleQueueReconciliation(state.checkID)
-		end
-	end
+function BuildOrder_Check_Produce_Validate(check)
+    local t = check.payload
+    return t.ids ~= nil and (t.constant ~= nil or t.count ~= nil)
 end
 
-function Produce_OnBuildItemComplete(context)
-	if context == nil or context.player == nil then
-		return
-	end
+-- child = {
+--   obj_id
+--   check
+--   parent_id
+--   completed
+--   poll_completion_handle (for non-event only)
+-- }
+function BuildOrder_Check_Produce_Activate(obj, player)
+    if _bo_produce_data.units[obj.check.id] ~= nil then
+        return false
+    end
 
-	BuildOrder_BeginCheckUpdates()
-	for checkID, state in pairs(PRODUCE_STATE) do
-		if state ~= nil and context.player == state.player then
-			if Produce_IsQueued(state) then
-				-- Completion does not identify the producer; recount every human queue next tick.
-				Produce_ScheduleQueueReconciliation(state.checkID)
-			elseif state.remaining > 0 and context.pbg ~= nil and context.spawnedSquad ~= nil then
-				if BuildOrder_MatchesAnyBlueprint(state.pbgs, context.pbg) then
-					local squadID = context.spawnedSquad.SquadID
-					if state.seen[squadID] ~= true then
-						state.seen[squadID] = true
-						state.remaining = state.remaining - 1
-						if state.remaining == 0 then
-							BuildOrder_SetCheckComplete(checkID, true)
-						end
-					end
-				end
-			end
-		end
-	end
-	BuildOrder_EndCheckUpdates()
+    local payload = obj.check.payload
+    local pbgs = ResolvePBGs(payload.ids)
+    if #pbgs == 0 then
+        return false
+    end
+
+    _bo_units_data.units[obj.check.id] = {
+        obj_id = obj.obj_id,
+        player = player,
+        pbgs = pbgs
+        minimum = payload.count ~= nil and payload.count or 1,
+        num_built = 0
+        queued = payload.queued,
+        constant = payload.constant
+    }
+    -- Instead of trying to check for "constant" production,
+    -- we only check for a single unit to be produced. "Constant"
+    -- production is more of an optimization to be tracked via metrics
+    if payload.constant then
+        _bo_units_data.units[obj.check.id].count = 1
+    end
+
+    -- TODO: Might want to send both cases through the build events
+    -- It's fine to only send queued checks through command though
+    if payload.queued then
+        _bo_units_data.listening_for_command_event = true
+        if _bo_units_data.num_command_listeners == 0 then
+            Rule_AddGlobalEvent(
+                BuildOrder_Check_Produce_EntityCommandEventHandle,
+                GE_EntityCommandIssued
+            )
+        end
+        _bo_units_data.num_command_listeners =
+            _bo_units_data.num_command_listeners + 1
+
+    else
+        if _bo_units_data.num_build_listeners == 0 then
+            Rule_AddGlobalEvent(
+                BuildOrder_Check_Produce_BuildEventHandle,
+                GE_BuildItemComplete
+            )
+        end
+        _bo_units_data.num_build_listeners =
+            _bo_units_data.num_build_listeners + 1
+    end
+
+    return true
 end
 
-local function Produce_EnsureCommandEventRegistered()
-	if PRODUCE_COMMAND_EVENT_REGISTERED then
-		return
-	end
-
-	Rule_AddGlobalEvent(Produce_OnEntityCommandIssued, GE_EntityCommandIssued)
-	PRODUCE_COMMAND_EVENT_REGISTERED = true
+function BuildOrder_Check_Produce_Deactivate(obj)
+    if _bo_units_data.num_build_listeners > 0
+        or _bo_units_data.num_command_listeners > 0
+    then
+        DeactivateCheck(obj.check.id)
+    end
 end
 
-local function Produce_EnsureCompletionEventRegistered()
-	if PRODUCE_COMPLETION_EVENT_REGISTERED then
-		return
-	end
+function BuildOrder_Check_Produce_GetText(obj)
+    local payload = obj.check.payload
+    local unit_text = UnitName(
+        _bo_produce_data.units[obj.check.id], payload.id
+    )
 
-	Rule_AddGlobalEvent(Produce_OnBuildItemComplete, GE_BuildItemComplete)
-	PRODUCE_COMPLETION_EVENT_REGISTERED = true
+    if payload.constant then
+        return Loc_FormatText(CONSTANT_PROD_FORMAT, unit_text)
+    elseif payload.queued then
+        return Loc_FormatText(QUEUE_UNIT_FORMAT, payload.count, unit_text)
+    else
+        return Loc_FormatText(PROD_UNIT_FORMAT, payload.count, unit_text)
+    end
 end
 
-local function Produce_UpdateObservers()
-	local needsQueuedCommands = false
-	local needsCompletion = false
-	for _, state in pairs(PRODUCE_STATE) do
-		if Produce_IsQueued(state) then
-			needsQueuedCommands = true
-			needsCompletion = true
-		elseif state.remaining > 0 then
-			needsCompletion = true
-		end
-	end
+function BuildOrder_Check_Produce_BuildEventHandle(event)
+    -- TODO: Might want to use slightly different check
+    if IsInvalidEvent(event) then
+        return
+    end
 
-	if needsQueuedCommands then
-		Produce_EnsureCommandEventRegistered()
-	elseif PRODUCE_COMMAND_EVENT_REGISTERED then
-		Rule_RemoveGlobalEvent(Produce_OnEntityCommandIssued)
-		PRODUCE_COMMAND_EVENT_REGISTERED = false
-	end
+    for check_id, state in pairs(_bo_produce_data.units) do
+        -- TODO: Might be worth skipping the `state.queued` filter
+        if event.player == state.player and not state.queued then
+            if MatchesAnyBlueprint(state.pbgs, event.pbg) then
+                state.num_built = state.num_built + 1
+            end
 
-	if needsCompletion then
-		Produce_EnsureCompletionEventRegistered()
-	elseif PRODUCE_COMPLETION_EVENT_REGISTERED then
-		Rule_RemoveGlobalEvent(Produce_OnBuildItemComplete)
-		PRODUCE_COMPLETION_EVENT_REGISTERED = false
-	end
-
-	if needsQueuedCommands == false then
-		PRODUCE_RECOUNT_PENDING = {}
-		if PRODUCE_RECOUNT_RULE_ACTIVE then
-			Rule_Remove(Produce_ReconcileQueuedNextTick)
-			PRODUCE_RECOUNT_RULE_ACTIVE = false
-		end
-	end
+            -- TODO: We'll want to redo this for constant metrics
+            -- if we ever get to adding that
+            if state.num_built >= state.minimum then
+                Obj_SetState(state.obj_id, OS_Complete)
+                DeactivateCheck(check_id)
+            end
+        end
+    end
 end
 
-function Produce_Activate(check, objectiveID, context)
-	local player = context.localPlayer
-	if player == nil then
-		return
-	end
+-- Only used for checking the number of queued elements
+function BuildOrder_Check_Produce_EntityCommandEventHandle(event)
+    if IsInvalidEvent(event) then
+        return
+    end
 
-	PRODUCE_STATE[check.id] = {
-		checkID = check.id,
-		objectiveID = objectiveID,
-		player = player,
-		payload = check.payload,
-		pbgs = BuildOrder_ResolveBlueprints(check.payload.ids, BP_GetSquadBlueprint),
-		remaining = check.payload.count,
-		seen = {},
-	}
-	Produce_UpdateObservers()
-	if Produce_IsQueued(PRODUCE_STATE[check.id]) then
-		BuildOrder_SetCheckComplete(check.id, Produce_QueueHasCount(PRODUCE_STATE[check.id]))
-	end
+    local owner = Entity_GetPlayerOwner(event.entity)
+    if owner == nil or not Entity_HasProductionQueue(event.entity) then
+        return
+    end
+
+    for check_id, state in pairs(_bo_produce_data.units) do
+        if not state.queued or state.player ~= owner then
+            goto continue
+        end
+
+        -- TODO: This is not an ideal way of handling queued as it
+        -- only considers the active queue. If the queued entity completes
+        -- at some point, it is lost to this method of tracking.
+        -- TODO: Maybe track "queued" and "built" separately in this case
+        -- We already subscribe to the build event, so we simply increment
+        -- the num built and add it to num queued
+        local num_queued = 0
+        EGroup_ForEach(
+            Player_GetEntities(state.player),
+            function(groupID, entityIndex, entity)
+                local queue_size = Entity_GetProductionQueueSize(entity)
+                for index = 0, queueSize - 1 do
+                    if QueuedItemIsCheckMatch(entity, index, state.pbgs)
+                    then
+                        num_queued = num_queued + 1
+                    end
+                end
+            end
+        )
+        if num_queued >= state.minimum then
+            Obj_SetState(state.obj_id, OS_Complete)
+            DeactivateCheck(check_id)
+        end
+        ::continue::
+    end
 end
 
-function Produce_Deactivate(check, objectiveID, context)
-	local state = PRODUCE_STATE[check.id]
-	if state == nil then
-		return
-	end
+-----------------------------------------------------------------------
+-- Mod Implementation
+-----------------------------------------------------------------------
 
-	PRODUCE_STATE[check.id] = nil
-	Produce_UpdateObservers()
+local function QueuedItemIsCheckMatch(entity, index, pbgs)
+    return Entity_GetProductionQueueItemType(entity, index) == PITEM_Spawn
+        and BuildOrder_MatchesAnyBlueprint(
+            pbgs, Entity_GetProductionQueueItem(entity, index))
 end
 
-BuildOrder_RegisterHandler("produce", {
-	formatTitle = Produce_FormatTitle,
-	activate = Produce_Activate,
-	deactivate = Produce_Deactivate,
-})
+-- TODO: Same as built.scar, but for different internal data
+local function DeactivateCheck(check_id)
+    if _bo_produce_data.units[check_id] ~= nil then
+        if _bo_produce_data.units[check_id].queued then
+            _bo_produce_data.num_command_listeners =
+                _bo_produce_data.num_command_listeners - 1
+        else
+            _bo_produce_data.num_build_listeners =
+                _bo_produce_data.num_build_listeners - 1
+        end
+
+        _bo_produce_data.units[check_id] = nil
+    end
+
+    -- Only remove the event handler if all checks are deactivated
+    -- since a single step can have multiple checks of the same kind
+    if _bo_produce_data.num_build_listeners == 0 then
+        Rule_RemoveGlobalEvent(
+            BuildOrder_Check_Produce_BuildEventHandle)
+    elseif _bo_produce_data.num_command_listeners == 0 then
+        Rule_RemoveGlobalEvent(
+            BuildOrder_Check_Produce_EntityCommandEventHandle)
+    end
+end

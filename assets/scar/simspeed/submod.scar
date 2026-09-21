@@ -1,0 +1,199 @@
+-----------------------------------------------------------------------
+-- Imports
+-----------------------------------------------------------------------
+
+
+-----------------------------------------------------------------------
+-- Data
+-----------------------------------------------------------------------
+NORMAL_PHASE_OBJECTIVE_TITLE = "$dfb5645698a84afb91cf7a2dfb0f4a4e:4"
+SLOW_PHASE_OBJECTIVE_TITLE = "$dfb5645698a84afb91cf7a2dfb0f4a4e:5"
+
+SLOW_SIM_RATES = {
+	slow_sim_rate_1 = 1,
+	slow_sim_rate_2 = 2,
+	slow_sim_rate_3 = 3,
+	slow_sim_rate_4 = 4,
+	slow_sim_rate_5 = 5,
+	slow_sim_rate_6 = 6,
+	slow_sim_rate_7 = 7,
+}
+NORMAL_SIM_RATE = 8
+DEFAULT_NORMAL_DURATION = 45
+DEFAULT_SLOW_DURATION = 15
+
+-- Global data table that is added to `_mod` in `Slowdown_AddData`
+_slowdown_data = {
+	-- Set to false if the 
+	simspeed_enabled = true,
+	-- boolean flag tracking which phase we currently in
+	in_slow_phase = true,
+	-- Reference to objective tracker with countdown clock
+	objective = nil,
+	-- Number of in-game ticks to spend in each phase
+	-- Settings are given in seconds but converted to align with gameplay
+	-- For "normal" phase, ticks and seconds are assumed to be equivalent
+	normal_duration = DEFAULT_NORMAL_DURATION,
+	slow_duration = DEFAULT_SLOW_DURATION,
+	-- Simrate set during slow phase
+	slowed_sim_rate = 1,
+}
+
+-----------------------------------------------------------------------
+-- Helper Functions
+-----------------------------------------------------------------------
+
+-- Called during load as part of the game setup sequence
+local function GetOptionEnumKey(option)
+	if type(option) ~= "table" or type(option.enum_items) ~= "table" then
+		return nil
+	end
+
+	if option.enum_value == nil then
+		return nil
+	end
+
+	for enumKey, enumValue in pairs(option.enum_items) do
+		if enumValue == option.enum_value then
+			return enumKey
+		end
+	end
+
+	return nil
+end
+
+-- Used when switching between slow/fast periods
+local function StartPhase(title, phaseDuration, simRate, nextRule)
+	ClearPhaseObjective()
+
+	local objective = {
+		Title = title,
+		Description = Loc_Empty(),
+		Type = OT_Information,
+	}
+
+	Objective_Register(objective)
+	Objective_Start(objective, false, false)
+	Objective_StartTimer(objective, COUNT_DOWN, phaseDuration, 0)
+	_slowdown_data.objective = objective
+
+	Misc_SetSimRate(simRate)
+	Rule_Remove(nextRule)
+	Rule_AddOneShot(nextRule, phaseDuration)
+end
+
+local function ClearPhaseObjective()
+	if _slowdown_data.objective ~= nil then
+		Objective_StopTimer(_slowdown_data.objective)
+		Objective_Expire(_slowdown_data.objective, false, false)
+		_slowdown_data.objective = nil
+	end
+end
+
+-----------------------------------------------------------------------
+-- Mod Interface
+-----------------------------------------------------------------------
+
+-- TODO: This does not configure the pre-game settings screen
+function Slowdown_InitFromSettings(options)
+	if type(options) ~= "table"
+			or type(options.section_macro_trainer_settings) ~= "table"
+	then
+		return
+	end
+
+	local settings = options.section_macro_trainer_settings
+
+	-- Early return if the simspeed path is disabled
+	if settings.option_enable_simspeed_cycle == nil
+			or !settings.option_enable_simspeed_cycle then
+		_slowdown_data.simspeed_enabled = false
+		return
+	end
+
+	-- Otherwise, setup the game
+	-- Update the "normal" phase to match the settings
+	if settings.option_normal_duration_seconds ~= nil then
+		_slowdown_data.normal_duration = math.ceil(math.max(1,
+			math.min(300, settings.option_normal_duration_seconds)))
+	end
+
+	-- Update the "slow" phase and sim rate from settings
+	-- Because we are also changing the sim rate, we need to adjust the
+	-- duration of the slow period to align with 
+	local slow_duration = DEFAULT_SLOW_DURATION
+	if settings.option_slow_duration_seconds ~= nil then
+		slow_duration = math.max(1,
+			math.min(300, settings.option_slow_duration_seconds))
+	end
+
+	local rate_key = GetOptionEnumKey(settings.option_slow_sim_rate)
+	if rate_key ~= nil and SLOW_SIM_RATES[rate_key] ~= nil then
+		_slowdown_data.slowed_sim_rate = SLOW_SIM_RATES[rate_key]
+	end
+
+	-- Figure out how many ticks at the configured sim rate equate to
+	-- the desired duration for the slow period (where `SIM_RATE=8`
+	-- equates to normal speed). Ticks must always be an integer, so we
+	-- should round up to ensure players get enough time.
+	_slowdown_data.slow_duration = math.ceil(
+		slow_duration * _slowdown_data.slowSimRate / NORMAL_SIM_RATE)
+end
+
+function Slowdown_Start()
+	if _slowdown_data.simspeed_enabled then
+		Slowdown_EnterNormalPeriod()
+	end
+end
+
+function Slowdown_Stop()
+    Slowdown_StopCycle()
+end
+
+-----------------------------------------------------------------------
+-- Mod Implementation
+-----------------------------------------------------------------------
+
+function Slowdown_EnterSlowPeriod()
+	if _slowdown_data.in_slow_phase then
+		return
+	end
+
+	_slowdown_data.in_slow_phase = true
+	StartPhase(
+		SLOW_PHASE_OBJECTIVE_TITLE,
+		_slowdown_data.slow_duration,
+		_slowdown_data.slowed_sim_rate,
+		Slowdown_EnterNormalPeriod
+	)
+end
+
+function Slowdown_EnterNormalPeriod()
+	if not _slowdown_data.in_slow_phase then
+		return
+	end
+
+	_slowdown_data.in_slow_phase = false
+	StartPhase(
+		NORMAL_PHASE_OBJECTIVE_TITLE,
+		_slowdown_data.normal_duration,
+		NORMAL_SIM_RATE,
+		Slowdown_EnterSlowPeriod
+	)
+end
+
+function Slowdown_StartCycle()
+	if not _slowdown_data.simspeed_enabled then
+		return
+	end
+
+	_slowdown_data.in_slow_phase = true
+	SlowdownEnterNormalPeriod()
+end
+
+function Slowdown_StopCycle()
+	Rule_Remove(Slowdown_EnterSlowPeriod)
+	Rule_Remove(Slowdown_EnterNormalPeriod)
+	ClearPhaseObjective()
+	Misc_SetSimRate(NORMAL_SIM_RATE)
+end

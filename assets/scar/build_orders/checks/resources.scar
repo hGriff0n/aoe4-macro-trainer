@@ -1,89 +1,111 @@
-local RESOURCES_STATE = {}
-local RESOURCES_POLL_INTERVAL_SECONDS = 1
-local RESOURCES_ACTIVE_COUNT = 0
+-----------------------------------------------------------------------
+-- Imports
+-----------------------------------------------------------------------
 
-function Resources_FormatTitle(check, context)
-	return Loc_FormatText(
-		BUILD_ORDER_LOC_KEYS.collect,
-		Loc_FormatInteger(check.payload.count),
-		BuildOrder_ResourceName(check.payload.resource)
-	)
+
+-----------------------------------------------------------------------
+-- Data
+-----------------------------------------------------------------------
+
+_bo_resources_data = {
+    res = {}
+}
+
+COLLECT_RES_FORMAT = "Collect %d %s"
+BUILD_ORDER_RESOURCE_KEYS = {
+	food = "$dfb5645698a84afb91cf7a2dfb0f4a4e:148",
+	gold = "$dfb5645698a84afb91cf7a2dfb0f4a4e:149",
+	wood = "$dfb5645698a84afb91cf7a2dfb0f4a4e:150",
+	stone = "$dfb5645698a84afb91cf7a2dfb0f4a4e:151",
+}
+
+-----------------------------------------------------------------------
+-- Helper Functions
+-----------------------------------------------------------------------
+
+-----------------------------------------------------------------------
+-- Mod Interface
+-----------------------------------------------------------------------
+
+function BuildOrder_Check_Resources_Register()
+    BuildOrder_Objectives_RegisterCheckHandlers(
+        "resources",
+        BuildOrder_Check_Resources_Activate,
+        BuildOrder_Check_Resources_Deactivate,
+        BuildOrder_Check_Resources_GetText,
+        BuildOrder_Check_Resources_Validate,
+        BuildOrder_Check_Resources_PollCompletion
+    )
 end
 
-function Resources_ResourceType(resource)
-	if resource == "food" then
+function BuildOrder_Check_Resources_Validate(check)
+    local t = check.payload
+    return t.count ~= nil and t.resource ~= nil
+end
+
+function BuildOrder_Check_Resources_Activate(obj, player)
+    if _bo_resources_data.res[obj.check.id] ~= nil then
+        return false
+    end
+
+    local payload = obj.check.payload
+    _bo_resources_data.res[obj.check.id] = {
+        player = player,
+        type = ResolveResourceType(payload.resource),
+        count = payload.count
+    }
+    return true
+end
+
+function BuildOrder_Check_Resources_Deactivate(obj)
+    if _bo_resources_data.res[obj.check.id] == nil then
+        return
+    end
+
+    _bo_resources_data.res[obj.check.id] = nil
+end
+
+function BuildOrder_Check_Resources_GetText(obj)
+    local payload = obj.check.payload
+    return Loc_FormatText(
+        COLLECT_RES_FORMAT,
+        payload.count,
+        ResolveResourceLocString(payload.resource)
+    )
+end
+
+-- TODO: Would be ideal if we could do all checks in one go
+function BuildOrder_Check_Resources_PollCompletion(obj)
+    local state = _bo_resources_data[obj.check.id]
+    if state == nil then
+        return false
+    end
+
+    local current = Player_GetResource(res.player, res.type)
+    return current >= res.count
+end
+
+-----------------------------------------------------------------------
+-- Mod Implementation
+-----------------------------------------------------------------------
+
+local function ResolveResourceType(res)
+	if res == "food" then
 		return RT_Food
 	end
-	if resource == "gold" then
+	if res == "gold" then
 		return RT_Gold
 	end
-	if resource == "wood" then
+	if res == "wood" then
 		return RT_Wood
 	end
-	if resource == "stone" then
+	if res == "stone" then
 		return RT_Stone
 	end
 	return nil
 end
 
-function Resources_Poll(checkID)
-	local state = RESOURCES_STATE[checkID]
-	if state == nil then
-		return
-	end
-
-	local amount = Player_GetResource(state.player, state.resourceType)
-	BuildOrder_SetCheckComplete(checkID, amount >= state.payload.count)
+local function ResolveResourceLocString(res)
+    local loc = BUILD_ORDER_RESOURCE_KEYS[res]
+    return loc ~= nil and loc or res
 end
-
-function Resources_PollAll()
-	BuildOrder_BeginCheckUpdates()
-	for checkID, _ in pairs(RESOURCES_STATE) do
-		Resources_Poll(checkID)
-	end
-	BuildOrder_EndCheckUpdates()
-end
-
-function Resources_Activate(check, objectiveID, context)
-	local player = context.localPlayer
-	if player == nil then
-		return
-	end
-
-	local resourceType = Resources_ResourceType(check.payload.resource)
-	if resourceType == nil then
-		return
-	end
-
-	local state = {
-		player = context.localPlayer,
-		objectiveID = objectiveID,
-		payload = check.payload,
-		resourceType = resourceType,
-	}
-	RESOURCES_STATE[check.id] = state
-	if RESOURCES_ACTIVE_COUNT == 0 then
-		Rule_AddInterval(Resources_PollAll, RESOURCES_POLL_INTERVAL_SECONDS)
-	end
-	RESOURCES_ACTIVE_COUNT = RESOURCES_ACTIVE_COUNT + 1
-	Resources_Poll(check.id)
-end
-
-function Resources_Deactivate(check, objectiveID, context)
-	local state = RESOURCES_STATE[check.id]
-	if state == nil then
-		return
-	end
-
-	RESOURCES_STATE[check.id] = nil
-	RESOURCES_ACTIVE_COUNT = RESOURCES_ACTIVE_COUNT - 1
-	if RESOURCES_ACTIVE_COUNT == 0 then
-		Rule_Remove(Resources_PollAll)
-	end
-end
-
-BuildOrder_RegisterHandler("resources", {
-	formatTitle = Resources_FormatTitle,
-	activate = Resources_Activate,
-	deactivate = Resources_Deactivate,
-})

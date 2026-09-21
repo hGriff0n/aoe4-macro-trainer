@@ -1,120 +1,183 @@
-local VILS_STATE = {}
-local VILS_POLL_REGISTERED = false
+-----------------------------------------------------------------------
+-- Imports
+-----------------------------------------------------------------------
 
-function Vils_FormatTitle(check, context)
-	if check.payload.no_collect == true then
-		return Loc_FormatText(
-			BUILD_ORDER_LOC_KEYS.noCollect,
-			BuildOrder_ResourceName(check.payload.resource)
-		)
-	end
 
-	local resourceOrder = { "food", "gold", "wood", "stone" }
-	local allocations = {}
-	for _, resource in ipairs(resourceOrder) do
-		local count = check.payload[resource]
-		if count ~= nil then
-			table.insert(allocations, Loc_FormatText(
-				BUILD_ORDER_LOC_KEYS.allocation,
-				Loc_FormatInteger(count),
-				BuildOrder_ResourceName(resource)
-			))
-		end
-	end
+-----------------------------------------------------------------------
+-- Data
+-----------------------------------------------------------------------
 
-	return Loc_FormatText(
-		BUILD_ORDER_LOC_KEYS.assign,
-		BuildOrder_FormattedArgument(
-			BuildOrder_JoinLocalized(allocations, BUILD_ORDER_LOC_KEYS.allocationJoin)
-		)
-	)
+_bo_vils_data = {
+    active = {}
+}
+
+VIL_4RES = "Assign %d %s | %d %s | %d %s | %d %s"
+VIL_3RES = "Assign %d %s | %d %s | %d %s"
+VIL_2RES = "Assign %d %s | %d %s"
+VIL_1RES = "Assign %d %s"
+
+-----------------------------------------------------------------------
+-- Helper Functions
+-----------------------------------------------------------------------
+
+-- TODO: This is a common function
+local function RequireNumber(val)
+    if type(val) ~= "number" then
+        return 0
+    end
+    return val
 end
 
-function Vils_CountOrZero(value)
-	if type(value) ~= "number" then
-		return 0
-	end
-	return value
+-----------------------------------------------------------------------
+-- Mod Interface
+-----------------------------------------------------------------------
+
+function BuildOrder_Check_Vils_Register()
+    BuildOrder_Objectives_RegisterCheckHandlers(
+        "vils",
+        BuildOrder_Check_Vils_Activate,
+        BuildOrder_Check_Vils_Deactivate,
+        BuildOrder_Check_Vils_GetText,
+        BuildOrder_Check_Vils_Validate,
+        BuildOrder_Check_Vils_PollCompletion
+    )
 end
 
-function Vils_Poll(checkID)
-	local state = VILS_STATE[checkID]
-	if state == nil then
-		return
-	end
-
-	local food = Player_GetNumGatheringSquads(state.player, RT_Food)
-	local gold = Player_GetNumGatheringSquads(state.player, RT_Gold)
-	local wood = Player_GetNumGatheringSquads(state.player, RT_Wood)
-	local stone = Player_GetNumGatheringSquads(state.player, RT_Stone)
-	food = Vils_CountOrZero(food)
-	gold = Vils_CountOrZero(gold)
-	wood = Vils_CountOrZero(wood)
-	stone = Vils_CountOrZero(stone)
-
-	local completed = true
-	if state.payload.food ~= nil then
-		completed = completed and food >= state.payload.food
-	end
-	if state.payload.gold ~= nil then
-		completed = completed and gold >= state.payload.gold
-	end
-	if state.payload.wood ~= nil then
-		completed = completed and wood >= state.payload.wood
-	end
-	if state.payload.stone ~= nil then
-		completed = completed and stone >= state.payload.stone
-	end
-
-	if completed then
-		BuildOrder_SetCheckComplete(checkID, true)
-	else
-		BuildOrder_SetCheckComplete(checkID, false)
-	end
+function BuildOrder_Check_Vils_Validate(check)
+    local t = check.payload
+    return #t <= 4 and t["food"] ~= nil or t["gold"] ~= nil or t["wood"] ~= nil or t["stone"] ~= nil
 end
 
-function Vils_PollAll()
-	BuildOrder_BeginCheckUpdates()
-	for checkID, _ in pairs(VILS_STATE) do
-		Vils_Poll(checkID)
-	end
-	BuildOrder_EndCheckUpdates()
+function BuildOrder_Check_Vils_Activate(obj, player)
+    if _bo_vils_data.active[obj.check.id] ~= nil then
+        return false
+    end
+
+    _bo_vils_data.active[obj.check.id] = {
+        player = player
+    }
+    return true
 end
 
-function Vils_Activate(check, objectiveID, context)
-	local player = context.localPlayer
-	if player == nil then
-		return
-	end
+function BuildOrder_Check_Vils_Deactivate(obj)
+    if _bo_vils_data.active[obj.check.id] == nil then
+        return
+    end
 
-	local state = {
-		player = context.localPlayer,
-		objectiveID = objectiveID,
-		payload = check.payload,
-	}
-	VILS_STATE[check.id] = state
-	if VILS_POLL_REGISTERED == false then
-		Rule_Add(Vils_PollAll)
-		VILS_POLL_REGISTERED = true
-	end
-	Vils_Poll(check.id)
+    _bo_vils_data.active[obj.check.id] = nil
 end
 
-function Vils_Deactivate(check, objectiveID, context)
-	local state = VILS_STATE[check.id]
-	if state == nil then
-		return
-	end
-
-	VILS_STATE[check.id] = nil
-	if next(VILS_STATE) == nil then
-		Rule_Remove(Vils_PollAll)
-		VILS_POLL_REGISTERED = false
-	end
+function BuildOrder_Check_Vils_GetText(obj)
+    local res = GetPayloadAsList(obj.check.payload)
+    if #res == 4 then
+        return Loc_FormatText(
+            VIL_4RES,
+            res[1].key, res[1].value,
+            res[2].key, res[2].value,
+            res[3].key, res[3].value,
+            res[4].key, res[4].value
+        )
+    elseif #res == 3 then
+        return Loc_FormatText(
+            VIL_3RES,
+            res[1].key, res[1].value,
+            res[2].key, res[2].value,
+            res[3].key, res[3].value
+        )
+    elseif #res == 2 then
+        return Loc_FormatText(
+            VIL_2RES,
+            res[1].key, res[1].value,
+            res[2].key, res[2].value
+        )
+    elseif #res == 1 then
+        return Loc_FormatText(VIL_1RES, res[1].key, res[1].value)
+    end
 end
 
-BuildOrder_RegisterHandler("vils", {
-	formatTitle = Vils_FormatTitle,
-	activate = Vils_Activate,
-	deactivate = Vils_Deactivate,
-})
+function BuildOrder_Check_Vils_PollCompletion(obj)
+    local state = _bo_vils_data.active[obj.check.id]
+    if state == nil then
+        return false
+    end
+
+    -- TODO: Is this how I want to pass around the player?
+    local player = state.player
+    local payload = obj.check.payload
+
+    -- Then check if each resource assignment is being met
+    local passes = true
+    if payload.food ~= nil then
+        passes = passes and GetVilsOnFood(player) >= payload.food
+    end
+    if payload.gold ~= nil then
+        passes = passes and GetVilsOnGold(player) >= payload.gold
+    end
+    if payload.wood ~= nil then
+        passes = passes and GetVilsOnWood(player) >= payload.wood
+    end
+    if payload.stone ~= nil then
+        passes = passes and GetVilsOnStone(player) >= payload.stone
+    end
+
+    return passes
+end
+
+-----------------------------------------------------------------------
+-- Mod Implementation
+-----------------------------------------------------------------------
+
+local function GetPayloadAsList(payload)
+    local resources = []
+    for k, v in pairs(payload) do
+        resources[#resource + 1] = { key: k, value: v }
+    end
+    return resources
+end
+
+local function GetPayloadResourcesAsKeyString(payload)
+    local key = ""
+    if payload.food ~= nil then
+        key = key + "F"
+    end
+    if payload.gold ~= nil then
+        key = key + "G"
+    end
+    if payload.wood ~= nil then
+        key = key + "W"
+    end
+    if payload.stone ~= nil then
+        key = key + "S"
+    end
+    return key
+end
+
+local function GetVilsOnResource(player, resource)
+    if resource == "Food" then
+        return GetVilsOnFood(player)
+    elseif resource = "Gold" then
+        return GetVilsOnGold(player)
+    elseif resource = "Wood" then
+        return GetVilsOnWood(player)
+    elseif resource = "Stone" then
+        return GetVilsOnStone(player)
+    else
+        return 0
+    end
+end
+
+local function GetVilsOnFood(player)
+    return RequireNumber(Player_GetNumGatheringSquads(player, RT_Food))
+end
+
+local function GetVilsOnGold(player)
+    return RequireNumber(Player_GetNumGatheringSquads(player, RT_Gold))
+end
+
+local function GetVilsOnWood(player)
+    return RequireNumber(Player_GetNumGatheringSquads(player, RT_Wood))
+end
+
+local function GetVilsOnStone(player)
+    return RequireNumber(Player_GetNumGatheringSquads(player, RT_Stone))
+end

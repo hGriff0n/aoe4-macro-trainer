@@ -1,46 +1,325 @@
-UPGRADES_STATE = {}
-UPGRADES_EVENTS_REGISTERED = false
-UPGRADES_RECONCILIATION_PENDING = false
+-----------------------------------------------------------------------
+-- Imports
+-----------------------------------------------------------------------
 
-function Upgrades_FormatTitle(check, context)
-	local name = BuildOrder_GameName("upgrade", check.payload.id, context)
-	local title = nil
-	if check.payload.queued then
-		title = Loc_FormatText(BUILD_ORDER_LOC_KEYS.queueResearch, name)
-	else
-		title = Loc_FormatText(BUILD_ORDER_LOC_KEYS.research, name)
-	end
-	if check.optional then
-		return Loc_FormatText(
-			BUILD_ORDER_LOC_KEYS.optional,
-			BuildOrder_FormattedArgument(title)
-		)
-	end
-	return title
+
+-----------------------------------------------------------------------
+-- Data
+-----------------------------------------------------------------------
+
+_bo_upgrades_data = {
+    techs = {},
+    num_queued_listeners = 0,
+    num_research_listeners = 0,
+    num_cancel_listeners = 0
+}
+
+QUEUE_RESEARCH_FORMAT = "Queue %s for research"
+RESEARCH_FORMAT = "Research %s"
+
+-----------------------------------------------------------------------
+-- Helper Functions
+-----------------------------------------------------------------------
+
+-- TODO: Similar to built.scar but for upgrades
+local function ResolvePBGs(ids)
+    local pbgs = []
+    for _, id in ipairs(id) do
+        local found, pbg = BP_GetUpgradeBlueprint(id)
+        if found and pbg ~= nil then
+            pbgs[#pbgs + 1] = pbg
+        end
+    end
+    return pbgs
 end
 
-local function Upgrades_IsCompletedResearch(state)
-	return Player_HasUpgrade(state.player, state.upgrade)
+-- TODO: Not sure which one is needed yet
+-- TODO: Same as buildings.scar, but without entity resolution
+-- TODO: Same as units.scar
+local function PBGMatches(left, right)
+    return left ~= nil and right ~= nil
+		and left.PropertyBagGroupID == right.PropertyBagGroupID
+		and left.PropertyBagGroupModPackID == right.PropertyBagGroupModPackID
+		and left.PropertyBagGroupType == right.PropertyBagGroupType
 end
 
-local function Upgrades_HasQueuedResearch(state)
-	local entities = Player_GetEntities(state.player)
-	for entityIndex = 1, EGroup_Count(entities) do
-		local entity = EGroup_GetEntityAt(entities, entityIndex)
-		-- Player_GetEntities is player-scoped, but retain the owner guard for converted entities.
-		if entity ~= nil and Entity_GetPlayerOwner(entity) == state.player then
-			for index = 0, Entity_GetProductionQueueSize(entity) - 1 do
-				local itemType = Entity_GetProductionQueueItemType(entity, index)
-				if (itemType == PITEM_Upgrade or itemType == PITEM_PlayerUpgrade)
-					and BuildOrder_BlueprintsEqual(Entity_GetProductionQueueItem(entity, index), state.upgrade) then
-					return true
-				end
-			end
-		end
+-- Similar to built.scar
+local function UpgradeName(tech, id)
+    if tech ~= nil and tech.pbg ~= nil then
+        local resolved, uiInfo = BP_GetUpgradeUIInfo(tech.pbg)
+        if uiInfo ~= nil and uiInfo.screenName ~= nil then
+            return uiInfo.screenName
+        end
+    end
+    print("Missing localization string for " .. tostring(id))
+    return BuildOrder_RawText(tostring(id))
+end
+
+local function IsInvalidEvent(event)
+    return event == nil or event.upgrade == nil or event.executer ~= nil
+end
+
+-----------------------------------------------------------------------
+-- Mod Interface
+-----------------------------------------------------------------------
+
+function BuildOrder_Check_Upgrades_Register()
+    BuildOrder_Objectives_RegisterCheckHandlers(
+        "upgrades",
+        BuildOrder_Check_Upgrades_Activate,
+        BuildOrder_Check_Upgrades_Deactivate,
+        BuildOrder_Check_Upgrades_GetText,
+        BuildOrder_Check_Upgrades_Validate,
+        nil
+    )
+end
+
+function BuildOrder_Check_Upgrades_Validate(check)
+    local t = check.payload
+    return t.id ~= nil
+end
+
+function BuildOrder_Check_Upgrades_Activate(obj, player)
+    if _bo_upgrades_data.techs[obj.check.id] ~= nil then
+        return false
+    end
+
+    local payload = obj.check.payload
+    local pbgs = ResolvePBGs([payload.id])
+    if #pbgs == 0 then
+        return false
+    end
+
+    -- TODO: `Activate` is called before `CreateObjective`, so this
+    -- techically doesn't work. We want this case to be auto-marked
+    -- as complete even if we don't need any resolution
+    if IsUpgradeCompleted(player, pbgs[1], payload.queued) then
+        Obj_SetState(obj.obj_id, OS_Complete)
+        return true
+    end
+ 
+    _bo_upgrades_data.techs[obj.check.id] = {
+        obj_id = obj.obj_id,
+        pbg = pbgs[1],
+        queued = payload.queued,
+        player = player,
+        completed = false
+    }
+
+    -- TODO: Handle `IsUpgradeCompleted`/`IsUpgradeQueued`
+    if payload.queued then
+        AddQueuedListener()
+    else
+        AddCompletedListener()
+    end
+
+    return true
+end
+
+function BuildOrder_Check_Upgrades_Deactivate(obj)
+    if _bo_upgrades_data.events_registered then
+        DeactivateCheck(obj.check.id)
+    end
+end
+
+function BuildOrder_Check_Upgrades_GetText(obj)
+    local payload = obj.check.payload
+    if payload.queued then
+        return Loc_FormatText(QUEUE_RESEARCH_FORMAT, UpgradeName)
+    else
+        return Loc_FormatText(RESEARCH_FORMAT, "")
+    end
+end
+
+-- TODO: Need to resolve event naming schema
+-- TODO: Implement if check is through events
+-- We have one event handle active for all checks in a given step
+-- but we call activate/deactivate for each one
+function OnUpgradeQueued(event)
+    -- TODO: Might want to use slightly different check
+    if IsInvalidEvent(event) then
+        return
+    end
+
+    local owner = GetExecuterOwner(event)
+    for check_id, state in pairs(_bo_upgrades_data.techs) do
+        if not state.completed
+            and state.queued
+            and owner == state.player
+            and PBGMatches(event.upgrade, state.upgrade)
+        then
+            state.completed = true
+            Obj_SetState(state.obj_id, OS_Complete)
+            DropQueuedListener()
+            AddCancelListener()
+        end
+    end
+    -- TODO: Implement
+end
+
+function OnUpgradeCancelled(event)
+    -- TODO: Might want to use slightly different check
+    if IsInvalidEvent(event) then
+		return
 	end
-	return false
+
+	local owner = BuildOrder_GetExecuterOwner(context)
+    for check_id, state in pairs(_bo_upgrades_data.techs) do
+        if state.completed
+            and state.queued
+            and owner == state.player
+            and PBGMatches(event.upgrade, state.upgrade)
+        then
+            state.completed = false
+            Obj_SetState(state.obj_id, OS_Incomplete)
+            DropCancelListener()
+            AddQueuedListener()
+        end
+    end
 end
 
+-- TODO: I think these loops where i deactivate the check in the middle
+-- are incorrect. Just collect ids to delete and then run it
+function OnUpgradeFinished(event)
+    -- TODO: Might want to use slightly different check
+    if IsInvalidEvent(event) then
+		return
+	end
+
+	local owner = BuildOrder_GetExecuterOwner(context)
+    for check_id, state in pairs(_bo_upgrades_data.techs) do
+        if owner == state.player
+            and PBGMatches(event.upgrade, state.upgrade)
+        then
+            Obj_SetState(state.obj_id, OS_Complete)
+            DeactivateCheck(check_id)
+        end
+    end
+end
+
+-----------------------------------------------------------------------
+-- Mod Implementation
+-----------------------------------------------------------------------
+
+local function AddQueuedListener()
+    if _bo_upgrades_data.num_queued_listeners == 0 then
+        Rule_AddGlobalEvent(OnUpgradeQueued, GE_UpgradeStart)
+    end
+    _bo_upgrades_data.num_queued_listeners =
+        _bo_upgrades_data.num_queued_listeners + 1
+end
+
+local function AddCancelListener()
+    if _bo_upgrades_data.num_cancel_listeners == 0 then
+        Rule_AddGlobalEvent(
+            OnUpgradeCancelled, GE_UpgradeCancelled)
+    end
+    _bo_upgrades_data.num_cancel_listeners =
+        _bo_upgrades_data.num_cancel_listeners + 1
+end
+
+local function AddCompletedListener()
+    if _bo_upgrades_data.num_research_listeners == 0 then
+        Rule_AddGlobalEvent(
+            OnUpgradeFinished, GE_UpgradeComplete)
+    end
+    _bo_upgrades_data.num_research_listeners =
+        _bo_upgrades_data.num_research_listeners + 1
+end
+
+local function DropQueuedListener()
+    _bo_upgrades_data.num_queued_listeners =
+        _bo_upgrades_data.num_queued_listeners - 1
+    if _bo_upgrades_data.num_queued_listeners == 0 then
+        Rule_RemoveGlobalEvent(OnUpgradeQueued)
+    end
+end
+
+local function DropCancelListener()
+    _bo_upgrades_data.num_cancel_listeners =
+        _bo_upgrades_data.num_cancel_listeners - 1
+    if _bo_upgrades_data.num_cancel_listeners == 0 then
+        Rule_RemoveGlobalEvent(OnUpgradeCancelled)
+    end
+end
+
+local function DropCompletedListener()
+    _bo_upgrades_data.num_research_listeners =
+        _bo_upgrades_data.num_research_listeners - 1
+    if _bo_upgrades_data.num_research_listeners == 0 then
+        Rule_RemoveGlobalEvent(OnUpgradeFinished)
+    end
+end
+
+local function GetExecuterOwner(event)
+	if event.executer.PlayerID ~= nil then
+		return context.executer
+	end
+	if event.executer.EntityID ~= nil then
+		return Entity_GetPlayerOwner(context.executer)
+	end
+	return nil
+
+end
+
+local function DeactivateCheck(check_id)
+    local state = _bo_upgrades_data.techs[check_id]
+
+    if state == nil then
+        return
+    end
+
+    _bo_upgrades_data.techs[check_id] = nil
+
+    -- Remove the check from being considered by the event
+    -- This also removes the event if all listeners are dropped
+    if state.queued then
+        if state.completed then
+            DropCancelListener()
+        else
+            DropQueuedListener()
+        end
+    else
+        DropCompletedListener()
+    end
+
+end
+
+local function IsUpgradeCompleted(player, pbg, queued)
+    if not queued then
+        return Player_HasUpgrade(player, pbg)
+    end
+
+    local queued_upgrade = false
+    EGroup_ForEach(
+        Player_GetEntities(player),
+        function(group, index, entity)
+            if queued_upgrade then
+                return
+            end
+
+            if Entity_GetPlayerOwner(entity) == player then
+                local queue_size = Entity_GetProductionQueueSize(entity)
+                for index = 0, queue_size - 1 do
+                    local item = Entity_GetProductionQueueItem(
+                        entity, index)
+                    local type = Entity_GetProductionQueueItemType(
+                        entity, index)
+                    if (type == PITEM_Upgrade
+                        or itemType == PITEM_PlayerUpgrade)
+                        and PBGMatches(item, pbg)
+                    then
+                        queued_upgrade = true
+                        return
+                    end
+                end
+            end
+        end
+    )
+    return queued_upgrade
+end
+
+-- TODO: Could this be the way to resolve the `obj_id` issue???
 local function Upgrades_SetCheckComplete(state, complete)
 	if state.checkComplete == complete then
 		return
@@ -48,168 +327,3 @@ local function Upgrades_SetCheckComplete(state, complete)
 	state.checkComplete = complete
 	BuildOrder_SetCheckComplete(state.checkID, complete)
 end
-
-local function Upgrades_Complete(state)
-	state.completed = true
-	state.cancelPending = false
-	Upgrades_SetCheckComplete(state, true)
-end
-
-local function Upgrades_ActivateBaseline(state)
-	if Upgrades_IsCompletedResearch(state) then
-		Upgrades_Complete(state)
-	elseif state.queued then
-		Upgrades_SetCheckComplete(state, Upgrades_HasQueuedResearch(state))
-	end
-end
-
-function Upgrades_ScheduleReconciliation()
-	if UPGRADES_RECONCILIATION_PENDING then
-		return
-	end
-	UPGRADES_RECONCILIATION_PENDING = true
-	Rule_Add(Upgrades_ReconcileNextTick)
-end
-
-function Upgrades_ReconcileNextTick()
-	Rule_Remove(Upgrades_ReconcileNextTick)
-	UPGRADES_RECONCILIATION_PENDING = false
-	BuildOrder_BeginCheckUpdates()
-	for _, state in pairs(UPGRADES_STATE) do
-		if state ~= nil and state.completed == false and state.cancelPending then
-			state.cancelPending = false
-			if Upgrades_IsCompletedResearch(state) then
-				Upgrades_Complete(state)
-			elseif state.queued then
-				Upgrades_SetCheckComplete(state, Upgrades_HasQueuedResearch(state))
-			end
-		end
-	end
-	Upgrades_UpdateObservers()
-	BuildOrder_EndCheckUpdates()
-end
-
-function Upgrades_OnUpgradeStart(context)
-	if context == nil or context.upgrade == nil then
-		return
-	end
-
-	local owner = BuildOrder_GetExecuterOwner(context)
-	BuildOrder_BeginCheckUpdates()
-	for _, state in pairs(UPGRADES_STATE) do
-		if state ~= nil and state.completed == false and state.queued then
-			if owner ~= state.player then
-				-- Never allow opponent research to satisfy a local-player objective.
-			elseif BuildOrder_BlueprintsEqual(context.upgrade, state.upgrade) then
-				Upgrades_SetCheckComplete(state, true)
-			end
-		end
-	end
-	BuildOrder_EndCheckUpdates()
-end
-
-function Upgrades_OnUpgradeCancelled(context)
-	if context == nil or context.upgrade == nil then
-		return
-	end
-
-	local owner = BuildOrder_GetExecuterOwner(context)
-	local shouldReconcile = false
-	for _, state in pairs(UPGRADES_STATE) do
-		if state ~= nil and state.completed == false and state.queued then
-			if owner ~= state.player then
-				-- Never allow opponent research to alter a local-player objective.
-			elseif BuildOrder_BlueprintsEqual(context.upgrade, state.upgrade) then
-				state.cancelPending = true
-				shouldReconcile = true
-			end
-		end
-	end
-	if shouldReconcile then
-		Upgrades_ScheduleReconciliation()
-	end
-end
-
-function Upgrades_OnUpgradeComplete(context)
-	if context == nil or context.upgrade == nil then
-		return
-	end
-
-	local owner = BuildOrder_GetExecuterOwner(context)
-	BuildOrder_BeginCheckUpdates()
-	for _, state in pairs(UPGRADES_STATE) do
-		if state ~= nil and state.completed == false then
-			if owner ~= state.player then
-				-- Never allow opponent research to satisfy a local-player objective.
-			elseif BuildOrder_BlueprintsEqual(context.upgrade, state.upgrade) then
-				Upgrades_Complete(state)
-			end
-		end
-	end
-	Upgrades_UpdateObservers()
-	BuildOrder_EndCheckUpdates()
-end
-
-function Upgrades_UpdateObservers()
-	local needsEvents = false
-	for _, state in pairs(UPGRADES_STATE) do
-		if state ~= nil and state.completed == false then
-			needsEvents = true
-		end
-	end
-
-	if needsEvents and not UPGRADES_EVENTS_REGISTERED then
-		Rule_AddGlobalEvent(Upgrades_OnUpgradeStart, GE_UpgradeStart)
-		Rule_AddGlobalEvent(Upgrades_OnUpgradeCancelled, GE_UpgradeCancelled)
-		Rule_AddGlobalEvent(Upgrades_OnUpgradeComplete, GE_UpgradeComplete)
-		UPGRADES_EVENTS_REGISTERED = true
-	elseif not needsEvents and UPGRADES_EVENTS_REGISTERED then
-		Rule_RemoveGlobalEvent(Upgrades_OnUpgradeStart)
-		Rule_RemoveGlobalEvent(Upgrades_OnUpgradeCancelled)
-		Rule_RemoveGlobalEvent(Upgrades_OnUpgradeComplete)
-		UPGRADES_EVENTS_REGISTERED = false
-	end
-
-	if not needsEvents and UPGRADES_RECONCILIATION_PENDING then
-		Rule_Remove(Upgrades_ReconcileNextTick)
-		UPGRADES_RECONCILIATION_PENDING = false
-	end
-end
-
-local function Upgrades_Activate(check, objectiveID, context)
-	local player = context.localPlayer
-	if player == nil then
-		return
-	end
-	if UPGRADES_STATE[check.id] ~= nil then
-		return
-	end
-
-	UPGRADES_STATE[check.id] = {
-		checkID = check.id,
-		objectiveID = objectiveID,
-		player = player,
-		upgrade = BP_GetUpgradeBlueprint(check.payload.id),
-		queued = check.payload.queued,
-		completed = false,
-		checkComplete = false,
-		cancelPending = false,
-	}
-	Upgrades_ActivateBaseline(UPGRADES_STATE[check.id])
-	Upgrades_UpdateObservers()
-end
-
-local function Upgrades_Deactivate(check, objectiveID, context)
-	if UPGRADES_STATE[check.id] == nil then
-		return
-	end
-
-	UPGRADES_STATE[check.id] = nil
-	Upgrades_UpdateObservers()
-end
-
-BuildOrder_RegisterHandler("upgrades", {
-	formatTitle = Upgrades_FormatTitle,
-	activate = Upgrades_Activate,
-	deactivate = Upgrades_Deactivate,
-})
