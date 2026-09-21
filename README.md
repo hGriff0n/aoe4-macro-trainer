@@ -3,6 +3,8 @@ App for training macro habits via overlays, gameplay mods, and puzzles/scenarios
 
 ## Build orders
 
+WARNING: The compiler currently only works on windows
+
 Build-order YAML is compiled into the active Age of Empires IV player's datastore.
 The `.aoe4mod` package contains the objective runtime but no bundled build-order
 catalog.
@@ -57,6 +59,7 @@ The datastore compiler does not package the mod or invoke Essence.
 ## Build the mod
 
 Build the checked-in assets directly with the Age of Empires IV Content Editor.
+
 From PowerShell:
 
 ```powershell
