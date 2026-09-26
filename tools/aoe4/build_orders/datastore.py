@@ -35,7 +35,7 @@ def load_datastore(rt_file: Path) -> Datastore:
                 if check['kind'] in _registered_checks:
                     step.checks.append(
                         _registered_checks[check['kind']].from_datastore(
-                            check)
+                            check, bo['civ'])
                     )
                 else:
                     print(f'Unexpected check in datastore: {check}. Ignoring')
@@ -52,7 +52,7 @@ def _build_step_to_datastore(step: BuildOrderStep) -> Dict[str, Any]:
     if step.title:
         data['title'] = step.title
     for check in step.checks:
-        data['checks'].append(
+        data['checks'].extend(
             _registry[check.key()].to_datastore(check))
     return data
 

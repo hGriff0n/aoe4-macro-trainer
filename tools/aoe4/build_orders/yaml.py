@@ -21,8 +21,9 @@ def load_build_order(bo_yaml: Path) -> BuildOrder:
 
         for check, data in raw_step.items():
             if check in _registered_checks:
-                step.checks.append(
-                    _registered_checks[check].from_yaml(data))
+                step.checks.extend(
+                    _registered_checks[check].from_yaml(
+                        data, bo['civ']))
             else:
                 print(f'Unexpected check in yaml: {check}. Ignoring')
 
@@ -35,8 +36,9 @@ def _step_to_yaml_dict(step: BuildOrderStep):
     if step.title:
         data['title'] = step.title
     for check in checks:
-        data.update(
-            _registry[check.key()].to_yaml(check))
+        data.update({
+            check.key(): _registry[check.key()].to_yaml(check)
+        })
     return data
 
 

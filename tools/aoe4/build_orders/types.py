@@ -1,7 +1,11 @@
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from typing import Any, Dict, List, Optional, TypeVar
+from typing import Any, Dict, Either, List, Optional, TypeVar
 import uuid
+
+
+ScarRepr = Dict[str, Any]
+YamlRepr = Either[Dict[str, Any], List[Any]]
 
 
 @dataclass
@@ -10,12 +14,12 @@ class BuildOrderCheckBase(ABC):
     optional: bool = False
 
     @abstractmethod
-    def yaml_payload(self) -> Dict[str, Any]:
+    def yaml_payload(self) -> YamlRepr:
         """Return the yaml representation"""
         pass
 
     @abstractmethod
-    def datastore_payload(self) -> Dict[str, Any]:
+    def datastore_payload(self) -> List[ScarRepr]:
         """Return the datastore 'payload'"""
         pass
 
@@ -40,22 +44,22 @@ class _CheckFactory(ABC):
 
     # TODO: Technically, this isn't strict enough
     @abstractmethod
-    def from_yaml(self, data: Dict[str, Any]) -> BuildOrderCheckBase:
+    def from_yaml(self, data: YamlRepr, civ: str) -> List[BuildOrderCheckBase]:
         """Deserialize the check from the yaml representation"""
         pass
 
     @abstractmethod
-    def from_datastore(self, data: Dict[str, Any]) -> BuildOrderCheckBase:
+    def from_datastore(self, data: ScarRepr, civ: str) -> BuildOrderCheckBase:
         """Deserialize a check from the datastore representation"""
         pass
 
     @abstractmethod
-    def to_yaml(self, check: BuildOrderCheckBase) -> Dict[str, Any]:
+    def to_yaml(self, check: BuildOrderCheckBase) -> YamlRepr:
         """Serialize the check to the yaml dictionary representation"""
         pass
 
     @abstractmethod
-    def to_datastore(self, check: BuildOrderCheckBase) -> Dict[str, Any]:
+    def to_datastore(self, check: BuildOrderCheckBase) -> List[ScarRepr]:
         """Serialize the check to the datastore representation"""
         pass
 
@@ -63,24 +67,24 @@ class _CheckFactory(ABC):
 # TODO: Would be nice to set `key` here too (ie. `@check_factory('vils')`)
 def check_factory(cls: type[BuildOrderCheck]) -> BuildOrderCheckBase:
     class BoCheckFactory(_CheckFactory):
-        def to_yaml(self, check: cls) -> Dict[str, Any]:
+        def to_yaml(self, check: cls) -> YamlRepr:
             return check.yaml_payload()
 
-        def from_yaml(self, data: Dict[str, Any]) -> cls:
-            return cls.from_yaml(data)
+        def from_yaml(self, data: YamlRepr, civ: str) -> List[cls]:
+            return cls.from_yaml(data, civ)
         
-        def to_datastore(self, check: cls) -> Dict[str, Any]:
-            return {
+        def to_datastore(self, check: cls) -> List[ScarRepr]:
+            return [{
                 'id': check.id,
                 'kind': check.key,
                 'optional': check.optional,
-                'payload': check.datastore_payload()
-            }
+                'payload': payload
+            } for payload in check.datastore_payload()]
         
-        def from_datastore(self, data: Dict[str, Any]) -> cls:
+        def from_datastore(self, data: ScarRepr, civ: str) -> cls:
             if data.get('kind', '') != cls.key():
                 raise ValueError(f'{cls} must have kind={cls.key()}, got {data.get('kind')}')
-            return cls.from_datastore(data)
+            return cls.from_datastore(data, civ)
         
     cls.make_factory = lambda: return BoCheckFactory()
     return cls

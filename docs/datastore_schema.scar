@@ -29,6 +29,7 @@ LuaDataStore = {
                             id = string
                             vils = int,
                             location = string,
+                            -- Supports `oneof` in yaml
 
                             -- age_up
                             trigger = string
@@ -57,6 +58,7 @@ LuaDataStore = {
                             constant = bool,
                             count = int,
                             ids = [string],
+                            queued = bool,
                         }
                     }]
                 }]
