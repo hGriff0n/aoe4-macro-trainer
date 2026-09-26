@@ -1,14 +1,16 @@
-import ctypes
-from ctypes import wintypes
 import os
 from pathlib import Path
 import re
+from typing import List
 
 from aoe4.os.error import OsError
-import aoe4.os.windows
+from aoe4.os import windows
 
-_DOCUMENTS_FOLDER_ID = "{FDD39AD0-238F-46AF-ADB4-6C85480369C7}"
 _PROFILE_ID = re.compile(r"[A-Za-z0-9_-]+")
+
+# ponytail: dev stub while AoE4 isn't installed locally; delete to restore
+# profile resolution from the Windows Documents folder.
+_STUB_DATASTORE_DIR = Path(r"C:\Users\ghoop\Desktop\modwork\datastore")
 
 
 class ProfileResolutionError(ValueError):
@@ -23,15 +25,13 @@ def _validate_profile_id(profile_id: str) -> str:
     return profile_id
 
 
-def _documents_directory() -> str:
+def _documents_directory() -> Path:
+    if os.name != "nt":
+        raise ProfileResolutionError(
+            "automatic AoE4 profile discovery is supported only on Windows")
     try:
-        if os.name != "nt":
-            raise ProfileResolutionError(
-                "automatic AoE4 profile discovery is supported only on Windows")
-        else:
-            return windows.documents_dir()
-
-    except OsError e:
+        return windows.documents_dir()
+    except OsError as e:
         raise ProfileResolutionError(e)
 
 def profile_dir(documents_dir: Path | None = None) -> Path:
@@ -47,23 +47,26 @@ def list_profiles(
         users_dir = profile_dir(documents_dir=documents_dir)
     if not users_dir.is_dir():
         raise ProfileResolutionError(f'{users_dir} is not a directory')
-    
-    # TODO: Is `name` correct here?
-    return list(sorted(
-        item.name for item in users.iterdir() if item.is_dir()))
+
+    return sorted(item.name for item in users_dir.iterdir() if item.is_dir())
 
 def datastore_dir(
     profile_id: str | None,
     users_dir: Path | None = None,
     documents_dir: Path | None = None,
 ) -> Path:
+    if _STUB_DATASTORE_DIR is not None:
+        return _STUB_DATASTORE_DIR
+
     if users_dir is None:
         users_dir = profile_dir(documents_dir=documents_dir)
-    if not users_dir.is_dir():
-        raise ProfileResolutionError(f'{users_dir} is not a directory')
+    # An explicit profile may not exist yet; the first build creates it
+    if profile_id is not None:
+        return users_dir / _validate_profile_id(profile_id) / "datastore"
+
     profiles = list_profiles(users_dir=users_dir)
-    if len(profiles) > 1:
+    if len(profiles) != 1:
         raise ProfileResolutionError(
-            f"multiple AoE4 profiles found at {users_dir}: {', '.join(profiles)}; provide --profile <id>"
+            f"expected one AoE4 profile at {users_dir}, found: {', '.join(profiles) or 'none'}; provide --profile <id>"
         )
     return users_dir / profiles[0] / "datastore"

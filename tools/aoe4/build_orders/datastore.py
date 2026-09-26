@@ -1,8 +1,14 @@
-import luadata
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, Dict
+
+import luadata
 
 from aoe4.build_orders.types import BuildOrder, BuildOrderStep, CheckRegistry
 
+
+SCHEMA_VERSION = 2
+_PREFIX = 'LuaDataStore = '
 
 _registered_checks = CheckRegistry()
 
@@ -15,27 +21,31 @@ class Datastore:
 
 
 def load_datastore(rt_file: Path) -> Datastore:
-    # Skip `LuaDataStore = ` because luadata expects a `{` at the start
-    with rt_file.open('r') as f:
-        data = luadata.unserialize(f.read()[15:])[rt_file.stem]
-
     d = Datastore(
-        schema_version=data['schema_version'],
+        schema_version=SCHEMA_VERSION,
         build_orders={},
         filepath=rt_file
     )
-    for id, bo in data.get('build_orders', {}):
+    # The first build creates the datastore
+    if not rt_file.exists():
+        return d
+
+    # Skip `LuaDataStore = ` because luadata expects a `{` at the start
+    with rt_file.open('r', encoding='utf-8') as f:
+        data = luadata.unserialize(f.read()[len(_PREFIX):])[rt_file.stem]
+
+    d.schema_version = data['schema_version']
+    for id, raw_bo in data.get('build_orders', {}).items():
         bo = BuildOrder(
-            id=id, civ=bo['civ'], title=bo['title'])
-        for raw_step in bo.get('steps', []):
-            step = BuildOrderStep()
-            if 'title' in raw_step:
-                step.title = raw_step['title']
+            id=id, civ=raw_bo['civ'], title=raw_bo['title'],
+            link=raw_bo.get('link'))
+        for raw_step in raw_bo.get('steps', []):
+            step = BuildOrderStep(title=raw_step.get('title'))
             for check in raw_step.get('checks', []):
                 if check['kind'] in _registered_checks:
                     step.checks.append(
                         _registered_checks[check['kind']].from_datastore(
-                            check, bo['civ'])
+                            check, bo.civ)
                     )
                 else:
                     print(f'Unexpected check in datastore: {check}. Ignoring')
@@ -47,21 +57,21 @@ def load_datastore(rt_file: Path) -> Datastore:
 
 def _build_step_to_datastore(step: BuildOrderStep) -> Dict[str, Any]:
     data = {
-        checks = []
+        'checks': []
     }
     if step.title:
         data['title'] = step.title
     for check in step.checks:
         data['checks'].extend(
-            _registry[check.key()].to_datastore(check))
+            _registered_checks[check.key()].to_datastore(check))
     return data
 
 def _build_order_to_datastore(bo: BuildOrder) -> Dict[str, Any]:
     data = {
-        civ: bo.civ,
-        id: bo.id,
-        title: bo.title,
-        step: []
+        'civ': bo.civ,
+        'id': bo.id,
+        'title': bo.title,
+        'steps': []
     }
     if bo.link:
         data['link'] = bo.link
@@ -78,6 +88,7 @@ def save_datastore(ds: Datastore):
     for id, bo in ds.build_orders.items():
         data['build_orders'][id] = _build_order_to_datastore(bo)
 
-    with ds.filepath.open('w') as f:
-        f.write('LuaDataStoreID = ')
-        f.write(luadata.serialize(data))
+    ds.filepath.parent.mkdir(parents=True, exist_ok=True)
+    with ds.filepath.open('w', encoding='utf-8') as f:
+        f.write(_PREFIX)
+        f.write(luadata.serialize({ds.filepath.stem: data}, indent='    '))

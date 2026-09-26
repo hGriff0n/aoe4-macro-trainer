@@ -1,33 +1,32 @@
-from aoe4.build_orders.types import BuildOrderCheckBase, make_factory, ScarRepr, YamlRepr
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional
+
+from aoe4.build_orders.types import BuildOrderCheckBase, check_factory, ids_dict, parse_ids, ScarRepr, YamlRepr
 
 
-@make_factory
+@check_factory
+@dataclass
 class BuiltCheck(BuildOrderCheckBase):
     count: int = 1
-    building_ids: List[str] = []
+    building_ids: List[str] = field(default_factory=list)
     vils: Optional[int] = None
     location: Optional[str] = None
 
-    def _get_id_dict(self) -> Dict[str, Any]:
-        if len(self.age_ids) == 1:
-            return {'id': self.age_ids[0]}
-        return {'oneof': self.age_ids}
+    def _payload(self) -> Dict[str, Any]:
+        data = {'count': self.count}
+        if self.vils:
+            data['vils'] = self.vils
+        if self.location:
+            data['location'] = self.location
+        return data | ids_dict(self.building_ids)
 
     def yaml_payload(self) -> YamlRepr:
-        data = {'count': self.count}
-        if self.vils:
-            data['vils'] = self.vils
-        if self.location:
-            data['location'] = self.location
-        return data | self._get_id_dict()
+        return [self._payload()]
 
     def datastore_payload(self) -> List[ScarRepr]:
-        data = {'count': self.count}
-        if self.vils:
-            data['vils'] = self.vils
-        if self.location:
-            data['location'] = self.location
-        return [data | self._get_id_dict()]
+        return [self._payload()]
 
     @staticmethod
     def key() -> str:
@@ -40,7 +39,7 @@ class BuiltCheck(BuildOrderCheckBase):
 
     @staticmethod
     def _instance_from_yaml(data: Dict[str, Any], civ: str) -> BuiltCheck:
-        ids = data.get('id', data.get('oneof', []))
+        ids = parse_ids(data)
         BuiltCheck.validate_civ_id_access(ids, civ)
         return BuiltCheck(
             building_ids=ids,
@@ -54,17 +53,17 @@ class BuiltCheck(BuildOrderCheckBase):
         if not isinstance(data, list):
             raise ValueError('built must be a list in yaml')
         return [
-            BuiltCheck._instance_from_yaml(building)
+            BuiltCheck._instance_from_yaml(building, civ)
             for building in data
         ]
 
     @staticmethod
     def from_datastore(data: ScarRepr, civ: str) -> BuiltCheck:
         payload = data.get('payload', {})
-        ids = payload.get('id', payload.get('oneof', []))
+        ids = parse_ids(payload)
         BuiltCheck.validate_civ_id_access(ids, civ)
         return BuiltCheck(
-            id=data.get('id')
+            id=data.get('id'),
             optional=data.get('optional', False),
             count=payload.get('count', 1),
             building_ids=ids,

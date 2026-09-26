@@ -1,10 +1,16 @@
-from aoe4.build_orders.types import BuildOrderCheckBase, make_factory, ScarRepr, YamlRepr
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import List
+
+from aoe4.build_orders.types import BuildOrderCheckBase, check_factory, ScarRepr, YamlRepr
 from aoe4.constants import *
 
 
-@make_factory
+@check_factory
+@dataclass
 class HintCheck(BuildOrderCheckBase):
-    hints: List[str] = []
+    hints: List[str] = field(default_factory=list)
 
     @staticmethod
     def key() -> str:
@@ -32,15 +38,16 @@ class HintCheck(BuildOrderCheckBase):
         if 'text' not in payload:
             raise ValueError('hints must have text payload in datastore')
         return HintCheck(
-            id=data.get('id')
+            id=data.get('id'),
             optional=data.get('optional', False),
             hints=[payload['text']]
         )
 
 
-@make_factory
+@check_factory
+@dataclass
 class RallypointCheck(BuildOrderCheckBase):
-    resources: List[str] = []
+    resources: List[str] = field(default_factory=list)
 
     def yaml_payload(self) -> YamlRepr:
         return self.resources
@@ -61,13 +68,13 @@ class RallypointCheck(BuildOrderCheckBase):
         return RallypointCheck(
             resources=data
         )
-    
+
     @staticmethod
     def from_datastore(data: ScarRepr, civ: str) -> RallypointCheck:
         payload = data.get('payload', {})
         # TODO: Validate resource but this allows silver/olive
         return RallypointCheck(
-            id=data.get('id')
+            id=data.get('id'),
             optional=data.get('optional', False),
-            resources=payload['resource']
+            resources=[payload['resource']]
         )
