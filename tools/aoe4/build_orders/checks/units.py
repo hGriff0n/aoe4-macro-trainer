@@ -1,10 +1,16 @@
-from aoe4.build_orders.types import BuildOrderCheckBase, make_factory, ScarRepr, YamlRepr
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any, Dict, List
+
+from aoe4.build_orders.types import BuildOrderCheckBase, check_factory, ScarRepr, YamlRepr
 from aoe4.constants import *
 
 
-@make_factory
+@check_factory
+@dataclass
 class UnitCheck(BuildOrderCheckBase):
-    unit_ids: List[str] = []
+    unit_ids: List[str] = field(default_factory=list)
     count: int = 1
 
     @staticmethod
@@ -13,14 +19,14 @@ class UnitCheck(BuildOrderCheckBase):
 
     def yaml_payload(self) -> YamlRepr:
         return [{
-            id: self.unit_ids[0],
-            count: self.count
+            'id': self.unit_ids[0],
+            'count': self.count
         }]
 
     def datastore_payload(self) -> List[ScarRepr]:
         return [{
-            ids: self.unit_ids,
-            count: self.count,
+            'ids': self.unit_ids,
+            'count': self.count,
         }]
 
     # TODO: Validate ids are valid for civ
@@ -29,7 +35,7 @@ class UnitCheck(BuildOrderCheckBase):
         pass
 
     @staticmethod
-    def _instance_from_yaml(data: Dict[str, Any], civ: str) -> UpgradeCheck:
+    def _instance_from_yaml(data: Dict[str, Any], civ: str) -> UnitCheck:
         return UnitCheck(
             unit_ids=[data['id']],
             count=data.get('count', 1),
@@ -38,11 +44,11 @@ class UnitCheck(BuildOrderCheckBase):
     @staticmethod
     def from_yaml(data: YamlRepr, civ: str) -> List[UnitCheck]:
         if not isinstance(data, list):
-            raise ValueError('produce must be a list in yaml')
+            raise ValueError('units must be a list in yaml')
         UnitCheck.validate_civ_id_access(
             [unit['id'] for unit in data], civ)
         return [
-            UnitCheck._instance_from_yaml(unit)
+            UnitCheck._instance_from_yaml(unit, civ)
             for unit in data
         ]
 
@@ -52,16 +58,17 @@ class UnitCheck(BuildOrderCheckBase):
         ids = payload['ids']
         UnitCheck.validate_civ_id_access(ids, civ)
         return UnitCheck(
-            id=data.get('id')
+            id=data.get('id'),
             optional=data.get('optional', False),
             unit_ids=ids,
             count=payload.get('count', 1)
         )
 
 
-@make_factory
+@check_factory
+@dataclass
 class ProductionCheck(BuildOrderCheckBase):
-    unit_ids: List[str] = []
+    unit_ids: List[str] = field(default_factory=list)
     count: int = 1
     constant: bool = False
     queued: bool = False
@@ -72,17 +79,18 @@ class ProductionCheck(BuildOrderCheckBase):
 
     def yaml_payload(self) -> YamlRepr:
         return [{
-            id: self.unit_ids[0],
-            count: self.count,
-            constant: self.constant,
-            queued: self.queued
+            'id': self.unit_ids[0],
+            'count': self.count,
+            'constant': self.constant,
+            'queued': self.queued
         }]
 
     def datastore_payload(self) -> List[ScarRepr]:
         return [{
-            ids: self.unit_ids,
-            count: self.count,
-            constant: self.constant
+            'ids': self.unit_ids,
+            'count': self.count,
+            'constant': self.constant,
+            'queued': self.queued
         }]
 
     @staticmethod
@@ -101,7 +109,7 @@ class ProductionCheck(BuildOrderCheckBase):
         UnitCheck.validate_civ_id_access(
             [unit['id'] for unit in data], civ)
         return [
-            ProductionCheck._instance_from_yaml(unit)
+            ProductionCheck._instance_from_yaml(unit, civ)
             for unit in data
         ]
 
@@ -111,10 +119,10 @@ class ProductionCheck(BuildOrderCheckBase):
         ids = payload['ids']
         UnitCheck.validate_civ_id_access(ids, civ)
         return ProductionCheck(
-            id=data.get('id')
+            id=data.get('id'),
             optional=data.get('optional', False),
             unit_ids=ids,
-            count=payload.get('count', 1)
+            count=payload.get('count', 1),
             constant=payload.get('constant', False),
             queued=payload.get('queued', False)
         )
