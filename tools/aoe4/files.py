@@ -6,11 +6,8 @@ from typing import List
 from aoe4.os.error import OsError
 from aoe4.os import windows
 
-_PROFILE_ID = re.compile(r"[A-Za-z0-9_-]+")
 
-# ponytail: dev stub while AoE4 isn't installed locally; delete to restore
-# profile resolution from the Windows Documents folder.
-_STUB_DATASTORE_DIR = Path(r"C:\Users\ghoop\Desktop\modwork\datastore")
+_PROFILE_ID = re.compile(r"[A-Za-z0-9_-]+")
 
 
 class ProfileResolutionError(ValueError):
@@ -55,9 +52,6 @@ def datastore_dir(
     users_dir: Path | None = None,
     documents_dir: Path | None = None,
 ) -> Path:
-    if _STUB_DATASTORE_DIR is not None:
-        return _STUB_DATASTORE_DIR
-
     if users_dir is None:
         users_dir = profile_dir(documents_dir=documents_dir)
     # An explicit profile may not exist yet; the first build creates it
