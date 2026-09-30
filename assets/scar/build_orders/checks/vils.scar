@@ -1,70 +1,52 @@
 -----------------------------------------------------------------------
 -- Imports
 -----------------------------------------------------------------------
-import("dynimport.scar")
-import("build_orders/localization.scar")
+import("utils/dynimport.scar")
+
+DynImport("build_orders/localization.scar")
 
 
 -----------------------------------------------------------------------
 -- Data
 -----------------------------------------------------------------------
 
-_bo_vils_data = {
-    active = {}
-}
-
+_bo_vils_data = {}
 local _VIL_1RES_ID = 170
 
 -----------------------------------------------------------------------
 -- Local Helper Functions
 -----------------------------------------------------------------------
 
--- TODO: This is a common function
-local function RequireNumber(val)
+local function GetPayloadAsList(payload)
+    local resources = {}
+    for k, v in pairs(payload) do
+        resources[#resources + 1] = { res = BO_LOC_ResourceName(k), count = v }
+    end
+    return resources
+end
+
+local function num_or_zero(val)
     if type(val) ~= "number" then
         return 0
     end
     return val
 end
 
-local function ResolveResourceType(res)
-    if res == "food" then
-        return RT_Food
-    end
-    if res == "gold" then
-        return RT_Gold
-    end
-    if res == "wood" then
-        return RT_Wood
-    end
-    if res == "stone" then
-        return RT_Stone
-    end
-    return nil
-end
-
-local function GetPayloadAsList(payload)
-    local resources = {}
-    for k, v in pairs(payload) do
-        resources[#resources + 1] = { res = BO_LOC_ResourceName(ResolveResourceType(k)), count = v }
-    end
-    return resources
-end
-
+-- TODO: `RT_*` are apparently nil for some reason
 local function GetVilsOnFood(player)
-    return RequireNumber(Player_GetNumGatheringSquads(player, RT_Food))
+    return num_or_zero(Player_GetNumGatheringSquads(player, RT_Food))
 end
 
 local function GetVilsOnGold(player)
-    return RequireNumber(Player_GetNumGatheringSquads(player, RT_Gold))
+    return num_or_zero(Player_GetNumGatheringSquads(player, RT_Gold))
 end
 
 local function GetVilsOnWood(player)
-    return RequireNumber(Player_GetNumGatheringSquads(player, RT_Wood))
+    return num_or_zero(Player_GetNumGatheringSquads(player, RT_Wood))
 end
 
 local function GetVilsOnStone(player)
-    return RequireNumber(Player_GetNumGatheringSquads(player, RT_Stone))
+    return num_or_zero(Player_GetNumGatheringSquads(player, RT_Stone))
 end
 
 -----------------------------------------------------------------------
@@ -84,31 +66,33 @@ end
 
 function BuildOrder_Check_Vils_Validate(check)
     local t = check.payload
-    return #t <= 4 and t["food"] ~= nil or t["gold"] ~= nil or t["wood"] ~= nil or t["stone"] ~= nil
+    return t.food ~= nil or t.gold ~= nil or t.wood ~= nil or t.stone ~= nil
 end
 
 function BuildOrder_Check_Vils_Activate(obj, player)
-    if _bo_vils_data.active[obj.check.id] ~= nil then
+    if _bo_vils_data[obj.check.id] ~= nil then
         return false
     end
 
-    _bo_vils_data.active[obj.check.id] = {
+    print("[VilCheck] Registered check="..tostring(obj.check.id))
+    _bo_vils_data[obj.check.id] = {
         player = player
     }
     return true
 end
 
 function BuildOrder_Check_Vils_Deactivate(obj)
-    if _bo_vils_data.active[obj.check.id] == nil then
+    if _bo_vils_data[obj.check.id] == nil then
         return
     end
 
-    _bo_vils_data.active[obj.check.id] = nil
+    print("[VilCheck] Deleted check="..tostring(obj.check.id))
+    _bo_vils_data[obj.check.id] = nil
 end
 
 -- TODO: Looks like the old version chained them together???
 function BuildOrder_Check_Vils_GetText(obj)
-    print("Getting text for vils check")
+    print("[VilCheck] Assembling objective text")
     local res = GetPayloadAsList(obj.check.payload)
     if #res == 4 then
         return Loc_FormatText(
@@ -136,32 +120,36 @@ function BuildOrder_Check_Vils_GetText(obj)
     end
 end
 
-function BuildOrder_Check_Vils_PollCompletion(obj)
-    local state = _bo_vils_data.active[obj.check.id]
-    if state == nil then
+local function _vilcheck(player, req, reader, res)
+    if req == nil or req == 0 then
         return false
     end
 
-    -- TODO: Is this how I want to pass around the player?
+    local num_vils = reader(player)
+    if num_vils < req then
+        print("[VilCheck] Missing "..res.." vils: Want="..tostring(req).." Got="..tostring(num_vils))
+    end
+
+    return num_vils < req
+end
+
+function BuildOrder_Check_Vils_PollCompletion(obj)
+    local state = _bo_vils_data[obj.check.id]
+    if state == nil then
+        print("[VilCheck] No check tracked for child "..obj.check.id)
+        return false
+    end
+
     local player = state.player
     local payload = obj.check.payload
 
     -- Then check if each resource assignment is being met
-    local passes = true
-    if payload.food ~= nil then
-        passes = passes and GetVilsOnFood(player) >= payload.food
-    end
-    if payload.gold ~= nil then
-        passes = passes and GetVilsOnGold(player) >= payload.gold
-    end
-    if payload.wood ~= nil then
-        passes = passes and GetVilsOnWood(player) >= payload.wood
-    end
-    if payload.stone ~= nil then
-        passes = passes and GetVilsOnStone(player) >= payload.stone
-    end
-
-    return passes
+    return not (
+        _vilcheck(player, payload.food, GetVilsOnFood, "food")
+        or _vilcheck(player, payload.gold, GetVilsOnGold, "gold")
+        or _vilcheck(player, payload.wood, GetVilsOnWood, "wood")
+        or _vilcheck(player, payload.stone, GetVilsOnStone, "stone")
+    )
 end
 
 -----------------------------------------------------------------------

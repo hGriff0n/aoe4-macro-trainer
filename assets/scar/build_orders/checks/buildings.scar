@@ -1,8 +1,10 @@
 -----------------------------------------------------------------------
 -- Imports
 -----------------------------------------------------------------------
-import("dynimport.scar")
-import("build_orders/localization.scar")
+import("utils/dynimport.scar")
+
+DynImport("build_orders/localization.scar")
+DynImport("build_orders/checks/utils/pbg.scar")
 
 
 -----------------------------------------------------------------------
@@ -18,39 +20,6 @@ local _BUILDINGS_FORMAT_ID = 168
 -----------------------------------------------------------------------
 -- Local Helper Functions
 -----------------------------------------------------------------------
-
--- TODO: Same as built.scar
-local function ResolvePBGs(ids)
-    local pbgs = {}
-    for _, id in ipairs(ids) do
-        local found, pbg = BP_GetEntityBlueprint(id)
-        if found and pbg ~= nil then
-            pbgs[#pbgs + 1] = pbg
-        end
-    end
-    return pbgs
-end
-
--- TODO: Same as built.scar, but resolves entity to pbg
-local function PBGMatches(left, entity)
-    local right = ResolvePBGs({ entity })[1]
-    return left ~= nil and right ~= nil
-        and left.PropertyBagGroupID == right.PropertyBagGroupID
-        and left.PropertyBagGroupModPackID == right.PropertyBagGroupModPackID
-        and left.PropertyBagGroupType == right.PropertyBagGroupType
-end
-
--- TODO: Same as built.scar
-local function BuildingName(building, id)
-    if building ~= nil and building.pbg ~= nil then
-        local resolved, uiInfo = BP_GetEntityUIInfo(building.pbg)
-        if uiInfo ~= nil and uiInfo.screenName ~= nil then
-            return uiInfo.screenName
-        end
-    end
-    print("Missing localization string for " .. tostring(id))
-    return BuildOrder_RawText(tostring(id))
-end
 
 
 -----------------------------------------------------------------------
@@ -82,13 +51,15 @@ function BuildOrder_Check_Buildings_Activate(obj, player)
         return false
     end
 
-    local pbgs = ResolvePBGs({ obj.check.payload.id })
-    if #pbgs == 0 then
+    local pbg = Mod_Pbg_Resolve(obj.check.payload.id, BP_GetEntityBlueprint)
+    if pbg == nil then
+        print("[BuildingCheck] Failed to resolve pbg: check="..tostring(obj.check.id).." pbg="..tostring(obj.check.payload.id))
         return false
     end
 
+    print("[BuildingCheck] Registered check="..tostring(obj.check.id))
     _bo_buildings_data.buildings[obj.check.id] = {
-        pbg = pbgs[1],
+        pbg = pbg,
         count = obj.check.payload.count,
         player = player
     }
@@ -100,24 +71,30 @@ function BuildOrder_Check_Buildings_Deactivate(obj)
         return
     end
 
+    print("[BuildingCheck] Deleted check="..tostring(obj.check.id))
     _bo_buildings_data.buildings[obj.check.id] = nil
 end
 
 function BuildOrder_Check_Buildings_GetText(obj)
     print("Getting text for building check")
+
+    local building = _bo_buildings_data.buildings[obj.check.id]
+    local building_name = Mod_Pbg_ScreenName(
+        building~= nil and building.pbg or nil,
+        payload.id,
+        BP_GetEntityUIInfo
+    )
+
     local payload = obj.check.payload
     return Loc_FormatText(
-        BO_LOC_StringId(_BUILDINGS_FORMAT_ID),
-        payload.count,
-        BuildingName(
-            _bo_buildings_data.buildings[obj.check.id], payload.id)
-    )
+        BO_LOC_StringId(_BUILDINGS_FORMAT_ID), payload.count, building_name)
 end
 
 -- TODO: Would be ideal if we could do all checks in one go
 function BuildOrder_Check_Buildings_PollCompletion(obj)
     local state = _bo_buildings_data[obj.check.id].buildings
     if state == nil then
+        print("[BuildingCheck] No check tracked for child "..obj.check.id)
         return false
     end
 
@@ -128,12 +105,15 @@ function BuildOrder_Check_Buildings_PollCompletion(obj)
             if Entity_GetPlayerOwner(entity) == state.player
                 and not Entity_IsBuilding(entity)
                 and Entity_GetBuildingProgress(entity) >= 1.0
-                and PBGMatches(state.pbg, entity)
+                and Mod_Pbg_Equals(
+                    state.pbg, Mod_Pbg_Resolve(entity, BP_GetEntityBlueprint))
             then
                 count = count + 1
             end
         end
     )
+
+    print("[BuildingCheck] Found "..tostring(count).." buildings. Want="..tostring(obj.check.payload.count))
     return count >= obj.check.payload.count
 end
 

@@ -1,8 +1,11 @@
 -----------------------------------------------------------------------
 -- Imports
 -----------------------------------------------------------------------
-import("dynimport.scar")
-import("build_orders/localization.scar")
+import("utils/dynimport.scar")
+import("utils/debug.scar")
+
+DynImport("build_orders/localization.scar")
+DynImport("build_orders/checks/utils/pbg.scar")
 
 
 -----------------------------------------------------------------------
@@ -23,52 +26,6 @@ local _PROD_UNIT_FORMAT = 164
 -- Local Helper Functions
 -----------------------------------------------------------------------
 
--- Similar to built.scar/buildings.scar, but for units
-local function ResolveUnitPBGs(ids)
-    local pbgs = {}
-    for _, id in ipairs(ids) do
-        local found, pbg = BP_GetSquadBlueprint(id)
-        if found and pbg ~= nil then
-            pbgs[#pbgs + 1] = pbg
-        end
-    end
-    return pbgs
-end
-
--- TODO: Same as built.scar
-local function PBGMatches(left, right)
-    return left ~= nil and right ~= nil
-        and left.PropertyBagGroupID == right.PropertyBagGroupID
-        and left.PropertyBagGroupModPackID == right.PropertyBagGroupModPackID
-        and left.PropertyBagGroupType == right.PropertyBagGroupType
-end
-
-local function MatchesAnyBlueprint(pbgs, blueprint)
-    if pbgs == nil then
-        return false
-    end
-
-    for _, pbg in ipairs(pbgs) do
-        if PBGMatches(pbg, blueprint) then
-            return true
-        end
-    end
-    return false
-end
-
--- Similar to built.scar/buildings.scar, but for units
-local function UnitName(unit, id)
-    if unit ~= nil and unit.pbgs ~= nil and #unit.pbgs > 0 then
-        local resolved, uiInfo = BP_GetSquadUIInfo(
-            unit.pbgs[1], Player_GetRace(unit.player))
-        if uiInfo ~= nil and uiInfo.screenName ~= nil then
-            return uiInfo.screenName
-        end
-    end
-    print("Missing localization string for " .. tostring(id))
-    return BuildOrder_RawText(tostring(id))
-end
-
 local function IsInvalidEvent(event)
     return event == nil or event.player == nil or event.pbg == nil
         or event.entity == nil or event.entity.EntityID == nil
@@ -76,11 +33,10 @@ end
 
 local function QueuedItemIsCheckMatch(entity, index, pbgs)
     return Entity_GetProductionQueueItemType(entity, index) == PITEM_Spawn
-        and BuildOrder_MatchesAnyBlueprint(
-            pbgs, Entity_GetProductionQueueItem(entity, index))
+        and Mod_Pbg_MatchesAny(
+            pbgs, Entity_GetProductionQueueItem(entity, index)) ~= nil
 end
 
--- TODO: Same as built.scar, but for different internal data
 local function DeactivateCheck(check_id)
     if _bo_produce_data.units[check_id] ~= nil then
         if _bo_produce_data.units[check_id].queued then
@@ -91,15 +47,18 @@ local function DeactivateCheck(check_id)
                 _bo_produce_data.num_build_listeners - 1
         end
 
+        print("[ProduceCheck] Deleted check="..tostring(obj.check.id))
         _bo_produce_data.units[check_id] = nil
     end
 
     -- Only remove the event handler if all checks are deactivated
     -- since a single step can have multiple checks of the same kind
     if _bo_produce_data.num_build_listeners == 0 then
+        print("[ProduceCheck] All build checks deactiated, removing listener")
         Rule_RemoveGlobalEvent(
             BuildOrder_Check_Produce_BuildEventHandle)
     elseif _bo_produce_data.num_command_listeners == 0 then
+        print("[ProduceCheck] All entity checks deactiated, removing listener")
         Rule_RemoveGlobalEvent(
             BuildOrder_Check_Produce_EntityCommandEventHandle)
     end
@@ -138,11 +97,13 @@ function BuildOrder_Check_Produce_Activate(obj, player)
     end
 
     local payload = obj.check.payload
-    local pbgs = ResolvePBGs(payload.ids)
+    local pbgs = Mod_Pbg_ResolveAll(payload.ids, BP_GetSquadBlueprint)
     if #pbgs == 0 then
+        print("[ProduceCheck] Failed to resolve pbg: check="..tostring(obj.check.id).." pbg="..tostring(obj.check.payload.id))
         return false
     end
 
+    print("[ProduceCheck] Registered check="..tostring(obj.check.id))
     _bo_units_data.units[obj.check.id] = {
         obj_id = obj.obj_id,
         player = player,
@@ -164,6 +125,7 @@ function BuildOrder_Check_Produce_Activate(obj, player)
     if payload.queued then
         _bo_units_data.listening_for_command_event = true
         if _bo_units_data.num_command_listeners == 0 then
+            print("[ProduceCheck] Adding queue event listener: check="..tostring(obj.check.id))
             Rule_AddGlobalEvent(
                 BuildOrder_Check_Produce_EntityCommandEventHandle,
                 GE_EntityCommandIssued
@@ -171,8 +133,10 @@ function BuildOrder_Check_Produce_Activate(obj, player)
         end
         _bo_units_data.num_command_listeners =
             _bo_units_data.num_command_listeners + 1
+
     else
         if _bo_units_data.num_build_listeners == 0 then
+            print("[ProduceCheck] Adding unit build listener: check="..tostring(obj.check.id))
             Rule_AddGlobalEvent(
                 BuildOrder_Check_Produce_BuildEventHandle,
                 GE_BuildItemComplete
@@ -186,6 +150,7 @@ function BuildOrder_Check_Produce_Activate(obj, player)
 end
 
 function BuildOrder_Check_Produce_Deactivate(obj)
+    print("[ProduceCheck] Requested deactivation of check "..tostring(obj.check.id))
     if _bo_units_data.num_build_listeners > 0
         or _bo_units_data.num_command_listeners > 0
     then
@@ -194,23 +159,29 @@ function BuildOrder_Check_Produce_Deactivate(obj)
 end
 
 function BuildOrder_Check_Produce_GetText(obj)
+    print("[ProduceCheck] Assembling objective text")
     print("Getting text for produce check")
     local payload = obj.check.payload
-    local unit_text = UnitName(
-        _bo_produce_data.units[obj.check.id], payload.id
+    local prace = Player_GetRace(unit.player)
+    local unit_text = Mod_Pbg_ScreenName(
+        unit ~= nil and unit.pbgs ~= nil and #unit.pbgs > 0 and unit.pbgs[1] or nil,
+        id,
+        function(pbg) return BP_GetSquadUIInfo(pbg, prace)
     )
 
     if payload.constant then
         return Loc_FormatText(BO_LOC_StringId(_CONSTANT_PROD_FORMAT), unit_text)
     elseif payload.queued then
-        return Loc_FormatText(BO_LOC_StringId(_QUEUE_UNIT_FORMAT_ID), payload.count, unit_text)
+        return Loc_FormatText(
+            BO_LOC_StringId(_QUEUE_UNIT_FORMAT_ID), payload.count, unit_text)
     else
-        return Loc_FormatText(BO_LOC_StringId(_PROD_UNIT_FORMAT_ID), payload.count, unit_text)
+        return Loc_FormatText(
+            BO_LOC_StringId(_PROD_UNIT_FORMAT_ID), payload.count, unit_text)
     end
 end
 
 function BuildOrder_Check_Produce_BuildEventHandle(event)
-    -- TODO: Might want to use slightly different check
+    print("[ProduceCheck] Received unit build event: "..tostring(event))
     if IsInvalidEvent(event) then
         return
     end
@@ -218,13 +189,15 @@ function BuildOrder_Check_Produce_BuildEventHandle(event)
     for check_id, state in pairs(_bo_produce_data.units) do
         -- TODO: Might be worth skipping the `state.queued` filter
         if event.player == state.player and not state.queued then
-            if MatchesAnyBlueprint(state.pbgs, event.pbg) then
+            if Mod_Pbg_MatchesAny(state.pbgs, event.pbg) ~= nil then
+                print("[ProduceCheck] Found matching listener")
                 state.num_built = state.num_built + 1
             end
 
-            -- TODO: We'll want to redo this for constant metrics
-            -- if we ever get to adding that
+            -- TODO: We'll want to redo this for constant 
+            -- if we ever get to adding telemetry
             if state.num_built >= state.minimum then
+                print("[ProduceCheck] Expected num events seen. Marking "..tostring(state.obj_id).." complete")
                 Obj_SetState(state.obj_id, OS_Complete)
                 DeactivateCheck(check_id)
             end
@@ -232,14 +205,19 @@ function BuildOrder_Check_Produce_BuildEventHandle(event)
     end
 end
 
+-- TODO: Need to test what the 
 -- Only used for checking the number of queued elements
+-- Don't need to check built because a unit has to be queued first
 function BuildOrder_Check_Produce_EntityCommandEventHandle(event)
+    print("[ProduceCheck] Received entity command event: "..tostring(event))
+    Mod_Debug_PrintTable(event)
     if IsInvalidEvent(event) then
         return
     end
 
     local owner = Entity_GetPlayerOwner(event.entity)
     if owner == nil or not Entity_HasProductionQueue(event.entity) then
+        print("[AgeUpCheck] Wrong owner for check. leaving early")
         return
     end
 
@@ -254,6 +232,7 @@ function BuildOrder_Check_Produce_EntityCommandEventHandle(event)
         -- TODO: Maybe track "queued" and "built" separately in this case
         -- We already subscribe to the build event, so we simply increment
         -- the num built and add it to num queued
+        -- Or just increment everytime we get a new queue?
         local num_queued = 0
         EGroup_ForEach(
             Player_GetEntities(state.player),
@@ -267,7 +246,9 @@ function BuildOrder_Check_Produce_EntityCommandEventHandle(event)
                 end
             end
         )
+
         if num_queued >= state.minimum then
+            print("[ProduceCheck] Expected num events seen. Marking "..tostring(state.obj_id).." complete")
             Obj_SetState(state.obj_id, OS_Complete)
             DeactivateCheck(check_id)
         end

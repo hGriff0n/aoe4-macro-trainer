@@ -27,7 +27,7 @@ is exactly one directory under `My Games/Age of Empires IV/Users`. With no
 profiles or more than one profile, pass the profile ID (not a filesystem path):
 
 ```powershell
-python -m tools.build_orders.compiler build build_orders --profile 76561198000000000
+python tools/compiler.py build build_orders --profile 76561198000000000
 ```
 
 An explicit profile ID also works before the profile directory or datastore file
@@ -37,16 +37,16 @@ replaces matching IDs, appends new IDs, and retains unrelated datastore orders.
 The `build` word is optional, so this is equivalent:
 
 ```powershell
-python -m tools.build_orders.compiler build_orders --profile 76561198000000000
+python tools/compiler.py  build_orders --profile 76561198000000000
 ```
 
 With no input argument, the default input is the repository's `build_orders`
 directory. The remaining commands are:
 
 ```powershell
-python -m tools.build_orders.compiler list --profile 76561198000000000
-python -m tools.build_orders.compiler delete english-opening english-fast-castle --profile 76561198000000000
-python -m tools.build_orders.compiler extract english-opening --output-dir exported --profile 76561198000000000
+python tools/compiler.py list --profile 76561198000000000
+python tools/compiler.py delete english-opening english-fast-castle --profile 76561198000000000
+python tools/compiler.py extract english-opening --output-dir exported --profile 76561198000000000
 ```
 
 `list` shows each compiled ID, civilization, title, and source. `delete` and

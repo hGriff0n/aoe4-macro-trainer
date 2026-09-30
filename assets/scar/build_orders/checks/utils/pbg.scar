@@ -1,0 +1,53 @@
+
+local _pbg_cache = {}
+
+function Mod_Pbg_Resolve(id, blueprint_getter)
+    local pbgs = {}
+    if _pbg_cache[id] == nil then
+        local found, pbg = blueprint_getter(id)
+        if found and pbg ~= nil then
+            _pbg_cache[id] = pbg
+        end
+    end
+    return _pbg_cache[id]
+end
+
+function Mod_Pbg_ResolveAll(ids, blueprint_getter)
+    local pbgs = {}
+    for _, id in ipairs(ids) do
+        local _pbg = Mod_Pbg_Resolve(id, blueprint_getter)
+        if _pbg ~= nil then
+            pbgs[#pbgs+1] = _pbg
+        end
+    end
+    return pbgs
+end
+
+-- Same as buildings.scar, but without entity resolution
+function Mod_Pbg_Equals(left, right)
+    return left ~= nil and right ~= nil
+        and left.PropertyBagGroupID == right.PropertyBagGroupID
+        and left.PropertyBagGroupModPackID == right.PropertyBagGroupModPackID
+        and left.PropertyBagGroupType == right.PropertyBagGroupType
+end
+
+function Mod_Pbg_MatchesAny(pbgs, blueprint)
+    for i, pbg in ipairs(pbgs ~= nil and pbgs or {}) do
+        if Mod_Pbg_Equals(pbg, blueprint) then
+            return i
+        end
+    end
+    return nil
+end
+
+-- TODO: There's probably some way to identify building/etc. from pbg
+function Mod_Pbg_ScreenName(pbg, id, ui_accessor)
+    if pbg ~= nil then
+        local resolved, uiInfo = ui_accessor(pbg)
+        if uiInfo ~= nil and uiInfo.screenName ~= nil then
+            return uiInfo.screenName
+        end
+    end
+    print("Missing localization string for " .. tostring(id))
+    return BuildOrder_RawText(tostring(id))
+end

@@ -1,19 +1,17 @@
 -----------------------------------------------------------------------
 -- Imports
 -----------------------------------------------------------------------
-import("dynimport.scar")
-import("build_orders/localization.scar")
+import("utils/dynimport.scar")
+
+DynImport("build_orders/localization.scar")
+DynImport("build_orders/checks/utils.scar")
 
 
 -----------------------------------------------------------------------
 -- Data
 -----------------------------------------------------------------------
 
-_bo_ageup_data = {
-    age = {},
-    num_upgrade_triggers = 0,
-    num_building_triggers = 0
-}
+_bo_ageup_data = {}
 
 local _AGE_FORMAT_ID = 161
 
@@ -21,58 +19,59 @@ local _AGE_FORMAT_ID = 161
 -- Local Helper Functions
 -----------------------------------------------------------------------
 
--- Same as produce.scar
-local function PBGMatches(left, right)
-    return left ~= nil and right ~= nil
-        and left.PropertyBagGroupID == right.PropertyBagGroupID
-        and left.PropertyBagGroupModPackID == right.PropertyBagGroupModPackID
-        and left.PropertyBagGroupType == right.PropertyBagGroupType
-end
+-- TODO: Don't know if the pbg.display_name field is accurate
+local function CheckUpgradeResearched()
+    print("[AgeUpCheck] Checking if player already aged up: check="..tostring(obj.check.id))
 
--- Same as produce.scar
-local function MatchesAnyBlueprint(pbgs, blueprint)
-    if pbgs == nil then
-        return false
-    end
-
-    for _, pbg in ipairs(pbgs) do
-        if PBGMatches(pbg, blueprint) then
+    for _, pbg in ipairs(_bo_ageup_data.pbgs) do
+        if Player_HasUpgrade(_bo_ageup_data.player, pbg) then
+            print("[AgeUpCheck] Player already aged up via "..pbg.display_name..": check="..tostring(obj.check.id))
             return true
         end
     end
-    return false
-end
-
-local function CheckAlreadyCompleted()
-    if _bo_ageup_data.age.trigger == "upgrade" then
-        for _, pbg in ipairs(_bo_ageup_data.age.pbgs) do
-            if Player_HasUpgrade(_bo_ageup_data.age.player, pbg) then
-                return true
-            end
-        end
-    else
-        return CheckConstructionStarted()
-    end
 
     return false
 end
 
+-- TODO: Don't know if the entity.display_name field is accurate
 local function CheckConstructionStarted()
-    local state = _bo_ageup_data.age
+    print("[AgeUpCheck] Checking if player already aged up: check="..tostring(obj.check.id))
+
+    local state = _bo_ageup_data
     local found_landmark = false
     EGroup_ForEach(
         Player_GetEntities(state.player),
         function(group, index, entity)
             if Entity_GetPlayerOwner(entity) == state.player
                 and Entity_IsBuilding(entity)
-                and MatchesAnyBlueprint(
-                    state.pbgs, Entity_GetBlueprint(entity))
+                and Mod_Pbg_Equals(state.pbgs, Entity_GetBlueprint(entity)) ~= nil
             then
+                print("[AgeUpCheck] Player already built landmark "..entity.display_name..": check="..tostring(obj.check.id))
                 found_landmark = true
             end
         end
     )
+
     return found_landmark
+end
+
+local function CheckAlreadyCompleted()
+    if _bo_ageup_data.trigger == "upgrade" then
+        return CheckUpgradeResearched()
+    else
+        return CheckConstructionStarted()
+    end
+end
+
+-- TODO: Same in upgrades.scar
+local function GetExecuterOwner(event)
+    if event.executer.PlayerID ~= nil then
+        return context.executer
+    end
+    if event.executer.EntityID ~= nil then
+        return Entity_GetPlayerOwner(context.executer)
+    end
+    return nil
 end
 
 -----------------------------------------------------------------------
@@ -105,7 +104,7 @@ end
 -- }
 function BuildOrder_Check_AgeUp_Activate(obj, player)
     -- We can only have one age check per step
-    if _bo_ageup_data.age ~= nil then
+    if _bo_ageup_data ~= nil then
         return false
     end
 
@@ -114,10 +113,11 @@ function BuildOrder_Check_AgeUp_Activate(obj, player)
     local pbgs = BuildOrder_ResolvePayloadBlueprints(
         check.payload, resolver)
     if pbgs == nil or #pbgs == 0 then
+        print("[AgeUpCheck] Failed to resolve pbg: check="..tostring(obj.check.id).." pbg="..tostring(obj.check.payload.id))
         return false
     end
 
-    _bo_ageup_data.age = {
+    _bo_ageup_data = {
         obj_id = obj.obj_id,
         pbgs = pbgs,
         trigger = check.payload.trigger,
@@ -125,17 +125,20 @@ function BuildOrder_Check_AgeUp_Activate(obj, player)
         player = player
     }
 
-    -- TODO: This has the issue with `obj_id` not be created yet
+    -- TODO: This has the issue with `obj_id` not being created yet
     local completed = CheckAlreadyCompleted()
     if completed then
+        print("[AgeUpCheck] Already completed check="..tostring(obj.check.id))
         Obj_SetState(obj.obj_id, OS_Complete)
         BuildOrder_Check_AgeUp_Deactivate(obj)
         return true
     end
 
-    if _bo_ageup_data.age.trigger == "upgrade" then
+    if _bo_ageup_data.trigger == "upgrade" then
+        print("[AgeUpCheck] Registered Adding upgrade event listener: check="..tostring(obj.check.id))
         Rule_AddGlobalEvent(OnUpgradeStart, GE_UpgradeStart)
     else
+        print("[AgeUpCheck] Adding construction event listener: check="..tostring(obj.check.id))
         Rule_AddGlobalEvent(OnConstructionStart, GE_ConstructionStart)
     end
 
@@ -143,20 +146,25 @@ function BuildOrder_Check_AgeUp_Activate(obj, player)
 end
 
 function BuildOrder_Check_AgeUp_Deactivate(obj)
-    if _bo_ageup_data.age == nil then
+    if _bo_ageup_data == nil then
         return
     end
 
-    if _bo_ageup_data.age.trigger == "upgrade" then
+    if _bo_ageup_data.trigger == "upgrade" then
+        print("[AgeUpCheck] Removing upgrade listener for check "..tostring(obj.check.id))
         Rule_RemoveGlobalEvent(OnUpgradeStart)
     else
+        print("[AgeUpCheck] Removing construction listener for check "..tostring(obj.check.id))
         Rule_RemoveGlobalEvent(OnConstructionStart)
     end
-    _bo_ageup_data.age = nil
+
+    print("[AgeUpCheck] Deleted check="..tostring(obj.check.id))
+    _bo_ageup_data = nil
 end
 
+-- TODO: Update the ids used by this approach
 function BuildOrder_Check_AgeUp_GetText(obj)
-    print("Getting text for ageup check")
+    print("[AgeUpCheck] Assembling objective text")
     local targetKind = "entity"
     if obj.check.payload.trigger == "upgrade" then
         targetKind = "upgrade"
@@ -164,48 +172,64 @@ function BuildOrder_Check_AgeUp_GetText(obj)
     return Loc_FormatText(
         BUILD_ORDER_LOC_KEYS.ageUp,
         BuildOrder_TargetNames(
-            obj.check.payload, targetKind, _bo_ageup_data.age)
+            obj.check.payload, targetKind, _bo_ageup_data)
     )
 end
 
 -- TODO: Needs fix to set state
 function OnConstructionStart(event)
-    if _bo_ageup_data.age == nil
+    print("[AgeUpCheck] Received construction event: "..tostring(event))
+    if _bo_ageup_data == nil
         or event == nil
         or event.player == nil
         or event.pbg == nil
         or event.entity == nil
         or event.entity.EntityID == nil
     then
+        print("[AgeUpCheck] No/invalid check tracked for child "..tostring(obj.check.id))
         return
     end
 
-    if event.player == _bo_ageup_data.age.player
-        and MatchesAnyBlueprint(_bo_ageup_data.age.pbgs, event.pbg)
-    then
-        Obj_SetState(_bo_ageup_data.age.obj_id, OS_Complete)
+    if event.player ~= _bo_ageup_data.player then
+        print("[AgeUpCheck] Wrong owner for check. leaving early")
+        return
+    end
+
+    local match = Mod_Pbg_MatchesAny(_bo_ageup_data.pbgs, event.pbg)
+    if match ~= nil then
+        print("[AgeUpCheck] Found expected event. Marking "..tostring(_bo_ageup_data.obj_id).." complete")
+        Obj_SetState(_bo_ageup_data.obj_id, OS_Complete)
         BuildOrder_Check_AgeUp_Deactivate(nil)
+    else
+        print("[AgeUpCheck] Building pbg not one of the expected ids. Skipping.")
     end
 end
 
 -- TODO: Needs fix to set state
 function OnUpgradeStart(event)
-    if _bo_ageup_data.age == nil
+    print("[AgeUpCheck] Received upgrade event: "..tostring(event))
+    if _bo_ageup_data == nil
         or event == nil
         or event.executer == nil
         or event.upgrade == nil
     then
+        print("[AgeUpCheck] No/invalid check tracked for child "..tostring(obj.check.id))
         return
     end
 
-    -- TODO: Missing `BuildOrder_GetExecuterOwner`
     local owner = GetExecuterOwner(event)
-    if owner == _bo_ageup_data.age.player
-        -- TODO: Missing `BuildOrder_MatchesAnyBlueprint`
-        and MatchesAnyBlueprint(_bo_ageup_data.age.pbgs, event.upgrade)
-    then
-        Obj_SetState(_bo_ageup_data.age.obj_id, OS_Complete)
+    if owner ~= _bo_ageup_data.player then
+        print("[AgeUpCheck] Wrong owner for check. leaving early")
+        return
+    end
+
+    local match = Mod_Pbg_MatchesAny(_bo_ageup_data.pbgs, event.pbg)
+    if match ~= nil then
+        print("[AgeUpCheck] Found expected event. Marking "..tostring(_bo_ageup_data.obj_id).." complete")
+        Obj_SetState(_bo_ageup_data.obj_id, OS_Complete)
         BuildOrder_Check_AgeUp_Deactivate(nil)
+    else
+        print("[AgeUpCheck] Event pbg not one of the expected ids. Skipping.")
     end
 end
 
@@ -213,16 +237,31 @@ end
 -- Mod Implementation
 -----------------------------------------------------------------------
 
--- TODO: Update?
+-- TODO: Do we need player???
+local function kind_name(kind, id, pbg, player)
+    -- local prace = Player_GetRaceName(player)
+    return Mod_Pbg_ScreenName(pbg, id, function(pbg)
+        if kind == "entity" then
+            return BP_GetEntityUIInfo(pbg)
+        else
+            -- The old code used `BP_GetSquadUIInfo`??? but it worked
+            return BP_GetUpgradeUIInfo(pbg)
+        end
+    end)
+end
+
+-- TODO: This will need tweaking based on how we setup the formatting string
 function BuildOrder_TargetNames(payload, kind, context)
     local names = {}
     local joined = false
+        
     if payload.id ~= nil then
-        table.insert(names, BuildOrder_GameName(kind, id, context.pbgs[1], context.player))
+        table.insert(names, kind_name(kind, id, context.pbgs[1], context.player))
+
     elseif payload.oneof ~= nil then
         joined = true
         for i, id in ipairs(payload.oneof) do
-            table.insert(names, BuildOrder_GameName(kind, id, context.pbgs[i], context.player))
+            table.insert(names, kind_name(kind, id, context.pbgs[i], context.player))
         end
     end
 
@@ -232,23 +271,4 @@ function BuildOrder_TargetNames(payload, kind, context)
         return BuildOrder_FormattedArgument(result)
     end
     return result
-end
-
--- TODO: Potentially mergeable with some other files
-function BuildOrder_GameName(kind, id, pbg, player)
-    if kind == "entity" then
-        local resolved, uiInfo = BP_GetEntityUIInfo(pbg)
-        if uiInfo ~= nil and uiInfo.screenName ~= nil then
-            return uiInfo.screenName
-        end
-    elseif kind == "upgrade" then
-        local resolved, uiInfo = BP_GetSquadUIInfo(
-            pbg, Player_GetRace(player))
-        if uiInfo ~= nil and uiInfo.screenName ~= nil then
-            return uiInfo.screenName
-        end
-    end
-
-    print("BuildOrder: missing localized " .. tostring(kind) .. " name for " .. tostring(id))
-    return BuildOrder_RawText(tostring(id))
 end

@@ -1,19 +1,17 @@
 -----------------------------------------------------------------------
 -- Imports
 -----------------------------------------------------------------------
-import("dynimport.scar")
-import("build_orders/localization.scar")
+import("utils/dynimport.scar")
+
+DynImport("build_orders/localization.scar")
 
 
 -----------------------------------------------------------------------
 -- Data
 -----------------------------------------------------------------------
 
-_bo_resources_data = {
-    res = {}
-}
+_bo_resources_data = {}
 
--- TODO: Is there any documentation on the format strings?
 local _COLLECT_RES_FORMAT_ID = 155
 BUILD_ORDER_RESOURCE_KEYS = {
     food = "$dfb5645698a84afb91cf7a2dfb0f4a4e:148",
@@ -25,24 +23,6 @@ BUILD_ORDER_RESOURCE_KEYS = {
 -----------------------------------------------------------------------
 -- Local Helper Functions
 -----------------------------------------------------------------------
-
--- TODO: Same as vils.scar
--- TODO: Game is crashing saying these are nil, but the old mod used them fine? Why???
-local function ResolveResourceType(res)
-    if res == "food" then
-        return RT_Food
-    end
-    if res == "gold" then
-        return RT_Gold
-    end
-    if res == "wood" then
-        return RT_Wood
-    end
-    if res == "stone" then
-        return RT_Stone
-    end
-    return nil
-end
 
 -----------------------------------------------------------------------
 -- Mod Interface
@@ -65,34 +45,36 @@ function BuildOrder_Check_Resources_Validate(check)
 end
 
 function BuildOrder_Check_Resources_Activate(obj, player)
-    if _bo_resources_data.res[obj.check.id] ~= nil then
+    if _bo_resources_data[obj.check.id] ~= nil then
         return false
     end
 
     local payload = obj.check.payload
-    _bo_resources_data.res[obj.check.id] = {
+    print("[ResourceCheck] Registered check="..tostring(obj.check.id))
+    _bo_resources_data[obj.check.id] = {
         player = player,
-        type = ResolveResourceType(payload.resource),
+        type = payload.resource,
         count = payload.count
     }
     return true
 end
 
 function BuildOrder_Check_Resources_Deactivate(obj)
-    if _bo_resources_data.res[obj.check.id] == nil then
+    if _bo_resources_data[obj.check.id] == nil then
         return
     end
 
-    _bo_resources_data.res[obj.check.id] = nil
+    print("[ResourceCheck] Deleted check="..tostring(obj.check.id))
+    _bo_resources_data[obj.check.id] = nil
 end
 
 function BuildOrder_Check_Resources_GetText(obj)
-    print("Getting text for resources check")
+    print("[ResourceCheck] Assembling objective text")
     local payload = obj.check.payload
     return Loc_FormatText(
         BO_LOC_StringId(_COLLECT_RES_FORMAT_ID),
         payload.count,
-        BO_LOC_ResourceName(_bo_resources_data.res[obj.check.id].type)
+        BO_LOC_ResourceName(_bo_resources_data[obj.check.id].type)
     )
 end
 
@@ -100,10 +82,12 @@ end
 function BuildOrder_Check_Resources_PollCompletion(obj)
     local state = _bo_resources_data[obj.check.id]
     if state == nil then
+        print("[ResourceCheck] No check tracked for child "..obj.check.id)
         return false
     end
 
     local current = Player_GetResource(res.player, res.type)
+    print("[ResourceCheck] Checking "..res.." storage: Want="..tostring(res.count).." Got="..tostring(current))
     return current >= res.count
 end
 

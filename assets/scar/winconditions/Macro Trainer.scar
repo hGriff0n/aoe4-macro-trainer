@@ -28,7 +28,7 @@ import("gameplay/currentageui.scar")
 -- Mod-Specific Imports
 -----------------------------------------------------------------------
 
-import("dynimport.scar")
+import("utils/dynimport.scar")
 DynImport("simspeed/submod.scar")
 DynImport("build_orders/submod.scar")
 

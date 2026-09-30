@@ -1,17 +1,16 @@
 -----------------------------------------------------------------------
 -- Imports
 -----------------------------------------------------------------------
-import("dynimport.scar")
-import("build_orders/localization.scar")
+import("utils/dynimport.scar")
+
+DynImport("build_orders/localization.scar")
 
 
 -----------------------------------------------------------------------
 -- Data
 -----------------------------------------------------------------------
 
-_bo_rallypoint_data = {
-
-}
+_bo_rallypoint_data = {}
 
 local _RALLYPOINT_FORMAT_ID = 158
 
@@ -51,7 +50,7 @@ end
 function BuildOrder_Check_Rallypoint_GetText(obj)
     print("Getting text for rallypoint check")
     return Loc_FormatText(BO_LOC_StringId(_RALLYPOINT_FORMAT_ID),
-        BuildOrder_ResourceName(obj.check.payload.resource))
+        BO_LOC_ResourceName(obj.check.payload.resource))
 end
 
 -----------------------------------------------------------------------

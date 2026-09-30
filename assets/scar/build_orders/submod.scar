@@ -1,7 +1,10 @@
 -----------------------------------------------------------------------
 -- Imports
 -----------------------------------------------------------------------
-import("dynimport.scar")
+import("simspeed/simrate.scar")
+import("utils/debug.scar")
+import("utils/dynimport.scar")
+
 DynImport("build_orders/localization.scar")
 DynImport("build_orders/objectives.scar")
 DynImport("build_orders/selector_ui.scar")
@@ -136,22 +139,13 @@ local function FinishGameStart()
 	Rule_Remove(BuildOrder_PauseNextTick)
 	BuildOrderSelectorUI_Hide()
 
-	-- TODO: This should use a function from `simspeed`
-	Misc_SetSimRate(8)
+	Mod_Sim_Unpause()
 
 	-- TODO: Is there any state I need to pass through?
 	for _, hook in ipairs(_buildorder_data.start_hooks) do
 		hook()
 	end
 	return true
-end
-
------------------------------------------------------------------------
--- Mod Interface
------------------------------------------------------------------------
-
-function BuildOrder_OnInit()
-	BuildOrder_Objectives_OnInit()
 end
 
 local function get_civs(bolist)
@@ -165,12 +159,12 @@ local function get_civs(bolist)
 	return civs
 end
 
-local function list_keys(t)
-	local s = {}
-	for k, _ in pairs(t) do
-		s[#s + 1] = k
-	end
-	return table.concat(s, ", ")
+-----------------------------------------------------------------------
+-- Mod Interface
+-----------------------------------------------------------------------
+
+function BuildOrder_OnInit()
+	BuildOrder_Objectives_OnInit()
 end
 
 function BuildOrder_OnGameStart(start_hooks)
@@ -179,7 +173,7 @@ function BuildOrder_OnGameStart(start_hooks)
 	end
 
 	local bo_data = LoadDatastore(BUILD_ORDER_DATASTORE_ID)
-	print("loaded datastore: available civs " .. list_keys(get_civs(bo_data.build_orders)))
+	print("loaded datastore: available civs " .. Mod_Debug_PrintKeys(get_civs(bo_data.build_orders)))
 
 	-- Grabs the configured build orders that the player can use for their
 	-- current civilization to present for selection immediately on start
@@ -218,7 +212,7 @@ function BuildOrder_PauseNextTick()
 	Rule_RemoveMe()
 	print("Pausing for build order selection")
 	if _buildorder_data.waiting_selection then
-		Misc_SetSimRate(0)
+		Mod_Sim_Pause()
 	end
 end
 
@@ -232,21 +226,6 @@ function BuildOrder_ContinueWithoutBuildOrder()
 	return FinishGameStart()
 end
 
-function BuildOrder_PrintTable(t, indentation)
-	indentation = indentation or ""
-	for k, v in pairs(t) do
-		local value = tostring(v)
-		if type(v) == "table" then
-			print(indentation .. k .. " = {")
-			BuildOrder_PrintTable(v, indentation .. "  ")
-			print(indentation .. "}")
-		else
-			print(indentation .. k .. " = " .. value)
-		end
-	end
-end
-
--- TODO: All build orders basically auto-complete
 function BuildOrder_StartGame(parameter)
 	print("Entered bo callback")
 	if not _buildorder_data.waiting_selection then
@@ -263,8 +242,6 @@ function BuildOrder_StartGame(parameter)
 	for _, bo in ipairs(_buildorder_data.build_order_options) do
 		if bo ~= nil and bo.id == selected then
 			print("Starting game with build order " .. tostring(selected))
-			-- print("Build order details:")
-			-- BuildOrder_PrintTable(bo, "  ")
 			BuildOrder_Objectives_Start(bo, Game_GetLocalPlayer())
 			return FinishGameStart()
 		end

@@ -1,8 +1,10 @@
 -----------------------------------------------------------------------
 -- Imports
 -----------------------------------------------------------------------
-import("dynimport.scar")
-import("build_orders/localization.scar")
+import("utils/dynimport.scar")
+
+DynImport("build_orders/localization.scar")
+DynImport("build_orders/checks/uitls/pbg.scar")
 
 -----------------------------------------------------------------------
 -- Data
@@ -12,63 +14,29 @@ _bo_built_data = {
     buildings = {},
     event_registered = false
 }
-
 BUILD_MANY_FORMAT_ID = 160
 
 -----------------------------------------------------------------------
 -- Local Helper Functions
 -----------------------------------------------------------------------
 
--- TODO: Same as buildings.scar
-local function ResolvePBGs(ids)
-    local pbgs = {}
-    for _, id in ipairs(ids) do
-        local found, pbg = BP_GetEntityBlueprint(id)
-        if found and pbg ~= nil then
-            pbgs[#pbgs + 1] = pbg
-        end
-    end
-    return pbgs
-end
-
--- TODO: Same as buildings.scar, but without entity resolution
--- TODO: Same as units.scar
-local function PBGMatches(left, right)
-    return left ~= nil and right ~= nil
-        and left.PropertyBagGroupID == right.PropertyBagGroupID
-        and left.PropertyBagGroupModPackID == right.PropertyBagGroupModPackID
-        and left.PropertyBagGroupType == right.PropertyBagGroupType
-end
-
--- TODO: Same as buildings.scar
-local function BuildingName(building, id)
-    if building ~= nil and building.pbg ~= nil then
-        local resolved, uiInfo = BP_GetEntityUIInfo(building.pbg)
-        if uiInfo ~= nil and uiInfo.screenName ~= nil then
-            return uiInfo.screenName
-        end
-    end
-    print("Missing localization string for " .. tostring(id))
-    return BuildOrder_RawText(tostring(id))
-end
-
--- TODO: Similar to produce.scar
 local function IsInvalidEvent(event)
     return event == nil or event.player == nil or event.pbg == nil
         or event.entity == nil or event.entity.EntityID == nil
 end
 
--- TODO: Same as produce.scar, but for different internal data
 local function DeactivateCheck(check_id)
     if _bo_built_data.buildings[check_id] ~= nil then
+        print("[BuiltCheck] Deleted check="..tostring(obj.check.id))
         _bo_built_data.buildings[check_id] = nil
     end
 
     -- Only remove the event handler if all checks are deactivated
     -- since a single step can have multiple checks of the same kind
-    if #_bo_built_data.buildings == 0
+    if next(_bo_built_data.buildings) == nil
         and _bo_built_data.event_registered
     then
+        print("[BuiltCheck] All checks deactiated, removing listener")
         Rule_RemoveGlobalEvent(BuildOrder_Check_Built_EventHandle)
         _bo_built_data.event_registered = false
     end
@@ -100,11 +68,13 @@ function BuildOrder_Check_Built_Activate(obj, player)
     end
 
     local payload = obj.check.payload
-    local pbgs = ResolvePBGs({ payload.id })
-    if #pbgs == 0 then
+    local pbg = Mod_Pbg_Resolve(payload.id, BP_GetEntityBlueprint)
+    if pbg == nil then
+        print("[BuiltCheck] Failed to resolve pbg: check="..tostring(obj.check.id).." pbg="..tostring(obj.check.payload.id))
         return false
     end
 
+    print("[BuiltCheck] Registered check="..tostring(obj.check.id))
     _bo_built_data.buildings[obj.check.id] = {
         obj_id = obj.obj_id,
         pbg = pbgs[1],
@@ -113,6 +83,7 @@ function BuildOrder_Check_Built_Activate(obj, player)
     }
 
     if not _bo_built_data.event_registered then
+        print("[BuiltCheck] Adding event listener: check="..tostring(obj.check.id))
         _bo_built_data.event_registered = true
         Rule_AddGlobalEvent(
             BuildOrder_Check_Built_EventHandle,
@@ -123,34 +94,43 @@ function BuildOrder_Check_Built_Activate(obj, player)
 end
 
 function BuildOrder_Check_Built_Deactivate(obj)
+    print("[BuiltCheck] Requested deactivation of check "..tostring(obj.check.id))
     if _bo_built_data.event_registered then
         DeactivateCheck(obj.check.id)
     end
 end
 
 function BuildOrder_Check_Built_GetText(obj)
-    print("Getting text for built check")
+    print("[BuiltCheck] Assembling objective text")
     local payload = obj.check.payload
-    local building = BuildingName(
-        _bo_built_data.buildings[obj.check.id], payload.id)
-    return Loc_FormatText(BO_LOC_StringId(BUILD_MANY_FORMAT_ID), building, payload.count)
+    local building = _bo_built_data.buildings[obj.check.id]
+    local building_name = Mod_Pbg_ScreenName(
+        building~= nil and building.pbg or nil,
+        payload.id,
+        BP_GetEntityUIInfo
+    )
+    return Loc_FormatText(BO_LOC_StringId(BUILD_MANY_FORMAT_ID), payload.count, building)
 end
 
 -- We have one event handle active for all checks in a given step
 -- but we call activate/deactivate for each one
 function BuildOrder_Check_Built_EventHandle(event)
+    print("[BuiltCheck] Received event: "..tostring(event))
     if IsInvalidEvent(event) then
+        print("[BuiltCheck] No/invalid check tracked for child "..tostring(obj.check.id))
         return
     end
 
     for check_id, state in pairs(_bo_built_data.buildings) do
         if event.player == state.player
-            and PBGMatches(state.pbg, event.pbg)
+            and Mod_Pbg_Equals(state.pbg, event.pbg)
         then
+            print("[BuiltCheck] Found matching listener")
             state.count = state.count - 1
         end
 
         if state.count == 0 then
+            print("[BuiltCheck] Expected num events seen. Marking "..tostring(state.obj_id).." complete")
             Obj_SetState(state.obj_id, OS_Complete)
             DeactivateCheck(check_id)
         end

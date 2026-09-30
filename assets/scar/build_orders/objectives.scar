@@ -1,8 +1,10 @@
 -----------------------------------------------------------------------
 -- Imports
 -----------------------------------------------------------------------
-import("dynimport.scar")
-import("build_orders/localization.scar")
+import("utils/debug.scar")
+import("utils/dynimport.scar")
+
+DynImport("build_orders/localization.scar")
 
 -----------------------------------------------------------------------
 -- Data
@@ -160,14 +162,6 @@ end
 -- Mod Interface
 -----------------------------------------------------------------------
 
-local function list_keys(t)
-    local s = {}
-    for k, _ in pairs(t) do
-        s[#s + 1] = k
-    end
-    return table.concat(s, ", ")
-end
-
 function BuildOrder_Objectives_OnInit()
     BuildOrder_Check_AgeUp_Register()
     BuildOrder_Check_Buildings_Register()
@@ -179,7 +173,7 @@ function BuildOrder_Objectives_OnInit()
     BuildOrder_Check_Units_Register()
     BuildOrder_Check_Upgrades_Register()
     BuildOrder_Check_Vils_Register()
-    print("Registered handlers: " .. list_keys(_bo_objective_data.registered_checks))
+    print("Registered handlers: " .. Mod_Debug_PrintKeys(_bo_objective_data.registered_checks))
 end
 
 function BuildOrder_Objectives_ValidateCheck(check)
@@ -201,11 +195,8 @@ function BuildOrder_Objectives_Start(bo, player)
         return
     end
 
-    print("InitializeState")
     InitializeState(bo, player)
-    print("BuildOrder_Objectives_NextStep")
     BuildOrder_Objectives_NextStep()
-    print("Registering interval")
     Rule_AddInterval(BuildOrder_Objectives_CheckCompletion, 1)
 end
 
@@ -222,6 +213,7 @@ function BuildOrder_Objectives_Stop()
 end
 
 function BuildOrder_Objectives_NextStep()
+    print("Progressing to next step in build order")
     if _bo_objective_data.build_order == nil then
         print("Stopping because there is no build order")
         return
@@ -247,9 +239,11 @@ function BuildOrder_Objectives_NextStep()
     SetCurrentObjective(step, step_idx)
 end
 
+-- TODO: All steps auto-complete currently
 -- TODO: We don't have a way to set completion status from event handlers
 -- Either need to add a poll for checking internal tracking, or add some
 -- other method for setting the state
+-- TODO: Could be worth having poll for everything that just check event state
 function BuildOrder_Objectives_CheckCompletion()
     local step_completed = true
 
@@ -257,12 +251,15 @@ function BuildOrder_Objectives_CheckCompletion()
         -- Although most checks are done via event responders
         -- a few have to be done through polling
         if child.poll_handle ~= nil then
+            print("Polling check "..check.id)
             local completed = child:poll_handle()
             if completed ~= child.completed then
+                print("Check "..check.id.." switched status: Was="..child.completed)
                 SetObjectiveComplete(id, completed)
             end
             child.completed = completed
         else
+            print("Checking objective state for completion: "..tostring(OS_GetState(id)).."-"..tostring(OS_Complete))
             -- TODO: Not sure if this is correct
             child.completed = OS_GetState(id) == OS_Complete
         end
@@ -275,6 +272,7 @@ function BuildOrder_Objectives_CheckCompletion()
     -- If all required checks pass, then we can mark the step completed
     -- and move on to the next one (assuming there is any)
     if step_completed then
+        print("All sub-objectives for step ".._bo_objective_data.current_objective.." have completed. Marking objective as complete")
         Obj_SetState(_bo_objective_data.current_objective, OS_Complete)
         BuildOrder_Objectives_NextStep()
     end

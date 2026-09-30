@@ -1,0 +1,19 @@
+
+NORMAL_SIM_RATE = 8
+
+function Mod_Sim_SetRate(rate)
+	Misc_SetSimRate(rate)
+end
+
+function Mod_Sim_Pause()
+    Misc_SetSimRate(0)
+end
+
+-- TODO: Technically this is incorrect - we should get sim rate in `Pause`
+function Mod_Sim_Unpause()
+    return Mod_Sim_SetRate(NORMAL_SIM_RATE)
+end
+
+function Mod_Sim_RestoreNormal()
+    return Mod_Sim_SetRate(NORMAL_SIM_RATE)
+end
