@@ -1,14 +1,17 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <ProjectSettings xmlns:i="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://schemas.datacontract.org/2004/07/Essence.Editor.Core">
-	<LastDocumentDirectory i:nil="true" />
-	<LastDocumentType i:nil="true" />
+	<LastDocumentDirectory>E:\Docs\rtest\assets\scar\winconditions</LastDocumentDirectory>
+	<LastDocumentType>Script</LastDocumentType>
 	<PluginSettings xmlns:d2p1="http://schemas.microsoft.com/2003/10/Serialization/Arrays">
 		<d2p1:anyType xmlns:d3p1="http://schemas.datacontract.org/2004/07/Essence.Editor.Controls" i:type="d3p1:FileExplorerProjectSettings">
 			<d3p1:ExpandedPaths>
 				<d2p1:KeyValueOfstringArrayOfstringty7Ep6D1>
 					<d2p1:Key>AssetExplorerGeneric</d2p1:Key>
 					<d2p1:Value>
-						<d2p1:string>assets\locdb</d2p1:string>
+						<d2p1:string>assets\locdb\Macro Trainer.locdb</d2p1:string>
+						<d2p1:string>assets\scar\build_orders\checks\resources.scar</d2p1:string>
+						<d2p1:string>assets\scar\build_orders\objectives.scar</d2p1:string>
+						<d2p1:string>assets\scar\simspeed</d2p1:string>
 						<d2p1:string>assets\scar\winconditions</d2p1:string>
 					</d2p1:Value>
 				</d2p1:KeyValueOfstringArrayOfstringty7Ep6D1>
@@ -22,9 +25,16 @@
 	</PluginSettings>
 	<RecentFiles>
 		<History xmlns:d3p1="http://schemas.microsoft.com/2003/10/Serialization/Arrays">
-			<d3p1:string>E:\Docs\github\aoemod\aoe4-macro-trainer\Macro Trainer\assets\scar\winconditions\Macro Trainer.scar</d3p1:string>
-			<d3p1:string>E:\Docs\github\aoemod\aoe4-macro-trainer\Macro Trainer\assets\scar\winconditions\Macro Trainer.rdo</d3p1:string>
-			<d3p1:string>E:\Docs\github\aoemod\aoe4-macro-trainer\Macro Trainer\assets\mod.rdo</d3p1:string>
+			<d3p1:string>E:\Docs\github\aoemod\aoe4-macro-trainer\assets\scar\build_orders\objectives.scar</d3p1:string>
+			<d3p1:string>E:\Docs\github\aoemod\aoe4-macro-trainer\assets\scar\build_orders\checks\vils.scar</d3p1:string>
+			<d3p1:string>E:\Docs\github\aoemod\aoe4-macro-trainer\assets\scar\build_orders\localization.scar</d3p1:string>
+			<d3p1:string>E:\Docs\github\aoemod\aoe4-macro-trainer\assets\scar\build_orders\checks\age_up.scar</d3p1:string>
+			<d3p1:string>E:\Docs\github\aoemod\aoe4-macro-trainer\assets\scar\build_orders\checks\produce.scar</d3p1:string>
+			<d3p1:string>E:\Docs\github\aoemod\aoe4-macro-trainer\assets\scar\build_orders\checks\resources.scar</d3p1:string>
+			<d3p1:string>E:\Docs\github\aoemod\aoe4-macro-trainer\assets\scar\build_orders\checks\units.scar</d3p1:string>
+			<d3p1:string>E:\Docs\github\aoemod\aoe4-macro-trainer\assets\scar\build_orders\checks\buildings.scar</d3p1:string>
+			<d3p1:string>E:\Docs\github\aoemod\aoe4-macro-trainer\assets\scar\build_orders\checks\rallypoint.scar</d3p1:string>
+			<d3p1:string>E:\Docs\github\aoemod\aoe4-macro-trainer\assets\scar\build_orders\checks\hints.scar</d3p1:string>
 		</History>
 	</RecentFiles>
 </ProjectSettings>

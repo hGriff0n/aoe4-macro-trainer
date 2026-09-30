@@ -1,6 +1,8 @@
 -----------------------------------------------------------------------
 -- Imports
 -----------------------------------------------------------------------
+import("dynimport.scar")
+import("build_orders/localization.scar")
 
 
 -----------------------------------------------------------------------
@@ -13,16 +15,18 @@ _bo_ageup_data = {
     num_building_triggers = 0
 }
 
+local _AGE_FORMAT_ID = 161
+
 -----------------------------------------------------------------------
--- Helper Functions
+-- Local Helper Functions
 -----------------------------------------------------------------------
 
 -- Same as produce.scar
 local function PBGMatches(left, right)
     return left ~= nil and right ~= nil
-		and left.PropertyBagGroupID == right.PropertyBagGroupID
-		and left.PropertyBagGroupModPackID == right.PropertyBagGroupModPackID
-		and left.PropertyBagGroupType == right.PropertyBagGroupType
+        and left.PropertyBagGroupID == right.PropertyBagGroupID
+        and left.PropertyBagGroupModPackID == right.PropertyBagGroupModPackID
+        and left.PropertyBagGroupType == right.PropertyBagGroupType
 end
 
 -- Same as produce.scar
@@ -37,6 +41,38 @@ local function MatchesAnyBlueprint(pbgs, blueprint)
         end
     end
     return false
+end
+
+local function CheckAlreadyCompleted()
+    if _bo_ageup_data.age.trigger == "upgrade" then
+        for _, pbg in ipairs(_bo_ageup_data.age.pbgs) do
+            if Player_HasUpgrade(_bo_ageup_data.age.player, pbg) then
+                return true
+            end
+        end
+    else
+        return CheckConstructionStarted()
+    end
+
+    return false
+end
+
+local function CheckConstructionStarted()
+    local state = _bo_ageup_data.age
+    local found_landmark = false
+    EGroup_ForEach(
+        Player_GetEntities(state.player),
+        function(group, index, entity)
+            if Entity_GetPlayerOwner(entity) == state.player
+                and Entity_IsBuilding(entity)
+                and MatchesAnyBlueprint(
+                    state.pbgs, Entity_GetBlueprint(entity))
+            then
+                found_landmark = true
+            end
+        end
+    )
+    return found_landmark
 end
 
 -----------------------------------------------------------------------
@@ -120,15 +156,16 @@ function BuildOrder_Check_AgeUp_Deactivate(obj)
 end
 
 function BuildOrder_Check_AgeUp_GetText(obj)
-	local targetKind = "entity"
-	if obj.check.payload.trigger == "upgrade" then
-		targetKind = "upgrade"
-	end
-	return Loc_FormatText(
-		BUILD_ORDER_LOC_KEYS.ageUp,
-		BuildOrder_TargetNames(
+    print("Getting text for ageup check")
+    local targetKind = "entity"
+    if obj.check.payload.trigger == "upgrade" then
+        targetKind = "upgrade"
+    end
+    return Loc_FormatText(
+        BUILD_ORDER_LOC_KEYS.ageUp,
+        BuildOrder_TargetNames(
             obj.check.payload, targetKind, _bo_ageup_data.age)
-	)
+    )
 end
 
 -- TODO: Needs fix to set state
@@ -143,7 +180,7 @@ function OnConstructionStart(event)
         return
     end
 
-    if event.player == _bo_ageup_data.age.player and 
+    if event.player == _bo_ageup_data.age.player
         and MatchesAnyBlueprint(_bo_ageup_data.age.pbgs, event.pbg)
     then
         Obj_SetState(_bo_ageup_data.age.obj_id, OS_Complete)
@@ -164,7 +201,7 @@ function OnUpgradeStart(event)
     -- TODO: Missing `BuildOrder_GetExecuterOwner`
     local owner = GetExecuterOwner(event)
     if owner == _bo_ageup_data.age.player
-    -- TODO: Missing `BuildOrder_MatchesAnyBlueprint`
+        -- TODO: Missing `BuildOrder_MatchesAnyBlueprint`
         and MatchesAnyBlueprint(_bo_ageup_data.age.pbgs, event.upgrade)
     then
         Obj_SetState(_bo_ageup_data.age.obj_id, OS_Complete)
@@ -176,75 +213,42 @@ end
 -- Mod Implementation
 -----------------------------------------------------------------------
 
-local function CheckAlreadyCompleted()
-    if _bo_ageup_data.age.trigger == "upgrade" then
-        for _, pbg in ipairs(_bo_ageup_data.age.pbgs) do
-            if Player_HasUpgrade(_bo_ageup_data.age.player, pbg) then
-                return true
-            end
+-- TODO: Update?
+function BuildOrder_TargetNames(payload, kind, context)
+    local names = {}
+    local joined = false
+    if payload.id ~= nil then
+        table.insert(names, BuildOrder_GameName(kind, id, context.pbgs[1], context.player))
+    elseif payload.oneof ~= nil then
+        joined = true
+        for i, id in ipairs(payload.oneof) do
+            table.insert(names, BuildOrder_GameName(kind, id, context.pbgs[i], context.player))
         end
-    else
-        return CheckConstructionStarted()
     end
 
-    return false
-end
-
-local function CheckConstructionStarted()
-    local state = _bo_ageup_data.age
-    local found_landmark = false
-    EGroup_ForEach(
-        Player_GetEntities(state.player),
-        function(group, index, entity)
-            if Entity_GetPlayerOwner(entity) == state.player
-                and Entity_IsBuilding(entity)
-                and MatchesAnyBlueprint(
-                    state.pbgs, Entity_GetBlueprint(entity))
-            then
-                found_landmark = true
-            end
-        end
-    )
-    return found_landmark
-end
-
--- TODO: Update?
-local function BuildOrder_TargetNames(payload, kind, context)
-	local names = {}
-	local joined = false
-	if payload.id ~= nil then
-		table.insert(names, BuildOrder_GameName(kind, id, context.pbgs[1], context.player))
-	elseif payload.oneof ~= nil then
-		joined = true
-		for i, id in ipairs(payload.oneof) do
-			table.insert(names, BuildOrder_GameName(kind, id, context.pbgs[i], context.player))
-		end
-	end
-
     -- TODO: Need to implement `JoinLocalized`/etc?
-	local result = BuildOrder_JoinLocalized(names, BUILD_ORDER_LOC_KEYS.orJoin)
-	if joined then
-		return BuildOrder_FormattedArgument(result)
-	end
-	return result
+    local result = BuildOrder_JoinLocalized(names, BUILD_ORDER_LOC_KEYS.orJoin)
+    if joined then
+        return BuildOrder_FormattedArgument(result)
+    end
+    return result
 end
 
 -- TODO: Potentially mergeable with some other files
-local function BuildOrder_GameName(kind, id, pbg, player)
+function BuildOrder_GameName(kind, id, pbg, player)
     if kind == "entity" then
         local resolved, uiInfo = BP_GetEntityUIInfo(pbg)
         if uiInfo ~= nil and uiInfo.screenName ~= nil then
             return uiInfo.screenName
         end
-
     elseif kind == "upgrade" then
         local resolved, uiInfo = BP_GetSquadUIInfo(
             pbg, Player_GetRace(player))
         if uiInfo ~= nil and uiInfo.screenName ~= nil then
             return uiInfo.screenName
-        endx
+        end
     end
 
-	print("BuildOrder: missing localized " .. tostring(kind) .. " name for " .. tostring(id))
-	return BuildOrder_RawText(tostring(id))
+    print("BuildOrder: missing localized " .. tostring(kind) .. " name for " .. tostring(id))
+    return BuildOrder_RawText(tostring(id))
 end

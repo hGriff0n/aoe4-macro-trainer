@@ -1,6 +1,8 @@
 -----------------------------------------------------------------------
 -- Imports
 -----------------------------------------------------------------------
+import("dynimport.scar")
+import("build_orders/localization.scar")
 
 
 -----------------------------------------------------------------------
@@ -11,10 +13,10 @@ _bo_hints_data = {
 
 }
 
-local _HINT_TEXT_FORMAT = "[HINT] %s"
+local _HINT_TEXT_FORMAT_ID = 145
 
 -----------------------------------------------------------------------
--- Helper Functions
+-- Local Helper Functions
 -----------------------------------------------------------------------
 
 -----------------------------------------------------------------------
@@ -45,10 +47,10 @@ function BuildOrder_Check_Hints_Deactivate(obj)
 end
 
 function BuildOrder_Check_Hints_GetText(obj)
-    return Loc_FormatText(_HINT_TEXT_FORMAT, check.payload.text)
+    print("Getting text for hints check")
+    return Loc_FormatText(BO_LOC_StringId(_HINT_TEXT_FORMAT), check.payload.text)
 end
 
 -----------------------------------------------------------------------
 -- Mod Implementation
 -----------------------------------------------------------------------
-

@@ -1,21 +1,36 @@
 
-import("simspeed/submod.scar")
-import("build_order/submod.scar")
+-----------------------------------------------------------------------
+-- Default Imports for Normal Gameplay
+--
+-- The mod means to extend the normal gameplay loop so we have to
+-- support the normal gameplay systems. Without these imports, the
+-- game does not run some stuff (like ending the game)
+-----------------------------------------------------------------------
+-- Utility Scripts
+import("cardinal.scar")							-- Contains sfx references, UI templates, and Civ/Age helper functions
+import("ScarUtil.scar")							-- Contains game helper functions
 
--- TODO: Figure out imports
--- Builtin imports
-import("cardinal.scar")
-import("ScarUtil.scar")
+-- Gameplay Systems
+import("gameplay/score.scar")					-- Tracks player score
+import("gameplay/diplomacy.scar")				-- Manages Tribute
 
--- TODO: Are these builtin imports required
--- import("gameplay/chi/current_dynasty_ui.scar")   -- For china ui
--- import("gameplay/event_cues.scar")
--- import("gameplay/currentageui.scar")
--- import("winconditions/annihilation.scar")		-- player elimintation
--- import("winconditions/elimination.scar")		    -- player quit?
--- import("winconditions/surrender.scar")			-- playe surrender
--- import("gameplay/score.scar")					-- Tracks player score
--- import("gameplay/diplomacy.scar")				-- Manages Tribute
+-- Import Win Conditions
+import("winconditions/annihilation.scar")		-- Support for eliminating a player when they can no longer fight or produce units
+import("winconditions/elimination.scar")		-- Support for player quitting or dropping (through pause menu or disconnection)
+import("winconditions/surrender.scar")			-- Support for player surrender (through pause menu)
+
+-- Import UI Support
+import("gameplay/chi/current_dynasty_ui.scar")	-- Displays Chinese Dynasty UI
+import("gameplay/event_cues.scar")
+import("gameplay/currentageui.scar")
+
+-----------------------------------------------------------------------
+-- Mod-Specific Imports
+-----------------------------------------------------------------------
+
+import("dynimport.scar")
+DynImport("simspeed/submod.scar")
+DynImport("build_orders/submod.scar")
 
 -- TODO: Reworking local imports
 -- I think there was something in the chat logs about these imports needing to be in the top-level file?
@@ -37,8 +52,6 @@ import("ScarUtil.scar")
 -- import("build_orders/checks/vils.scar")
 
 
-
-
 -----------------------------------------------------------------------
 -- Modding Required Functions
 -----------------------------------------------------------------------
@@ -51,11 +64,12 @@ _mod = {
 -- Register the win condition (Some functions can be prepended with "Mod_" to be called automatically as part of the scripting framework)
 Core_RegisterModule(_mod.module)
 
+function Mod_OnGameSetup()
+end
+
 -- Called before initialization (ie. before `OnInit`)
 function Mod_PreInit()
-	-- TODO: Do I have to do this?
-	-- Enable Tribute UI
-	-- Core_CallDelegateFunctions("TributeEnabled", true)
+	-- Tribute UI is worthless in single-player
 end
 
 -- Called on match initialization before handing control to the player
@@ -71,7 +85,7 @@ end
 function Mod_Start()
 	-- Because BuildOrder needs to spawn a "select build order" ui modal
 	-- It must run first and then call whatever other start hooks
-	BuildOrder_OnGameStart([Slowdown_Start])
+	BuildOrder_OnGameStart({Slowdown_Start})
 end
 
 -- Called when Core_SetPlayerDefeated() is invoked.

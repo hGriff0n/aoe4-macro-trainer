@@ -1,3 +1,19 @@
-
-
 -- TODO: These need to be converted to loc ids
+import("dynimport.scar")
+
+local _BUILD_ORDER_RESOURCE_KEYS = {}
+_BUILD_ORDER_RESOURCE_KEYS[RT_Stone] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:151"
+_BUILD_ORDER_RESOURCE_KEYS[RT_Wood] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:150"
+_BUILD_ORDER_RESOURCE_KEYS[RT_Gold] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:149"
+_BUILD_ORDER_RESOURCE_KEYS[RT_Food] = "$dfb5645698a84afb91cf7a2dfb0f4a4e:148"
+
+function BO_LOC_StringId(db_id)
+	return "$dfb5645698a84afb91cf7a2dfb0f4a4e:" .. tostring(db_id)
+end
+
+function BO_LOC_ResourceName(res)
+	if _BUILD_ORDER_RESOURCE_KEYS[res] ~= nil then
+		return _BUILD_ORDER_RESOURCE_KEYS[res]
+	end
+	return ""
+end

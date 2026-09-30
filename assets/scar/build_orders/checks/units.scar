@@ -1,6 +1,8 @@
 -----------------------------------------------------------------------
 -- Imports
 -----------------------------------------------------------------------
+import("dynimport.scar")
+import("build_orders/localization.scar")
 
 
 -----------------------------------------------------------------------
@@ -11,16 +13,16 @@ _bo_units_data = {
 
 }
 
-ACTIVE_UNITS_FORMAT = ""
+local _ACTIVE_UNITS_FORMAT_ID = 167
 
 -----------------------------------------------------------------------
--- Helper Functions
+-- Local Helper Functions
 -----------------------------------------------------------------------
 
 -- Similar to built.scar/buildings.scar, but for units
-local function ResolveUnitPBGs(ids)
-    local pbgs = []
-    for _, id in ipairs(id) do
+local function ResolveBlueprints(ids)
+    local pbgs = {}
+    for _, id in ipairs(ids) do
         local found, pbg = BP_GetSquadBlueprint(id)
         if found and pbg ~= nil then
             pbgs[#pbgs + 1] = pbg
@@ -32,9 +34,9 @@ end
 -- TODO: Same as built.scar
 local function PBGMatches(left, right)
     return left ~= nil and right ~= nil
-		and left.PropertyBagGroupID == right.PropertyBagGroupID
-		and left.PropertyBagGroupModPackID == right.PropertyBagGroupModPackID
-		and left.PropertyBagGroupType == right.PropertyBagGroupType
+        and left.PropertyBagGroupID == right.PropertyBagGroupID
+        and left.PropertyBagGroupModPackID == right.PropertyBagGroupModPackID
+        and left.PropertyBagGroupType == right.PropertyBagGroupType
 end
 
 local function MatchesAnyBlueprint(pbgs, blueprint)
@@ -111,12 +113,13 @@ function BuildOrder_Check_Units_Deactivate(obj)
 end
 
 function BuildOrder_Check_Units_GetText(obj)
+    print("Getting text for units check")
     local payload = obj.check.payload
     local unit_text = UnitName(
         _bo_units_data.units[obj.check.id], payload.id
     )
     return Loc_FormatText(
-        ACTIVE_UNITS_FORMAT,
+        BO_LOC_StringId(_ACTIVE_UNITS_FORMAT_ID),
         payload.count,
         unit_text
     )

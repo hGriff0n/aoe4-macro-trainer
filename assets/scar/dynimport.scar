@@ -1,0 +1,16 @@
+local absoluteDir = "E:/Docs/github/aoemod/aoe4-macro-trainer/assets/scar/"
+
+Import_UseAbsoluteDir = true
+
+function DynImport(file)
+	if Import_UseAbsoluteDir then
+		local success, resultOrError = pcall(function()
+			return assert(loadfile(absoluteDir .. file))()
+		end)
+		if not success then
+			fatal("Error importing file '" .. file .. "':\n" .. tostring(resultOrError))
+		end
+	else
+		import(file)
+	end
+end

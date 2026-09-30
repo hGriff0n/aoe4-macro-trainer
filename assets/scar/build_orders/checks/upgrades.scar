@@ -1,6 +1,8 @@
 -----------------------------------------------------------------------
 -- Imports
 -----------------------------------------------------------------------
+import("dynimport.scar")
+import("build_orders/localization.scar")
 
 
 -----------------------------------------------------------------------
@@ -14,17 +16,17 @@ _bo_upgrades_data = {
     num_cancel_listeners = 0
 }
 
-QUEUE_RESEARCH_FORMAT = "Queue %s for research"
-RESEARCH_FORMAT = "Research %s"
+local _QUEUE_RESEARCH_FORMAT_ID = 163
+local _RESEARCH_FORMAT_ID = 162
 
 -----------------------------------------------------------------------
--- Helper Functions
+-- Local Helper Functions
 -----------------------------------------------------------------------
 
 -- TODO: Similar to built.scar but for upgrades
-local function ResolvePBGs(ids)
-    local pbgs = []
-    for _, id in ipairs(id) do
+local function ResolveBlueprints(ids)
+    local pbgs = {}
+    for _, id in ipairs(ids) do
         local found, pbg = BP_GetUpgradeBlueprint(id)
         if found and pbg ~= nil then
             pbgs[#pbgs + 1] = pbg
@@ -38,9 +40,9 @@ end
 -- TODO: Same as units.scar
 local function PBGMatches(left, right)
     return left ~= nil and right ~= nil
-		and left.PropertyBagGroupID == right.PropertyBagGroupID
-		and left.PropertyBagGroupModPackID == right.PropertyBagGroupModPackID
-		and left.PropertyBagGroupType == right.PropertyBagGroupType
+        and left.PropertyBagGroupID == right.PropertyBagGroupID
+        and left.PropertyBagGroupModPackID == right.PropertyBagGroupModPackID
+        and left.PropertyBagGroupType == right.PropertyBagGroupType
 end
 
 -- Similar to built.scar
@@ -58,148 +60,6 @@ end
 local function IsInvalidEvent(event)
     return event == nil or event.upgrade == nil or event.executer ~= nil
 end
-
------------------------------------------------------------------------
--- Mod Interface
------------------------------------------------------------------------
-
-function BuildOrder_Check_Upgrades_Register()
-    BuildOrder_Objectives_RegisterCheckHandlers(
-        "upgrades",
-        BuildOrder_Check_Upgrades_Activate,
-        BuildOrder_Check_Upgrades_Deactivate,
-        BuildOrder_Check_Upgrades_GetText,
-        BuildOrder_Check_Upgrades_Validate,
-        nil
-    )
-end
-
-function BuildOrder_Check_Upgrades_Validate(check)
-    local t = check.payload
-    return t.id ~= nil
-end
-
-function BuildOrder_Check_Upgrades_Activate(obj, player)
-    if _bo_upgrades_data.techs[obj.check.id] ~= nil then
-        return false
-    end
-
-    local payload = obj.check.payload
-    local pbgs = ResolvePBGs([payload.id])
-    if #pbgs == 0 then
-        return false
-    end
-
-    -- TODO: `Activate` is called before `CreateObjective`, so this
-    -- techically doesn't work. We want this case to be auto-marked
-    -- as complete even if we don't need any resolution
-    if IsUpgradeCompleted(player, pbgs[1], payload.queued) then
-        Obj_SetState(obj.obj_id, OS_Complete)
-        return true
-    end
- 
-    _bo_upgrades_data.techs[obj.check.id] = {
-        obj_id = obj.obj_id,
-        pbg = pbgs[1],
-        queued = payload.queued,
-        player = player,
-        completed = false
-    }
-
-    -- TODO: Handle `IsUpgradeCompleted`/`IsUpgradeQueued`
-    if payload.queued then
-        AddQueuedListener()
-    else
-        AddCompletedListener()
-    end
-
-    return true
-end
-
-function BuildOrder_Check_Upgrades_Deactivate(obj)
-    if _bo_upgrades_data.events_registered then
-        DeactivateCheck(obj.check.id)
-    end
-end
-
-function BuildOrder_Check_Upgrades_GetText(obj)
-    local payload = obj.check.payload
-    if payload.queued then
-        return Loc_FormatText(QUEUE_RESEARCH_FORMAT, UpgradeName)
-    else
-        return Loc_FormatText(RESEARCH_FORMAT, "")
-    end
-end
-
--- TODO: Need to resolve event naming schema
--- TODO: Implement if check is through events
--- We have one event handle active for all checks in a given step
--- but we call activate/deactivate for each one
-function OnUpgradeQueued(event)
-    -- TODO: Might want to use slightly different check
-    if IsInvalidEvent(event) then
-        return
-    end
-
-    local owner = GetExecuterOwner(event)
-    for check_id, state in pairs(_bo_upgrades_data.techs) do
-        if not state.completed
-            and state.queued
-            and owner == state.player
-            and PBGMatches(event.upgrade, state.upgrade)
-        then
-            state.completed = true
-            Obj_SetState(state.obj_id, OS_Complete)
-            DropQueuedListener()
-            AddCancelListener()
-        end
-    end
-    -- TODO: Implement
-end
-
-function OnUpgradeCancelled(event)
-    -- TODO: Might want to use slightly different check
-    if IsInvalidEvent(event) then
-		return
-	end
-
-	local owner = BuildOrder_GetExecuterOwner(context)
-    for check_id, state in pairs(_bo_upgrades_data.techs) do
-        if state.completed
-            and state.queued
-            and owner == state.player
-            and PBGMatches(event.upgrade, state.upgrade)
-        then
-            state.completed = false
-            Obj_SetState(state.obj_id, OS_Incomplete)
-            DropCancelListener()
-            AddQueuedListener()
-        end
-    end
-end
-
--- TODO: I think these loops where i deactivate the check in the middle
--- are incorrect. Just collect ids to delete and then run it
-function OnUpgradeFinished(event)
-    -- TODO: Might want to use slightly different check
-    if IsInvalidEvent(event) then
-		return
-	end
-
-	local owner = BuildOrder_GetExecuterOwner(context)
-    for check_id, state in pairs(_bo_upgrades_data.techs) do
-        if owner == state.player
-            and PBGMatches(event.upgrade, state.upgrade)
-        then
-            Obj_SetState(state.obj_id, OS_Complete)
-            DeactivateCheck(check_id)
-        end
-    end
-end
-
------------------------------------------------------------------------
--- Mod Implementation
------------------------------------------------------------------------
 
 local function AddQueuedListener()
     if _bo_upgrades_data.num_queued_listeners == 0 then
@@ -252,14 +112,13 @@ local function DropCompletedListener()
 end
 
 local function GetExecuterOwner(event)
-	if event.executer.PlayerID ~= nil then
-		return context.executer
-	end
-	if event.executer.EntityID ~= nil then
-		return Entity_GetPlayerOwner(context.executer)
-	end
-	return nil
-
+    if event.executer.PlayerID ~= nil then
+        return context.executer
+    end
+    if event.executer.EntityID ~= nil then
+        return Entity_GetPlayerOwner(context.executer)
+    end
+    return nil
 end
 
 local function DeactivateCheck(check_id)
@@ -282,7 +141,6 @@ local function DeactivateCheck(check_id)
     else
         DropCompletedListener()
     end
-
 end
 
 local function IsUpgradeCompleted(player, pbg, queued)
@@ -306,7 +164,7 @@ local function IsUpgradeCompleted(player, pbg, queued)
                     local type = Entity_GetProductionQueueItemType(
                         entity, index)
                     if (type == PITEM_Upgrade
-                        or itemType == PITEM_PlayerUpgrade)
+                            or itemType == PITEM_PlayerUpgrade)
                         and PBGMatches(item, pbg)
                     then
                         queued_upgrade = true
@@ -319,11 +177,154 @@ local function IsUpgradeCompleted(player, pbg, queued)
     return queued_upgrade
 end
 
+-----------------------------------------------------------------------
+-- Mod Interface
+-----------------------------------------------------------------------
+
+function BuildOrder_Check_Upgrades_Register()
+    BuildOrder_Objectives_RegisterCheckHandlers(
+        "upgrades",
+        BuildOrder_Check_Upgrades_Activate,
+        BuildOrder_Check_Upgrades_Deactivate,
+        BuildOrder_Check_Upgrades_GetText,
+        BuildOrder_Check_Upgrades_Validate,
+        nil
+    )
+end
+
+function BuildOrder_Check_Upgrades_Validate(check)
+    local t = check.payload
+    return t.id ~= nil
+end
+
+function BuildOrder_Check_Upgrades_Activate(obj, player)
+    if _bo_upgrades_data.techs[obj.check.id] ~= nil then
+        return false
+    end
+
+    local payload = obj.check.payload
+    local pbgs = ResolveBlueprints({ payload.id })
+    if #pbgs == 0 then
+        return false
+    end
+
+    -- TODO: `Activate` is called before `CreateObjective`, so this
+    -- techically doesn't work. We want this case to be auto-marked
+    -- as complete even if we don't need any resolution
+    if IsUpgradeCompleted(player, pbgs[1], payload.queued) then
+        Obj_SetState(obj.obj_id, OS_Complete)
+        return true
+    end
+
+    _bo_upgrades_data.techs[obj.check.id] = {
+        obj_id = obj.obj_id,
+        pbg = pbgs[1],
+        queued = payload.queued,
+        player = player,
+        completed = false
+    }
+
+    -- TODO: Handle `IsUpgradeCompleted`/`IsUpgradeQueued`
+    if payload.queued then
+        AddQueuedListener()
+    else
+        AddCompletedListener()
+    end
+
+    return true
+end
+
+function BuildOrder_Check_Upgrades_Deactivate(obj)
+    if _bo_upgrades_data.events_registered then
+        DeactivateCheck(obj.check.id)
+    end
+end
+
+function BuildOrder_Check_Upgrades_GetText(obj)
+    print("Getting text for upgrades check")
+    local payload = obj.check.payload
+    if payload.queued then
+        return Loc_FormatText(BO_LOC_StringId(_QUEUE_RESEARCH_FORMAT_ID), UpgradeName(payload.pbg, payload.id))
+    else
+        return Loc_FormatText(BO_LOC_StringId(_RESEARCH_FORMAT_ID), "")
+    end
+end
+
+-- TODO: Need to resolve event naming schema
+-- TODO: Implement if check is through events
+-- We have one event handle active for all checks in a given step
+-- but we call activate/deactivate for each one
+function OnUpgradeQueued(event)
+    -- TODO: Might want to use slightly different check
+    if IsInvalidEvent(event) then
+        return
+    end
+
+    local owner = GetExecuterOwner(event)
+    for check_id, state in pairs(_bo_upgrades_data.techs) do
+        if not state.completed
+            and state.queued
+            and owner == state.player
+            and PBGMatches(event.upgrade, state.upgrade)
+        then
+            state.completed = true
+            Obj_SetState(state.obj_id, OS_Complete)
+            DropQueuedListener()
+            AddCancelListener()
+        end
+    end
+    -- TODO: Implement
+end
+
+function OnUpgradeCancelled(event)
+    -- TODO: Might want to use slightly different check
+    if IsInvalidEvent(event) then
+        return
+    end
+
+    local owner = BuildOrder_GetExecuterOwner(context)
+    for check_id, state in pairs(_bo_upgrades_data.techs) do
+        if state.completed
+            and state.queued
+            and owner == state.player
+            and PBGMatches(event.upgrade, state.upgrade)
+        then
+            state.completed = false
+            Obj_SetState(state.obj_id, OS_Incomplete)
+            DropCancelListener()
+            AddQueuedListener()
+        end
+    end
+end
+
+-- TODO: I think these loops where i deactivate the check in the middle
+-- are incorrect. Just collect ids to delete and then run it
+function OnUpgradeFinished(event)
+    -- TODO: Might want to use slightly different check
+    if IsInvalidEvent(event) then
+        return
+    end
+
+    local owner = BuildOrder_GetExecuterOwner(context)
+    for check_id, state in pairs(_bo_upgrades_data.techs) do
+        if owner == state.player
+            and PBGMatches(event.upgrade, state.upgrade)
+        then
+            Obj_SetState(state.obj_id, OS_Complete)
+            DeactivateCheck(check_id)
+        end
+    end
+end
+
+-----------------------------------------------------------------------
+-- Mod Implementation
+-----------------------------------------------------------------------
+
 -- TODO: Could this be the way to resolve the `obj_id` issue???
-local function Upgrades_SetCheckComplete(state, complete)
-	if state.checkComplete == complete then
-		return
-	end
-	state.checkComplete = complete
-	BuildOrder_SetCheckComplete(state.checkID, complete)
+function Upgrades_SetCheckComplete(state, complete)
+    if state.checkComplete == complete then
+        return
+    end
+    state.checkComplete = complete
+    BuildOrder_SetCheckComplete(state.checkID, complete)
 end

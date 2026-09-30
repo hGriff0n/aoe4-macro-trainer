@@ -1,6 +1,8 @@
 -----------------------------------------------------------------------
 -- Imports
 -----------------------------------------------------------------------
+import("dynimport.scar")
+import("build_orders/localization.scar")
 
 
 -----------------------------------------------------------------------
@@ -11,13 +13,10 @@ _bo_vils_data = {
     active = {}
 }
 
-VIL_4RES = "Assign %d %s | %d %s | %d %s | %d %s"
-VIL_3RES = "Assign %d %s | %d %s | %d %s"
-VIL_2RES = "Assign %d %s | %d %s"
-VIL_1RES = "Assign %d %s"
+local _VIL_1RES_ID = 170
 
 -----------------------------------------------------------------------
--- Helper Functions
+-- Local Helper Functions
 -----------------------------------------------------------------------
 
 -- TODO: This is a common function
@@ -26,6 +25,46 @@ local function RequireNumber(val)
         return 0
     end
     return val
+end
+
+local function ResolveResourceType(res)
+    if res == "food" then
+        return RT_Food
+    end
+    if res == "gold" then
+        return RT_Gold
+    end
+    if res == "wood" then
+        return RT_Wood
+    end
+    if res == "stone" then
+        return RT_Stone
+    end
+    return nil
+end
+
+local function GetPayloadAsList(payload)
+    local resources = {}
+    for k, v in pairs(payload) do
+        resources[#resources + 1] = { res = BO_LOC_ResourceName(ResolveResourceType(k)), count = v }
+    end
+    return resources
+end
+
+local function GetVilsOnFood(player)
+    return RequireNumber(Player_GetNumGatheringSquads(player, RT_Food))
+end
+
+local function GetVilsOnGold(player)
+    return RequireNumber(Player_GetNumGatheringSquads(player, RT_Gold))
+end
+
+local function GetVilsOnWood(player)
+    return RequireNumber(Player_GetNumGatheringSquads(player, RT_Wood))
+end
+
+local function GetVilsOnStone(player)
+    return RequireNumber(Player_GetNumGatheringSquads(player, RT_Stone))
 end
 
 -----------------------------------------------------------------------
@@ -67,31 +106,33 @@ function BuildOrder_Check_Vils_Deactivate(obj)
     _bo_vils_data.active[obj.check.id] = nil
 end
 
+-- TODO: Looks like the old version chained them together???
 function BuildOrder_Check_Vils_GetText(obj)
+    print("Getting text for vils check")
     local res = GetPayloadAsList(obj.check.payload)
     if #res == 4 then
         return Loc_FormatText(
-            VIL_4RES,
-            res[1].key, res[1].value,
-            res[2].key, res[2].value,
-            res[3].key, res[3].value,
-            res[4].key, res[4].value
+            BO_LOC_StringId(_VIL_1RES_ID + 3),
+            res[1].count, res[1].res,
+            res[2].count, res[2].res,
+            res[3].count, res[3].res,
+            res[4].count, res[4].res
         )
     elseif #res == 3 then
         return Loc_FormatText(
-            VIL_3RES,
-            res[1].key, res[1].value,
-            res[2].key, res[2].value,
-            res[3].key, res[3].value
+            BO_LOC_StringId(_VIL_1RES_ID + 2),
+            res[1].count, res[1].res,
+            res[2].count, res[2].res,
+            res[3].count, res[3].res
         )
     elseif #res == 2 then
         return Loc_FormatText(
-            VIL_2RES,
-            res[1].key, res[1].value,
-            res[2].key, res[2].value
+            BO_LOC_StringId(_VIL_1RES_ID + 1),
+            res[1].count, res[1].res,
+            res[2].count, res[2].res
         )
     elseif #res == 1 then
-        return Loc_FormatText(VIL_1RES, res[1].key, res[1].value)
+        return Loc_FormatText(BO_LOC_StringId(_VIL_1RES_ID), res[1].count, res[1].res)
     end
 end
 
@@ -126,58 +167,3 @@ end
 -----------------------------------------------------------------------
 -- Mod Implementation
 -----------------------------------------------------------------------
-
-local function GetPayloadAsList(payload)
-    local resources = []
-    for k, v in pairs(payload) do
-        resources[#resource + 1] = { key: k, value: v }
-    end
-    return resources
-end
-
-local function GetPayloadResourcesAsKeyString(payload)
-    local key = ""
-    if payload.food ~= nil then
-        key = key + "F"
-    end
-    if payload.gold ~= nil then
-        key = key + "G"
-    end
-    if payload.wood ~= nil then
-        key = key + "W"
-    end
-    if payload.stone ~= nil then
-        key = key + "S"
-    end
-    return key
-end
-
-local function GetVilsOnResource(player, resource)
-    if resource == "Food" then
-        return GetVilsOnFood(player)
-    elseif resource = "Gold" then
-        return GetVilsOnGold(player)
-    elseif resource = "Wood" then
-        return GetVilsOnWood(player)
-    elseif resource = "Stone" then
-        return GetVilsOnStone(player)
-    else
-        return 0
-    end
-end
-
-local function GetVilsOnFood(player)
-    return RequireNumber(Player_GetNumGatheringSquads(player, RT_Food))
-end
-
-local function GetVilsOnGold(player)
-    return RequireNumber(Player_GetNumGatheringSquads(player, RT_Gold))
-end
-
-local function GetVilsOnWood(player)
-    return RequireNumber(Player_GetNumGatheringSquads(player, RT_Wood))
-end
-
-local function GetVilsOnStone(player)
-    return RequireNumber(Player_GetNumGatheringSquads(player, RT_Stone))
-end

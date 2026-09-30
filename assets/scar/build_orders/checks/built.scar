@@ -1,7 +1,8 @@
 -----------------------------------------------------------------------
 -- Imports
 -----------------------------------------------------------------------
-
+import("dynimport.scar")
+import("build_orders/localization.scar")
 
 -----------------------------------------------------------------------
 -- Data
@@ -12,16 +13,16 @@ _bo_built_data = {
     event_registered = false
 }
 
-BUILD_MANY_FORMAT = "Build %d %s"
+BUILD_MANY_FORMAT_ID = 160
 
 -----------------------------------------------------------------------
--- Helper Functions
+-- Local Helper Functions
 -----------------------------------------------------------------------
 
 -- TODO: Same as buildings.scar
 local function ResolvePBGs(ids)
-    local pbgs = []
-    for _, id in ipairs(id) do
+    local pbgs = {}
+    for _, id in ipairs(ids) do
         local found, pbg = BP_GetEntityBlueprint(id)
         if found and pbg ~= nil then
             pbgs[#pbgs + 1] = pbg
@@ -34,9 +35,9 @@ end
 -- TODO: Same as units.scar
 local function PBGMatches(left, right)
     return left ~= nil and right ~= nil
-		and left.PropertyBagGroupID == right.PropertyBagGroupID
-		and left.PropertyBagGroupModPackID == right.PropertyBagGroupModPackID
-		and left.PropertyBagGroupType == right.PropertyBagGroupType
+        and left.PropertyBagGroupID == right.PropertyBagGroupID
+        and left.PropertyBagGroupModPackID == right.PropertyBagGroupModPackID
+        and left.PropertyBagGroupType == right.PropertyBagGroupType
 end
 
 -- TODO: Same as buildings.scar
@@ -54,7 +55,23 @@ end
 -- TODO: Similar to produce.scar
 local function IsInvalidEvent(event)
     return event == nil or event.player == nil or event.pbg == nil
-        or event.entity == nil or event.entity.EntityID = nil
+        or event.entity == nil or event.entity.EntityID == nil
+end
+
+-- TODO: Same as produce.scar, but for different internal data
+local function DeactivateCheck(check_id)
+    if _bo_built_data.buildings[check_id] ~= nil then
+        _bo_built_data.buildings[check_id] = nil
+    end
+
+    -- Only remove the event handler if all checks are deactivated
+    -- since a single step can have multiple checks of the same kind
+    if #_bo_built_data.buildings == 0
+        and _bo_built_data.event_registered
+    then
+        Rule_RemoveGlobalEvent(BuildOrder_Check_Built_EventHandle)
+        _bo_built_data.event_registered = false
+    end
 end
 
 -----------------------------------------------------------------------
@@ -83,7 +100,7 @@ function BuildOrder_Check_Built_Activate(obj, player)
     end
 
     local payload = obj.check.payload
-    local pbgs = ResolvePBGs([payload.id])
+    local pbgs = ResolvePBGs({ payload.id })
     if #pbgs == 0 then
         return false
     end
@@ -112,10 +129,11 @@ function BuildOrder_Check_Built_Deactivate(obj)
 end
 
 function BuildOrder_Check_Built_GetText(obj)
+    print("Getting text for built check")
     local payload = obj.check.payload
     local building = BuildingName(
         _bo_built_data.buildings[obj.check.id], payload.id)
-    return Loc_FormatText(BUILD_MANY_FORMAT, building, payload.count)
+    return Loc_FormatText(BO_LOC_StringId(BUILD_MANY_FORMAT_ID), building, payload.count)
 end
 
 -- We have one event handle active for all checks in a given step
@@ -142,19 +160,3 @@ end
 -----------------------------------------------------------------------
 -- Mod Implementation
 -----------------------------------------------------------------------
-
--- TODO: Same as produce.scar, but for different internal data
-local function DeactivateCheck(check_id)
-    if _bo_built_data.buildings[check_id] != nil then
-        _bo_built_data.buildings[check_id] = nil
-    end
-
-    -- Only remove the event handler if all checks are deactivated
-    -- since a single step can have multiple checks of the same kind
-    if #_bo_built_data.buildings == 0
-        and _bo_built_data.event_registered
-    then
-        Rule_RemoveGlobalEvent(BuildOrder_Check_Built_EventHandle)
-        _bo_built_data.event_registered = false
-    end
-end

@@ -1,6 +1,8 @@
 -----------------------------------------------------------------------
 -- Imports
 -----------------------------------------------------------------------
+import("dynimport.scar")
+import("build_orders/localization.scar")
 
 
 -----------------------------------------------------------------------
@@ -11,16 +13,16 @@ _bo_buildings_data = {
     buildings = {}
 }
 
-BUILDINGS_FORMAT = "Have %d %s built"
+local _BUILDINGS_FORMAT_ID = 168
 
 -----------------------------------------------------------------------
--- Helper Functions
+-- Local Helper Functions
 -----------------------------------------------------------------------
 
 -- TODO: Same as built.scar
 local function ResolvePBGs(ids)
-    local pbgs = []
-    for _, id in ipairs(id) do
+    local pbgs = {}
+    for _, id in ipairs(ids) do
         local found, pbg = BP_GetEntityBlueprint(id)
         if found and pbg ~= nil then
             pbgs[#pbgs + 1] = pbg
@@ -31,11 +33,11 @@ end
 
 -- TODO: Same as built.scar, but resolves entity to pbg
 local function PBGMatches(left, entity)
-    local right = ResolvePBGs([entity])[1]
+    local right = ResolvePBGs({ entity })[1]
     return left ~= nil and right ~= nil
-		and left.PropertyBagGroupID == right.PropertyBagGroupID
-		and left.PropertyBagGroupModPackID == right.PropertyBagGroupModPackID
-		and left.PropertyBagGroupType == right.PropertyBagGroupType
+        and left.PropertyBagGroupID == right.PropertyBagGroupID
+        and left.PropertyBagGroupModPackID == right.PropertyBagGroupModPackID
+        and left.PropertyBagGroupType == right.PropertyBagGroupType
 end
 
 -- TODO: Same as built.scar
@@ -80,7 +82,7 @@ function BuildOrder_Check_Buildings_Activate(obj, player)
         return false
     end
 
-    local pbgs = ResolvePBGs([obj.check.payload.id])
+    local pbgs = ResolvePBGs({ obj.check.payload.id })
     if #pbgs == 0 then
         return false
     end
@@ -102,9 +104,10 @@ function BuildOrder_Check_Buildings_Deactivate(obj)
 end
 
 function BuildOrder_Check_Buildings_GetText(obj)
+    print("Getting text for building check")
     local payload = obj.check.payload
     return Loc_FormatText(
-        BUILDINGS_FORMAT,
+        BO_LOC_StringId(_BUILDINGS_FORMAT_ID),
         payload.count,
         BuildingName(
             _bo_buildings_data.buildings[obj.check.id], payload.id)

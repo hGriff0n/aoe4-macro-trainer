@@ -1,6 +1,8 @@
 -----------------------------------------------------------------------
 -- Imports
 -----------------------------------------------------------------------
+import("dynimport.scar")
+import("build_orders/localization.scar")
 
 
 -----------------------------------------------------------------------
@@ -11,17 +13,36 @@ _bo_resources_data = {
     res = {}
 }
 
-COLLECT_RES_FORMAT = "Collect %d %s"
+-- TODO: Is there any documentation on the format strings?
+local _COLLECT_RES_FORMAT_ID = 155
 BUILD_ORDER_RESOURCE_KEYS = {
-	food = "$dfb5645698a84afb91cf7a2dfb0f4a4e:148",
-	gold = "$dfb5645698a84afb91cf7a2dfb0f4a4e:149",
-	wood = "$dfb5645698a84afb91cf7a2dfb0f4a4e:150",
-	stone = "$dfb5645698a84afb91cf7a2dfb0f4a4e:151",
+    food = "$dfb5645698a84afb91cf7a2dfb0f4a4e:148",
+    gold = "$dfb5645698a84afb91cf7a2dfb0f4a4e:149",
+    wood = "$dfb5645698a84afb91cf7a2dfb0f4a4e:150",
+    stone = "$dfb5645698a84afb91cf7a2dfb0f4a4e:151",
 }
 
 -----------------------------------------------------------------------
--- Helper Functions
+-- Local Helper Functions
 -----------------------------------------------------------------------
+
+-- TODO: Same as vils.scar
+-- TODO: Game is crashing saying these are nil, but the old mod used them fine? Why???
+local function ResolveResourceType(res)
+    if res == "food" then
+        return RT_Food
+    end
+    if res == "gold" then
+        return RT_Gold
+    end
+    if res == "wood" then
+        return RT_Wood
+    end
+    if res == "stone" then
+        return RT_Stone
+    end
+    return nil
+end
 
 -----------------------------------------------------------------------
 -- Mod Interface
@@ -66,11 +87,12 @@ function BuildOrder_Check_Resources_Deactivate(obj)
 end
 
 function BuildOrder_Check_Resources_GetText(obj)
+    print("Getting text for resources check")
     local payload = obj.check.payload
     return Loc_FormatText(
-        COLLECT_RES_FORMAT,
+        BO_LOC_StringId(_COLLECT_RES_FORMAT_ID),
         payload.count,
-        ResolveResourceLocString(payload.resource)
+        BO_LOC_ResourceName(_bo_resources_data.res[obj.check.id].type)
     )
 end
 
@@ -88,24 +110,3 @@ end
 -----------------------------------------------------------------------
 -- Mod Implementation
 -----------------------------------------------------------------------
-
-local function ResolveResourceType(res)
-	if res == "food" then
-		return RT_Food
-	end
-	if res == "gold" then
-		return RT_Gold
-	end
-	if res == "wood" then
-		return RT_Wood
-	end
-	if res == "stone" then
-		return RT_Stone
-	end
-	return nil
-end
-
-local function ResolveResourceLocString(res)
-    local loc = BUILD_ORDER_RESOURCE_KEYS[res]
-    return loc ~= nil and loc or res
-end

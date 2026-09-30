@@ -1,6 +1,8 @@
 -----------------------------------------------------------------------
 -- Imports
 -----------------------------------------------------------------------
+import("dynimport.scar")
+import("build_orders/localization.scar")
 
 
 -----------------------------------------------------------------------
@@ -11,10 +13,10 @@ _bo_rallypoint_data = {
 
 }
 
-local _RALLYPOINT_TEXT = "Rally new villagers to %s"
+local _RALLYPOINT_FORMAT_ID = 158
 
 -----------------------------------------------------------------------
--- Helper Functions
+-- Local Helper Functions
 -----------------------------------------------------------------------
 
 -----------------------------------------------------------------------
@@ -47,11 +49,11 @@ function BuildOrder_Check_Rallypoint_Deactivate(obj)
 end
 
 function BuildOrder_Check_Rallypoint_GetText(obj)
-    return Loc_FormatText(_RALLYPOINT_TEXT,
+    print("Getting text for rallypoint check")
+    return Loc_FormatText(BO_LOC_StringId(_RALLYPOINT_FORMAT_ID),
         BuildOrder_ResourceName(obj.check.payload.resource))
 end
 
 -----------------------------------------------------------------------
 -- Mod Implementation
 -----------------------------------------------------------------------
-

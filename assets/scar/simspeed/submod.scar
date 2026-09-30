@@ -1,6 +1,7 @@
 -----------------------------------------------------------------------
 -- Imports
 -----------------------------------------------------------------------
+import("dynimport.scar")
 
 
 -----------------------------------------------------------------------
@@ -106,7 +107,7 @@ function Slowdown_InitFromSettings(options)
 
 	-- Early return if the simspeed path is disabled
 	if settings.option_enable_simspeed_cycle == nil
-			or !settings.option_enable_simspeed_cycle then
+			or not settings.option_enable_simspeed_cycle then
 		_slowdown_data.simspeed_enabled = false
 		return
 	end

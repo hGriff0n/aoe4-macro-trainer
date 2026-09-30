@@ -1,6 +1,8 @@
 -----------------------------------------------------------------------
 -- Imports
 -----------------------------------------------------------------------
+import("dynimport.scar")
+import("build_orders/localization.scar")
 
 
 -----------------------------------------------------------------------
@@ -8,14 +10,14 @@
 -----------------------------------------------------------------------
 
 _selector_data = {
-    created_ui = false,
-    model = nil,
-    view = nil,
-    commands = nil,
-    callbacks = {}
+	created_ui = false,
+	model = nil,
+	view = nil,
+	commands = nil,
+	callbacks = {},
+	ui_name = "BuildOrderSelectorUI"
 }
 
-BUILD_ORDER_SELECTOR_UI_NAME = "BuildOrderSelectorUI"
 EMPTY_BO_LIST_MESSAGE = "No build orders for this civilization"
 
 BO_UI_XAML = [[
@@ -60,7 +62,7 @@ BO_UI_XAML = [[
 					         OverridesDefaultStyle="True"
 					         ItemTemplate="{StaticResource BuildOrderCardTemplate}"
 					         ItemsSource="{Binding [selector_options]}"
-					         SelectedIndex="{Binding [selected_index], Mode=OneWay}"
+					         SelectedValuePath="[id]"
 					         ScrollViewer.VerticalScrollBarVisibility="Auto">
 						<ListBox.Template>
 							<ControlTemplate TargetType="{x:Type ListBox}">
@@ -117,7 +119,7 @@ BO_UI_XAML = [[
 					        FontWeight="Bold"
 					        OverridesDefaultStyle="True"
 					        Command="{Binding [commands][start_game]}"
-					        CommandParameter="{Binding SelectedItem[id], ElementName=BuildOrderSelectorList}"
+					        CommandParameter="{Binding SelectedValue, ElementName=BuildOrderSelectorList}"
 					        Content="Start Game">
 						<Button.Template>
 							<ControlTemplate TargetType="{x:Type Button}">
@@ -170,21 +172,30 @@ BO_UI_XAML = [[
 -----------------------------------------------------------------------
 
 local function BuildOrderSelectorUI_InvokeCallback(key, parameter)
-	local callbackName = BUILD_ORDER_SELECTOR_UI_STATE.callbacks[key]
-	if type(callbackName) ~= "string" or
-       type(_G[callbackName]) ~= "function"
-    then
+	print("Running requested ui callback `" .. key .. "`")
+	local callbackName = _selector_data.callbacks[key]
+	if type(callbackName) ~= "string" then
+		print("Not calling callback because it is not a string")
 		return false
 	end
-	_G[callbackName](parameter)
-	return true
+	if type(callbackName) ~= "string" or
+		type(_G[callbackName]) ~= "function"
+	then
+		print("Not calling callback because it is not callable: " .. type(_G[callbackName]))
+		return false
+	end
+	return _G[callbackName](parameter)
 end
 
-local function BuildOrderSelectorUI_DispatchStartGame(parameter)
+-- The start button passes the list's SelectedValue (the selected order's id, via
+-- SelectedValuePath) rather than binding SelectedItem[id], which crashed on reselection.
+-- Don't pass SelectedIndex: int command parameters never reach Lua.
+function BuildOrderSelectorUI_DispatchStartGame(parameter)
+	print("Dispatching start game with parameter: " .. tostring(parameter))
 	return BuildOrderSelectorUI_InvokeCallback("start_game", parameter)
 end
 
-local function BuildOrderSelectorUI_DispatchContinueWithout(parameter)
+function BuildOrderSelectorUI_DispatchContinueWithout(parameter)
 	return BuildOrderSelectorUI_InvokeCallback("continue_without", parameter)
 end
 
@@ -192,36 +203,40 @@ end
 -- Mod Interface
 -----------------------------------------------------------------------
 
-function BuildOderSelectorUI_Show(model)
-    if not type(model) == "table" then
-        return false
-    end
+function BuildOrderSelectorUI_Show(model)
+	if not type(model) == "table" then
+		print("Skipping because `model` is not a table")
+		return false
+	end
 
-    _selector_data.model = model
+	_selector_data.model = model
 	if not BuildOrderSelectorUI_EnsureCreated() then
 		return false
 	end
 
-    UI_SetDataContext(BUILD_ORDER_SELECTOR_UI_NAME, _selector_data.view)
-    return true
+	UI_SetDataContext(_selector_data.ui_name, _selector_data.view)
+	return true
 end
 
-function BuildOderSelectorUI_Hide()
-    if _selector_data.created_ui then
-        UI_Remove(BUILD_ORDER_SELECTOR_UI_NAME)
-    end
+function BuildOrderSelectorUI_Hide()
+	print("Trying to hide ui")
+	if _selector_data.created_ui then
+		UI_Remove(_selector_data.ui_name)
+	else
+		print("Not hiding ui because it was never created")
+	end
 
-    _selector_data.created_ui = false
-    _selector_data.model = nil
-    _selector_data.view = nil
-    _selector_data.commands = nil
-    return true
+	_selector_data.created_ui = false
+	_selector_data.model = nil
+	_selector_data.view = nil
+	_selector_data.commands = nil
+	return true
 end
 
 function BuildOrderSelectorUI_SetCallbacks(callbacks)
-    if type(callbacks) == "table" and callbacks then
-        _selector_data.callbacks = callbacks
-    end
+	if type(callbacks) == "table" and callbacks then
+		_selector_data.callbacks = callbacks
+	end
 end
 
 function BuildOrderSelectorUI_Stop()
@@ -234,38 +249,39 @@ end
 -----------------------------------------------------------------------
 
 local function BuildOrderSelectorUI_CreatePresenter()
-    _selector_data.commands = {
-        start_game = UI_CreateCommand("BuildOrderSelectorUI_DispatchStartGame"),
-        continue_without = UI_CreateCommand("BuildOrderSelectorUI_DispatchContinueWithout"),
-    }
+	_selector_data.commands = {
+		start_game = UI_CreateCommand("BuildOrderSelectorUI_DispatchStartGame"),
+		continue_without = UI_CreateCommand("BuildOrderSelectorUI_DispatchContinueWithout"),
+	}
 
-    _selector_data.view = {
-        selector_options = _selector_data.model.orders,
-        selected_index = -1,
-        empty_message = #_selector_data.model.orders == 0
-            and EMPTY_BO_LIST_MESSAGE or "",
-        commands = _selector_data.commands
-    }
+	_selector_data.view = {
+		selector_options = _selector_data.model.orders,
+		empty_message = #_selector_data.model.orders == 0
+			and EMPTY_BO_LIST_MESSAGE or "",
+		commands = _selector_data.commands
+	}
 	UI_AddChild(
-        "ScarDefault", "XamlPresenter", BUILD_ORDER_SELECTOR_UI_NAME,
-        {
-            IsHitTestVisible = true,
-            Xaml = BUILD_ORDER_SELECTOR_UI_XAML,
-		    DataContext = UI_CreateDataContext(_selector_data.view),
-	    })
+		"ScarDefault", "XamlPresenter", _selector_data.ui_name,
+		{
+			IsHitTestVisible = true,
+			Xaml = BO_UI_XAML,
+			DataContext = UI_CreateDataContext(_selector_data.view),
+		})
+	return true
 end
 
 function BuildOrderSelectorUI_EnsureCreated()
-    if _selector_data.created_ui then
-        return true
-    end
+	if _selector_data.created_ui then
+		return true
+	end
 
-    local success = pcall(BuildOrderSelectorUI_CreatePresenter)
-    if not success then
-        BuildOderSelectorUI_Hide()
-        return false
-    end
+	local success = pcall(BuildOrderSelectorUI_CreatePresenter)
+	if not success then
+		print("Failed to create presenter")
+		BuildOrderSelectorUI_Hide()
+		return false
+	end
 
-    _selector_data.created_ui = true
-    return true
+	_selector_data.created_ui = true
+	return true
 end

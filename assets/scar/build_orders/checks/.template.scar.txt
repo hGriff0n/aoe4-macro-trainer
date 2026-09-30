@@ -1,0 +1,82 @@
+-------------------------------------------------------------------------
+---- Imports
+-------------------------------------------------------------------------
+import("dynimport.scar")
+
+
+-------------------------------------------------------------------------
+---- Data
+-------------------------------------------------------------------------
+
+--_bo_{check}_data = {
+    ---- NOTE: Always have one field keyed on `check.id` to disambiguate
+    ---- between multiple checks in the same step
+--}
+
+-------------------------------------------------------------------------
+---- Local Helper Functions
+-------------------------------------------------------------------------
+
+-------------------------------------------------------------------------
+---- Mod Interface
+-------------------------------------------------------------------------
+
+---- Note: `Activate` is always called before `GetText` when adding the
+---- check as a sub-objective
+--function BuildOrder_Check_{check}_Register()
+    --BuildOrder_Objectives_RegisterCheckHandlers(
+        --"{check}",
+        --BuildOrder_Check_{check}_Activate,
+        --BuildOrder_Check_{check}_Deactivate,
+        --BuildOrder_Check_{check}_GetText,
+        --BuildOrder_Check_{check}_Validate,
+        ---- Can be nil if check done via events
+        --BuildOrder_Check_{check}_PollCompletion,
+    --)
+--end
+
+--function BuildOrder_Check_{check}_Validate(check)
+    --local t = check.payload
+    --return false
+--end
+
+---- child = {
+----   obj_id
+----   check
+----   parent_id
+----   completed
+----   poll_completion_handle (for non-event only)
+---- }
+--function BuildOrder_Check_{check}_Activate(obj, player)
+    ---- TODO: This is called once per-check per-step so we have to track
+    ---- check ids for event handles/deactivation
+    ---- Returns if the activation succeeded
+    --return true
+--end
+
+--function BuildOrder_Check_{check}_Deactivate(obj)
+    ---- TODO: Multiple of the same check can be done per step
+    ---- This needs to only disable the specific ids
+--end
+
+---- NOTE: Always called before `Activate` as it is required to create
+---- the sub-objective which we use as the id in activate?
+--function BuildOrder_Check_{check}_GetText(obj)
+    --local payload = obj.check.payload
+--end
+
+---- TODO: Implement if check is through events
+---- We have one event handle active for all checks in a given step
+---- but we call activate/deactivate for each one
+--function BuildOrder_Check_{check}_EventHandle(event)
+--end
+
+---- TODO: Implement if check is through polling
+---- The interface currently means we run this once per check per step
+--function BuildOrder_Check_{check}_PollCompletion(obj)
+--end
+
+-------------------------------------------------------------------------
+---- Mod Implementation
+-------------------------------------------------------------------------
+

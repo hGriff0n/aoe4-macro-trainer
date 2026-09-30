@@ -1,6 +1,8 @@
 -----------------------------------------------------------------------
 -- Imports
 -----------------------------------------------------------------------
+import("dynimport.scar")
+import("build_orders/localization.scar")
 
 
 -----------------------------------------------------------------------
@@ -13,18 +15,18 @@ _bo_produce_data = {
     num_command_listeners = false
 }
 
-CONSTANT_PROD_FORMAT = "Constantly produce %s"
-QUEUE_UNIT_FORMAT = "Have %d %s queued"
-PROD_UNIT_FORMAT = "Produce at least %d %s"
+local _CONSTANT_PROD_FORMAT_ID = 166
+local _QUEUE_UNIT_FORMAT_ID = 165
+local _PROD_UNIT_FORMAT = 164
 
 -----------------------------------------------------------------------
--- Helper Functions
+-- Local Helper Functions
 -----------------------------------------------------------------------
 
 -- Similar to built.scar/buildings.scar, but for units
 local function ResolveUnitPBGs(ids)
-    local pbgs = []
-    for _, id in ipairs(id) do
+    local pbgs = {}
+    for _, id in ipairs(ids) do
         local found, pbg = BP_GetSquadBlueprint(id)
         if found and pbg ~= nil then
             pbgs[#pbgs + 1] = pbg
@@ -36,9 +38,9 @@ end
 -- TODO: Same as built.scar
 local function PBGMatches(left, right)
     return left ~= nil and right ~= nil
-		and left.PropertyBagGroupID == right.PropertyBagGroupID
-		and left.PropertyBagGroupModPackID == right.PropertyBagGroupModPackID
-		and left.PropertyBagGroupType == right.PropertyBagGroupType
+        and left.PropertyBagGroupID == right.PropertyBagGroupID
+        and left.PropertyBagGroupModPackID == right.PropertyBagGroupModPackID
+        and left.PropertyBagGroupType == right.PropertyBagGroupType
 end
 
 local function MatchesAnyBlueprint(pbgs, blueprint)
@@ -69,7 +71,38 @@ end
 
 local function IsInvalidEvent(event)
     return event == nil or event.player == nil or event.pbg == nil
-        or event.entity == nil or event.entity.EntityID = nil
+        or event.entity == nil or event.entity.EntityID == nil
+end
+
+local function QueuedItemIsCheckMatch(entity, index, pbgs)
+    return Entity_GetProductionQueueItemType(entity, index) == PITEM_Spawn
+        and BuildOrder_MatchesAnyBlueprint(
+            pbgs, Entity_GetProductionQueueItem(entity, index))
+end
+
+-- TODO: Same as built.scar, but for different internal data
+local function DeactivateCheck(check_id)
+    if _bo_produce_data.units[check_id] ~= nil then
+        if _bo_produce_data.units[check_id].queued then
+            _bo_produce_data.num_command_listeners =
+                _bo_produce_data.num_command_listeners - 1
+        else
+            _bo_produce_data.num_build_listeners =
+                _bo_produce_data.num_build_listeners - 1
+        end
+
+        _bo_produce_data.units[check_id] = nil
+    end
+
+    -- Only remove the event handler if all checks are deactivated
+    -- since a single step can have multiple checks of the same kind
+    if _bo_produce_data.num_build_listeners == 0 then
+        Rule_RemoveGlobalEvent(
+            BuildOrder_Check_Produce_BuildEventHandle)
+    elseif _bo_produce_data.num_command_listeners == 0 then
+        Rule_RemoveGlobalEvent(
+            BuildOrder_Check_Produce_EntityCommandEventHandle)
+    end
 end
 
 -----------------------------------------------------------------------
@@ -113,9 +146,9 @@ function BuildOrder_Check_Produce_Activate(obj, player)
     _bo_units_data.units[obj.check.id] = {
         obj_id = obj.obj_id,
         player = player,
-        pbgs = pbgs
+        pbgs = pbgs,
         minimum = payload.count ~= nil and payload.count or 1,
-        num_built = 0
+        num_built = 0,
         queued = payload.queued,
         constant = payload.constant
     }
@@ -138,7 +171,6 @@ function BuildOrder_Check_Produce_Activate(obj, player)
         end
         _bo_units_data.num_command_listeners =
             _bo_units_data.num_command_listeners + 1
-
     else
         if _bo_units_data.num_build_listeners == 0 then
             Rule_AddGlobalEvent(
@@ -162,17 +194,18 @@ function BuildOrder_Check_Produce_Deactivate(obj)
 end
 
 function BuildOrder_Check_Produce_GetText(obj)
+    print("Getting text for produce check")
     local payload = obj.check.payload
     local unit_text = UnitName(
         _bo_produce_data.units[obj.check.id], payload.id
     )
 
     if payload.constant then
-        return Loc_FormatText(CONSTANT_PROD_FORMAT, unit_text)
+        return Loc_FormatText(BO_LOC_StringId(_CONSTANT_PROD_FORMAT), unit_text)
     elseif payload.queued then
-        return Loc_FormatText(QUEUE_UNIT_FORMAT, payload.count, unit_text)
+        return Loc_FormatText(BO_LOC_StringId(_QUEUE_UNIT_FORMAT_ID), payload.count, unit_text)
     else
-        return Loc_FormatText(PROD_UNIT_FORMAT, payload.count, unit_text)
+        return Loc_FormatText(BO_LOC_StringId(_PROD_UNIT_FORMAT_ID), payload.count, unit_text)
     end
 end
 
@@ -245,34 +278,3 @@ end
 -----------------------------------------------------------------------
 -- Mod Implementation
 -----------------------------------------------------------------------
-
-local function QueuedItemIsCheckMatch(entity, index, pbgs)
-    return Entity_GetProductionQueueItemType(entity, index) == PITEM_Spawn
-        and BuildOrder_MatchesAnyBlueprint(
-            pbgs, Entity_GetProductionQueueItem(entity, index))
-end
-
--- TODO: Same as built.scar, but for different internal data
-local function DeactivateCheck(check_id)
-    if _bo_produce_data.units[check_id] ~= nil then
-        if _bo_produce_data.units[check_id].queued then
-            _bo_produce_data.num_command_listeners =
-                _bo_produce_data.num_command_listeners - 1
-        else
-            _bo_produce_data.num_build_listeners =
-                _bo_produce_data.num_build_listeners - 1
-        end
-
-        _bo_produce_data.units[check_id] = nil
-    end
-
-    -- Only remove the event handler if all checks are deactivated
-    -- since a single step can have multiple checks of the same kind
-    if _bo_produce_data.num_build_listeners == 0 then
-        Rule_RemoveGlobalEvent(
-            BuildOrder_Check_Produce_BuildEventHandle)
-    elseif _bo_produce_data.num_command_listeners == 0 then
-        Rule_RemoveGlobalEvent(
-            BuildOrder_Check_Produce_EntityCommandEventHandle)
-    end
-end
