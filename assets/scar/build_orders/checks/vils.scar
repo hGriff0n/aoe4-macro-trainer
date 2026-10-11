@@ -50,8 +50,7 @@ local function _vilcheck(player, req, reader)
 end
 
 local function _resource_pair_formatter(res, count)
-    return Loc_FormatText(
-        BoLoc_ModStringId(_VIL_RES_PAIR_ID), Loc_FormatInteger(count), BoLoc_String(res))
+    return Loc_FormatText(BoLoc_DelimId(" "), Loc_FormatInteger(count), BoLoc_String(res))
 end
 
 -----------------------------------------------------------------------

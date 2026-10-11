@@ -262,14 +262,19 @@ function BuildOrder_Objectives_CheckCompletion()
             local completed = child:poll_handle()
             if completed ~= child.completed then
                 print("Check " .. tostring(check_id) .. " switched status: Was=" .. tostring(child.completed))
-                SetObjectiveComplete(id, completed)
+                local obj_id = _bo_objective_data.check_obj_id_map[check_id]
+                if obj_id ~= nil then
+                    print("Updating objective " .. tostring(obj_id) .. " to completed=" .. tostring(completed))
+                    SetObjectiveComplete(obj_id, completed)
+                end
+                SetObjectiveComplete(obj_id, completed)
             end
             child.completed = completed
         else
             local obj_id = _bo_objective_data.check_obj_id_map[check_id]
             if obj_id ~= nil then
                 local state = Obj_GetState(obj_id)
-                print("Checking objective state for completion: "..tostring(state).."-"..tostring(OS_Complete))
+                print("Checking objective state for completion: " .. tostring(state) .. "-" .. tostring(OS_Complete))
                 child.completed = (state == OS_Complete)
             end
         end

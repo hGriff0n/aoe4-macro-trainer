@@ -27,7 +27,7 @@ end
 
 local function DeactivateCheck(check_id)
     if _bo_built_data.buildings[check_id] ~= nil then
-        print("[BuiltCheck] Deleted check=" .. tostring(obj.check.id))
+        print("[BuiltCheck] Deleted check=" .. tostring(check_id))
         _bo_built_data.buildings[check_id] = nil
     end
 
@@ -78,7 +78,7 @@ function BuildOrder_Check_Built_Activate(obj, player)
     print("[BuiltCheck] Registered check=" .. tostring(obj.check.id))
     _bo_built_data.buildings[obj.check.id] = {
         pbg = pbg,
-        count = obj.check.payload.count,
+        count = obj.check.payload.count or 1,
         player = player,
     }
 
@@ -111,7 +111,7 @@ function BuildOrder_Check_Built_GetText(obj)
     )
 
     return Loc_FormatText(
-        BoLoc_ModStringId(BUILD_MANY_FORMAT_ID), Loc_FormatInteger(payload.count), building_name)
+        BoLoc_ModStringId(BUILD_MANY_FORMAT_ID), Loc_FormatInteger(payload.count or 1), building_name)
 end
 
 -- We have one event handle active for all checks in a given step
@@ -119,7 +119,7 @@ end
 function BuildOrder_Check_Built_EventHandle(event)
     print("[BuiltCheck] Received event: " .. tostring(event))
     if IsInvalidEvent(event) then
-        print("[BuiltCheck] No/invalid check tracked for child " .. tostring(obj.check.id))
+        print("[BuiltCheck] Invalid event received")
         return
     end
 

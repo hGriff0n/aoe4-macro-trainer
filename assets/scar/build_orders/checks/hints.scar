@@ -47,7 +47,7 @@ end
 
 function BuildOrder_Check_Hints_GetText(obj)
     print("Getting text for hints check")
-    return Loc_FormatText(BoLoc_ModStringId(_HINT_TEXT_FORMAT), check.payload.text)
+    return Loc_FormatText(BoLoc_ModStringId(_HINT_TEXT_FORMAT_ID), obj.check.payload.text)
 end
 
 -----------------------------------------------------------------------
