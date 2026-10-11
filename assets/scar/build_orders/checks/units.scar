@@ -34,12 +34,12 @@ local function MatchesAnyBlueprint(pbgs, blueprint)
     return false
 end
 
-local _ScreenNameWrapper(units, id, player)
+local function _ScreenNameWrapper(units, id, player)
     local prace = Player_GetRace(player)
     local _unit = not (units == nil or units.pbgs == nil or #units.pbgs <= 0)
         and units.pbgs[1] or nil
     return Mod_Pbg_ScreenName(
-        unit, id, function(pbg) return BP_GetSquadUIInfo(pbg, prace))
+        unit, id, function(pbg) return BP_GetSquadUIInfo(pbg, prace) end)
 end
 
 -----------------------------------------------------------------------
@@ -75,10 +75,11 @@ function BuildOrder_Check_Units_Activate(obj, player)
     }
 
     if #state.pbgs == 0 then
-        print("[UnitCheck] Failed to activate. No pbgs resolved for check="..tostring(obj.check.id).." pbg="..tostring(payload.ids[1]))
+        print("[UnitCheck] Failed to activate. No pbgs resolved for check=" ..
+        tostring(obj.check.id) .. " pbg=" .. tostring(payload.ids[1]))
         return false
     end
-    print("[UnitCheck] Registered check="..tostring(obj.check.id))
+    print("[UnitCheck] Registered check=" .. tostring(obj.check.id))
     _bo_units_data.units[obj.check.id] = state
     return true
 end
@@ -88,7 +89,7 @@ function BuildOrder_Check_Units_Deactivate(obj)
         return
     end
 
-    print("[UnitCheck] Requested deactivation of check "..tostring(obj.check.id))
+    print("[UnitCheck] Requested deactivation of check " .. tostring(obj.check.id))
     _bo_units_data.units[obj.check.id] = nil
 end
 
@@ -99,7 +100,7 @@ function BuildOrder_Check_Units_GetText(obj)
         _bo_units_data.units[obj.check.id], payload.id
     )
     local units = _bo_units_data.units[obj.check.id]
-    local unit_text = _ScreenNameWrapper(units, payload.id, units~= nil and units.player)
+    local unit_text = _ScreenNameWrapper(units, payload.id, units ~= nil and units.player)
     return Loc_FormatText(
         BO_LOC_StringId(_ACTIVE_UNITS_FORMAT_ID),
         payload.count,
@@ -111,7 +112,7 @@ end
 function BuildOrder_Check_Units_PollCompletion(obj)
     local state = _bo_units_data[obj.check.id]
     if state == nil then
-        print("[UnitCheck] No check tracked for child "..obj.check.id)
+        print("[UnitCheck] No check tracked for child " .. obj.check.id)
         return false
     end
 
@@ -129,7 +130,7 @@ function BuildOrder_Check_Units_PollCompletion(obj)
         end
     )
 
-    print("[UnitCheck] Found "..tostring(count).." units. Want="..tostring(obj.check.payload.count))
+    print("[UnitCheck] Found " .. tostring(count) .. " units. Want=" .. tostring(obj.check.payload.count))
     return count >= state.minimum
 end
 

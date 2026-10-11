@@ -10,9 +10,7 @@ DynImport("build_orders/localization.scar")
 -- Data
 -----------------------------------------------------------------------
 
-_bo_hints_data = {
-
-}
+_bo_hints_data = {}
 
 local _HINT_TEXT_FORMAT_ID = 145
 

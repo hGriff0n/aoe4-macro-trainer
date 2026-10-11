@@ -1,20 +1,29 @@
-
 import("utils/dynimport.scar")
 
-local _BUILD_ORDER_RESOURCE_KEYS = {
-	food = 148,
-	gold = 149,
-	wood = 150,
-	stone = 151
-}
+local _RAW_TEXT_ID = 11252841
+
+-- TODO: Probably move to scar/utils/...
+local function _RawString(s)
+	return Loc_FormatText(_RAW_TEXT_ID, s)
+end
 
 function BO_LOC_StringId(db_id)
 	return "$dfb5645698a84afb91cf7a2dfb0f4a4e:" .. tostring(db_id)
 end
 
-function BO_LOC_ResourceName(res)
-	if _BUILD_ORDER_RESOURCE_KEYS[res] ~= nil then
-		return Loc_GetString(BO_LOC_StringId(_BUILD_ORDER_RESOURCE_KEYS[res]))
+function BoLoc_IsLocString(s)
+	return scartype_tostring(s) == "LOCSTRING"
+end
+
+function BoLoc_RawString(elem)
+	if elem == nil then
+		return _RawString("missing value")
 	end
-	return ""
+	if BoLoc_IsLocString(elem) then
+		return elem
+	end
+	if type(elem) ~= "string" then
+		return _RawString(tostring(elem))
+	end
+	return _RawString(elem)
 end

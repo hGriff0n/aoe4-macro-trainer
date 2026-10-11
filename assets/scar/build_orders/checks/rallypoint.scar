@@ -50,7 +50,7 @@ end
 function BuildOrder_Check_Rallypoint_GetText(obj)
     print("Getting text for rallypoint check")
     return Loc_FormatText(BO_LOC_StringId(_RALLYPOINT_FORMAT_ID),
-        BO_LOC_ResourceName(obj.check.payload.resource))
+        BoLoc_RawString(obj.check.payload.resource))
 end
 
 -----------------------------------------------------------------------

@@ -13,12 +13,6 @@ DynImport("build_orders/localization.scar")
 _bo_resources_data = {}
 
 local _COLLECT_RES_FORMAT_ID = 155
-BUILD_ORDER_RESOURCE_KEYS = {
-    food = "$dfb5645698a84afb91cf7a2dfb0f4a4e:148",
-    gold = "$dfb5645698a84afb91cf7a2dfb0f4a4e:149",
-    wood = "$dfb5645698a84afb91cf7a2dfb0f4a4e:150",
-    stone = "$dfb5645698a84afb91cf7a2dfb0f4a4e:151",
-}
 
 -----------------------------------------------------------------------
 -- Local Helper Functions
@@ -50,7 +44,7 @@ function BuildOrder_Check_Resources_Activate(obj, player)
     end
 
     local payload = obj.check.payload
-    print("[ResourceCheck] Registered check="..tostring(obj.check.id))
+    print("[ResourceCheck] Registered check=" .. tostring(obj.check.id))
     _bo_resources_data[obj.check.id] = {
         player = player,
         type = payload.resource,
@@ -64,7 +58,7 @@ function BuildOrder_Check_Resources_Deactivate(obj)
         return
     end
 
-    print("[ResourceCheck] Deleted check="..tostring(obj.check.id))
+    print("[ResourceCheck] Deleted check=" .. tostring(obj.check.id))
     _bo_resources_data[obj.check.id] = nil
 end
 
@@ -74,20 +68,21 @@ function BuildOrder_Check_Resources_GetText(obj)
     return Loc_FormatText(
         BO_LOC_StringId(_COLLECT_RES_FORMAT_ID),
         payload.count,
-        BO_LOC_ResourceName(_bo_resources_data[obj.check.id].type)
+        BoLoc_RawString(_bo_resources_data[obj.check.id].type)
     )
 end
 
 -- TODO: Would be ideal if we could do all checks in one go
 function BuildOrder_Check_Resources_PollCompletion(obj)
-    local state = _bo_resources_data[obj.check.id]
-    if state == nil then
-        print("[ResourceCheck] No check tracked for child "..obj.check.id)
+    local res = _bo_resources_data[obj.check.id]
+    if res == nil then
+        print("[ResourceCheck] No check tracked for child " .. obj.check.id)
         return false
     end
 
     local current = Player_GetResource(res.player, res.type)
-    print("[ResourceCheck] Checking "..res.." storage: Want="..tostring(res.count).." Got="..tostring(current))
+    print("[ResourceCheck] Checking " ..
+        res.type .. " storage: Want=" .. tostring(res.count) .. " Got=" .. tostring(current))
     return current >= res.count
 end
 

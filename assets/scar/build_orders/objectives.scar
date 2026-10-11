@@ -24,11 +24,7 @@ _bo_objective_data = {
     registered_checks = {}
 }
 
-local _LOC_IDS = {
-    unavailable = 174,
-    step = 144,
-    raw = 143
-}
+local _STEP_FORMAT_ID = 144
 
 -----------------------------------------------------------------------
 -- Helper Functions
@@ -99,9 +95,8 @@ local function AddCheckSubObjective(check, faction)
 
     -- Now get the text to create the child objective
     -- TODO: These need to handle `check.optional`
-	-- TODO: Temporarily disable localization so I can check that things load
-    -- local text = handles.format_check_text(child_obj)
-	local text = Loc_GetString(BO_LOC_StringId(27))
+    -- TODO: Temporarily disable localization so I can check that things load
+    local text = handles.format_check_text(child_obj)
     local obj_id = CreateObjective(
         text,
         faction,
@@ -116,10 +111,9 @@ end
 
 local function GetStepText(step, step_idx)
     if step.title ~= nil then
-        return Loc_FormatText(BO_LOC_StringId(_LOC_IDS.raw), step.title)
+        return BoLoc_RawString(step.title)
     end
-    return Loc_FormatText(BO_LOC_StringId(
-        _LOC_IDS.step), Loc_FormatInteger(step_idx))
+    return Loc_FormatText(BO_LOC_StringId(_STEP_FORMAT_ID), Loc_FormatInteger(step_idx))
 end
 
 local function SetCurrentObjective(step, step_idx)
@@ -138,12 +132,13 @@ local function SetCurrentObjective(step, step_idx)
 end
 
 local function CleanupCurrentObjective()
-    for obj_id, child in ipairs(_bo_objective_data.sub_objectives) do
+    for obj_id, child in pairs(_bo_objective_data.sub_objectives) do
         print("Deleting handler for child " .. tostring(obj_id) .. " (check " .. tostring(child.check.id) .. ")")
         local handle = GetCheckHandle(child.check)
         if handle ~= nil then
             handle.deactivate(child)
         end
+        -- Maybe defer deleting?
         Obj_Delete(obj_id)
     end
     _bo_objective_data.check_obj_id_map = {}
@@ -160,7 +155,7 @@ end
 
 function BuildOrder_Objectives_MarkComplete(check_id, status)
     if _bo_objective_data.check_obj_id_map[check_id] == nil then
-        print("Attempt to mark unallocated check complete: "..check_id)
+        print("Attempt to mark unallocated check complete: " .. check_id)
         return
     end
 
@@ -252,24 +247,25 @@ end
 function BuildOrder_Objectives_CheckCompletion()
     local step_completed = true
 
-    for id, child in ipairs(_bo_objective_data.sub_objectives) do
+    for id, child in pairs(_bo_objective_data.sub_objectives) do
         -- Although most checks are done via event responders
         -- a few have to be done through polling
         if child.poll_handle ~= nil then
-            print("Polling check "..check.id)
+            print("Polling check " .. tostring(child.check.id))
             local completed = child:poll_handle()
             if completed ~= child.completed then
-                print("Check "..check.id.." switched status: Was="..child.completed)
+                print("Check " .. tostring(child.check.id) .. " switched status: Was=" .. tostring(child.completed))
                 SetObjectiveComplete(id, completed)
             end
             child.completed = completed
         else
-            print("Checking objective state for completion: "..tostring(OS_GetState(id)).."-"..tostring(OS_Complete))
+            local status = Obj_GetState(id)
+            print("Checking objective state for completion: " .. tostring(status) .. "-" .. tostring(OS_Complete))
             -- TODO: Not sure if this is correct
-            child.completed = (Obj_GetState(id) == OS_Complete)
+            child.completed = (status == OS_Complete)
         end
 
-        print("Checking completion with optional="..tostring(child.check.optional))
+        print("Checking completion with optional=" .. tostring(child.check.optional))
         if not child.completed and not child.check.optional then
             step_completed = false
         end
@@ -278,7 +274,8 @@ function BuildOrder_Objectives_CheckCompletion()
     -- If all required checks pass, then we can mark the step completed
     -- and move on to the next one (assuming there is any)
     if step_completed then
-        print("All sub-objectives for step ".._bo_objective_data.current_objective.." have completed. Marking objective as complete")
+        print("All sub-objectives for step " ..
+            _bo_objective_data.current_objective .. " have completed. Marking objective as complete")
         Obj_SetState(_bo_objective_data.current_objective, OS_Complete)
         BuildOrder_Objectives_NextStep()
     end

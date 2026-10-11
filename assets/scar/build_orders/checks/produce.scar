@@ -47,7 +47,7 @@ local function DeactivateCheck(check_id)
                 _bo_produce_data.num_build_listeners - 1
         end
 
-        print("[ProduceCheck] Deleted check="..tostring(obj.check.id))
+        print("[ProduceCheck] Deleted check=" .. tostring(obj.check.id))
         _bo_produce_data.units[check_id] = nil
     end
 
@@ -99,11 +99,12 @@ function BuildOrder_Check_Produce_Activate(obj, player)
     local payload = obj.check.payload
     local pbgs = Mod_Pbg_ResolveAll(payload.ids, BP_GetSquadBlueprint)
     if #pbgs == 0 then
-        print("[ProduceCheck] Failed to resolve pbg: check="..tostring(obj.check.id).." pbg="..tostring(obj.check.payload.id))
+        print("[ProduceCheck] Failed to resolve pbg: check=" ..
+            tostring(obj.check.id) .. " pbg=" .. tostring(obj.check.payload.id))
         return false
     end
 
-    print("[ProduceCheck] Registered check="..tostring(obj.check.id))
+    print("[ProduceCheck] Registered check=" .. tostring(obj.check.id))
     _bo_units_data.units[obj.check.id] = {
         player = player,
         pbgs = pbgs,
@@ -124,7 +125,7 @@ function BuildOrder_Check_Produce_Activate(obj, player)
     if payload.queued then
         _bo_units_data.listening_for_command_event = true
         if _bo_units_data.num_command_listeners == 0 then
-            print("[ProduceCheck] Adding queue event listener: check="..tostring(obj.check.id))
+            print("[ProduceCheck] Adding queue event listener: check=" .. tostring(obj.check.id))
             Rule_AddGlobalEvent(
                 BuildOrder_Check_Produce_EntityCommandEventHandle,
                 GE_EntityCommandIssued
@@ -132,10 +133,9 @@ function BuildOrder_Check_Produce_Activate(obj, player)
         end
         _bo_units_data.num_command_listeners =
             _bo_units_data.num_command_listeners + 1
-
     else
         if _bo_units_data.num_build_listeners == 0 then
-            print("[ProduceCheck] Adding unit build listener: check="..tostring(obj.check.id))
+            print("[ProduceCheck] Adding unit build listener: check=" .. tostring(obj.check.id))
             Rule_AddGlobalEvent(
                 BuildOrder_Check_Produce_BuildEventHandle,
                 GE_BuildItemComplete
@@ -149,7 +149,7 @@ function BuildOrder_Check_Produce_Activate(obj, player)
 end
 
 function BuildOrder_Check_Produce_Deactivate(obj)
-    print("[ProduceCheck] Requested deactivation of check "..tostring(obj.check.id))
+    print("[ProduceCheck] Requested deactivation of check " .. tostring(obj.check.id))
     if _bo_units_data.num_build_listeners > 0
         or _bo_units_data.num_command_listeners > 0
     then
@@ -165,7 +165,7 @@ function BuildOrder_Check_Produce_GetText(obj)
     local unit_text = Mod_Pbg_ScreenName(
         unit ~= nil and unit.pbgs ~= nil and #unit.pbgs > 0 and unit.pbgs[1] or nil,
         id,
-        function(pbg) return BP_GetSquadUIInfo(pbg, prace)
+        function(pbg) return BP_GetSquadUIInfo(pbg, prace) end
     )
 
     if payload.constant then
@@ -180,7 +180,7 @@ function BuildOrder_Check_Produce_GetText(obj)
 end
 
 function BuildOrder_Check_Produce_BuildEventHandle(event)
-    print("[ProduceCheck] Received unit build event: "..tostring(event))
+    print("[ProduceCheck] Received unit build event: " .. tostring(event))
     if IsInvalidEvent(event) then
         return
     end
@@ -193,10 +193,10 @@ function BuildOrder_Check_Produce_BuildEventHandle(event)
                 state.num_built = state.num_built + 1
             end
 
-            -- TODO: We'll want to redo this for constant 
+            -- TODO: We'll want to redo this for constant
             -- if we ever get to adding telemetry
             if state.num_built >= state.minimum then
-                print("[ProduceCheck] Expected num events seen. Marking "..tostring(check_id).." complete")
+                print("[ProduceCheck] Expected num events seen. Marking " .. tostring(check_id) .. " complete")
                 BuildOrder_Objectives_MarkComplete(check_id, true)
                 DeactivateCheck(check_id)
             end
@@ -204,11 +204,11 @@ function BuildOrder_Check_Produce_BuildEventHandle(event)
     end
 end
 
--- TODO: Need to test what the 
+-- TODO: Need to test what the
 -- Only used for checking the number of queued elements
 -- Don't need to check built because a unit has to be queued first
 function BuildOrder_Check_Produce_EntityCommandEventHandle(event)
-    print("[ProduceCheck] Received entity command event: "..tostring(event))
+    print("[ProduceCheck] Received entity command event: " .. tostring(event))
     Mod_Debug_PrintTable(event)
     if IsInvalidEvent(event) then
         return
@@ -247,7 +247,7 @@ function BuildOrder_Check_Produce_EntityCommandEventHandle(event)
         )
 
         if num_queued >= state.minimum then
-            print("[ProduceCheck] Expected num events seen. Marking "..tostring(check_id).." complete")
+            print("[ProduceCheck] Expected num events seen. Marking " .. tostring(check_id) .. " complete")
             BuildOrder_Objectives_MarkComplete(check_id, true)
             DeactivateCheck(check_id)
         end

@@ -28,14 +28,9 @@
 44,,,No-order confirmation title.,,,Continue without a build order?
 45,,,No-order confirmation message.,,,No build-order objectives will be started.
 49,,,Build-order UI fallback action.,,,Continue Without Build Order
-143,,,Raw authored build-order text.,,,%1TEXT%
 144,,,Generated build-order step title.,,,Step #%1COUNT%
 145,,,Build-order hint title.,,,[HINT] %1TEXT%
 146,,,Optional check title wrapper.,,,[Optional] %1TEXT%
-148,,,Build-order resource name.,,,food
-149,,,Build-order resource name.,,,gold
-150,,,Build-order resource name.,,,wood
-151,,,Build-order resource name.,,,stone
 152,,,Resource allocation fragment.,,,%1COUNT% %2RESOURCE%
 153,,,Resource allocation separator.,,,%1TEXT% | %2TEXT%
 154,,,Alternative target separator.,,,%1TEXT% or %2TEXT%
@@ -53,8 +48,4 @@
 166,,,Constant production check.,,,Constantly produce %1UNIT%
 167,,,Active-unit count check.,,,Have %1COUNT% active %2UNIT%
 168,,,Total built buildings check.,,,Have %1COUNT% %2BUILDING% built
-170,,,1 Vil Resource Assignment,,,Assign %1COUNT% %1RESOURCE%
-171,,,2 Vil Resource Assignment,,,Assign %1COUNT% %1RESOURCE% | %1COUNT% %1RESOURCE%
-172,,,3 Vil Resource Assignment,,,Assign %1COUNT% %1RESOURCE% | %1COUNT% | %1RESOURCE% | %1COUNT% %1RESOURCE%
-173,,,4 Vil Resource Assignment,,,Assign %1COUNT% %1RESOURCE% | %1COUNT% %1RESOURCE% | %1COUNT% %1RESOURCE% | %1COUNT% %1RESOURCE%
-174,,,Invalid check text,,,[ERROR] Invalid check kind
+170,,,1 Vil Resource Assignment,,,Assign %1COUNT% %2RESOURCE%
