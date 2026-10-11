@@ -17,7 +17,12 @@ local function _ModStringIdImpl(db_id)
 end
 
 local function _RawStringImpl(s)
-	return Loc_FormatText(_RAW_TEXT_ID, s)
+	if string.sub(s, 1, 1) == "$" then
+		return Loc_GetString(s)
+	end
+	local text = LOC("")
+	text.LocString = s
+	return text
 end
 
 local function _JoinIdFromDelimiter(delim)
@@ -28,7 +33,7 @@ local function _JoinIdFromDelimiter(delim)
 	elseif delim == "/" then
 		return _JOIN_IDS.fraction
 	elseif delim == "|" then
-		return _ModStringId(_OR_DELIM_ID)
+		return _ModStringIdImpl(_OR_DELIM_ID)
 	else
 		return _JOIN_IDS.list
 	end
@@ -37,11 +42,11 @@ end
 local function _JoinStringsImpl(strs, join_id, formatter)
 	local k, v = next(strs)
 	local text = formatter(k, v)
-	
-	k, v = next(strs)
+
+	k, v = next(strs, k)
 	while k ~= nil do
-		text = Loc_FormatText(_JOIN_IDS.concat[1], text, formatter(k, v))
-		k, v = next(strs)
+		text = Loc_FormatText(join_id, text, formatter(k, v))
+		k, v = next(strs, k)
 	end
 
 	return text
