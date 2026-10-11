@@ -4,7 +4,7 @@
 import("utils/dynimport.scar")
 
 DynImport("simspeed/simrate.scar")
-DynImport("build_orders/localization.scar")
+DynImport("utils/localization.scar")
 
 -----------------------------------------------------------------------
 -- Data

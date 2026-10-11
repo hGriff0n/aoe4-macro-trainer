@@ -56,5 +56,5 @@ function Mod_Pbg_ScreenName(id, pbg, ui_accessor, player)
     end
 
     print("Missing localization string for " .. tostring(id))
-    return BoLoc_RawString(id)
+    return BoLoc_String(id)
 end

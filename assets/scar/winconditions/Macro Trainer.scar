@@ -35,7 +35,7 @@ DynImport("build_orders/submod.scar")
 -- TODO: Reworking local imports
 -- I think there was something in the chat logs about these imports needing to be in the top-level file?
 -- import("build_orders/datastore.scar")
--- import("build_orders/localization.scar")
+-- import("utils/localization.scar")
 -- import("build_orders/objective_engine.scar")
 -- import("build_orders/selector_ui.scar")
 -- import("build_orders/startup.scar")

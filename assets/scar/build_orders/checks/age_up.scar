@@ -5,7 +5,7 @@ import("utils/dynimport.scar")
 
 DynImport("build_orders/checks/utils/events.scar")
 DynImport("build_orders/checks/utils/pbg.scar")
-DynImport("build_orders/localization.scar")
+DynImport("utils/localization.scar")
 
 
 -----------------------------------------------------------------------

@@ -59,7 +59,7 @@ function BoLoc_CheckStr(s)
 	return _RawStringImpl(s ~= nil and s or "missing value")
 end
 
-function BoLoc_RawString(elem)
+function BoLoc_String(elem)
 	if BoLoc_IsLocString(elem) then
 		return elem
 	end
@@ -67,6 +67,10 @@ function BoLoc_RawString(elem)
 		return _RawStringImpl(tostring(elem))
 	end
 	return _RawStringImpl(elem)
+end
+
+function BoLoc_ConcatStrings(s1, s2)
+	return Loc_FormatText(_JOIN_IDS.concat, BoLoc_String(s1), BoLoc_String(s2))
 end
 
 function BoLoc_JoinStrings(strs, formatter, delim)

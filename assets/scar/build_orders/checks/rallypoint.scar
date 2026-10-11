@@ -3,7 +3,7 @@
 -----------------------------------------------------------------------
 import("utils/dynimport.scar")
 
-DynImport("build_orders/localization.scar")
+DynImport("utils/localization.scar")
 
 
 -----------------------------------------------------------------------
@@ -50,7 +50,7 @@ end
 function BuildOrder_Check_Rallypoint_GetText(obj)
     print("Getting text for rallypoint check")
     return Loc_FormatText(BoLoc_ModStringId(_RALLYPOINT_FORMAT_ID),
-        BoLoc_RawString(obj.check.payload.resource))
+        BoLoc_String(obj.check.payload.resource))
 end
 
 -----------------------------------------------------------------------

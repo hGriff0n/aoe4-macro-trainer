@@ -3,7 +3,7 @@
 -----------------------------------------------------------------------
 import("utils/dynimport.scar")
 
-DynImport("build_orders/localization.scar")
+DynImport("utils/localization.scar")
 
 
 -----------------------------------------------------------------------
@@ -11,6 +11,8 @@ DynImport("build_orders/localization.scar")
 -----------------------------------------------------------------------
 
 _bo_vils_data = {}
+
+-- TODO: This will put an `Assign ` in front of every element
 local _VIL_1RES_ID = 170
 local _OR_DELIM_ID = 153
 
@@ -21,7 +23,7 @@ local _OR_DELIM_ID = 153
 local function GetPayloadAsList(payload)
     local resources = {}
     for k, v in pairs(payload) do
-        resources[#resources + 1] = { res = BoLoc_RawString(k), count = v }
+        resources[#resources + 1] = { res = BoLoc_String(k), count = v }
     end
     return resources
 end
@@ -57,8 +59,9 @@ local function _vilcheck(player, req, reader)
     return reader(player) >= req
 end
 
-local function _res_obj_text(res, count)
-    return Loc_FormatText(BoLoc_ModStringId(_VIL_1RES_ID), Loc_FormatInteger(count), BoLoc_RawString(res))
+local function _resource_pair_formatter(res, count)
+    return Loc_FormatText(
+        BoLoc_ModStringId(_VIL_1RES_ID), Loc_FormatInteger(count), BoLoc_String(res))
 end
 
 -----------------------------------------------------------------------
@@ -103,21 +106,8 @@ function BuildOrder_Check_Vils_Deactivate(obj)
 end
 
 function BuildOrder_Check_Vils_GetText(obj)
-    print("RT_Food=" .. tostring(RT_Food))
-    print("[VilCheck] Assembling objective text")
-    local res = GetPayloadAsList(obj.check.payload)
-    local k, v = next(res)
-    local text = _res_obj_text(v.res, v.count)
-
-    k, v = next(res, k)
-    while k ~= nil do
-        text = Loc_FormatText(BoLoc_ModStringId(_OR_DELIM_ID), text, _res_obj_text(v.res, v.count))
-        k, v = next(res, k)
-    end
-
-    -- TODO: Rewrite to use `BoLoc_JoinStrings`
-
-    return text
+    return BoLoc_ConcatStrings(
+        "Assign ", BoLoc_JoinStrings(obj.check.payload, _resource_pair_formatter, "|"))
 end
 
 function BuildOrder_Check_Vils_PollCompletion(obj)

@@ -5,7 +5,7 @@ import("simspeed/simrate.scar")
 import("utils/debug.scar")
 import("utils/dynimport.scar")
 
-DynImport("build_orders/localization.scar")
+DynImport("utils/localization.scar")
 DynImport("build_orders/objectives.scar")
 DynImport("build_orders/selector_ui.scar")
 

@@ -3,7 +3,7 @@
 -----------------------------------------------------------------------
 import("utils/dynimport.scar")
 
-DynImport("build_orders/localization.scar")
+DynImport("utils/localization.scar")
 
 
 -----------------------------------------------------------------------
@@ -68,7 +68,7 @@ function BuildOrder_Check_Resources_GetText(obj)
     return Loc_FormatText(
         BoLoc_ModStringId(_COLLECT_RES_FORMAT_ID),
         payload.count,
-        BoLoc_RawString(_bo_resources_data[obj.check.id].type)
+        BoLoc_String(_bo_resources_data[obj.check.id].type)
     )
 end
 

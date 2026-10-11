@@ -4,7 +4,7 @@
 import("utils/debug.scar")
 import("utils/dynimport.scar")
 
-DynImport("build_orders/localization.scar")
+DynImport("utils/localization.scar")
 
 -----------------------------------------------------------------------
 -- Data
@@ -115,7 +115,7 @@ end
 
 local function GetStepText(step, step_idx)
     if step.title ~= nil then
-        return BoLoc_RawString(step.title)
+        return BoLoc_String(step.title)
     end
     return Loc_FormatText(BoLoc_ModStringId(_STEP_FORMAT_ID), Loc_FormatInteger(step_idx))
 end
