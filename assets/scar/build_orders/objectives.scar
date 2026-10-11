@@ -30,7 +30,16 @@ local _STEP_FORMAT_ID = 144
 -- Helper Functions
 -----------------------------------------------------------------------
 
-local function CreateObjective(title, faction, parent_id, kind)
+local function SetObjectiveComplete(id, complete)
+    if complete then
+        Obj_SetState(id, OS_Complete)
+    else
+        Obj_SetState(id, OS_Incomplete)
+    end
+end
+
+-- `completed` is optional as nil is falsy and unpassed args default to nil
+local function CreateObjective(title, faction, parent_id, kind, completed)
     local obj_id = Obj_Create(
         _bo_objective_data.local_player,
         title,
@@ -42,21 +51,13 @@ local function CreateObjective(title, faction, parent_id, kind)
         parent_id,
         kind
     )
-    Obj_SetState(obj_id, OS_Incomplete)
+    SetObjectiveComplete(obj_id, completed)
     Obj_SetVisible(obj_id, true)
     return obj_id
 end
 
 local function LogMissingHandler(check)
     print("BuildOrder: no registered handler for " .. tostring(check.kind) .. " (check " .. tostring(check.id) .. ")")
-end
-
-local function SetObjectiveComplete(id, complete)
-    if complete then
-        Obj_SetState(id, OS_Complete)
-    else
-        Obj_SetState(id, OS_Incomplete)
-    end
 end
 
 local function InitializeState(bo, player)
@@ -87,33 +88,36 @@ local function AddCheckSubObjective(check, faction)
         completed = false,
         poll_handle = handles ~= nil and handles.poll or nil
     }
+    -- Store it immediately so activate can mark `completed` if prefinishing is allowed
+    _bo_objective_data.sub_objectives[check.id] = child_obj
+
     -- If the activation doesn't work, don't add the child objective
     if not handles.activate(child_obj, _bo_objective_data.local_player) then
+        _bo_objective_data.sub_objectives[check.id] = nil
         print("Skipping objective for check " .. tostring(child_obj.check.id) .. " because activation failed")
         return
     end
 
     -- Now get the text to create the child objective
     -- TODO: These need to handle `check.optional`
-    -- TODO: Temporarily disable localization so I can check that things load
     local text = handles.format_check_text(child_obj)
     local obj_id = CreateObjective(
         text,
         faction,
         _bo_objective_data.current_objective,
-        "buildOrderCheck"
+        "buildOrderCheck",
+        _bo_objective_data.sub_objectives[check.id].completed
     )
     _bo_objective_data.check_obj_id_map[child_obj.check.id] = obj_id
 
     print("Created sub-objective " .. tostring(obj_id) .. " for check " .. tostring(child_obj.check.id))
-    _bo_objective_data.sub_objectives[obj_id] = child_obj
 end
 
 local function GetStepText(step, step_idx)
     if step.title ~= nil then
         return BoLoc_RawString(step.title)
     end
-    return Loc_FormatText(BO_LOC_StringId(_STEP_FORMAT_ID), Loc_FormatInteger(step_idx))
+    return Loc_FormatText(BoLoc_ModStringId(_STEP_FORMAT_ID), Loc_FormatInteger(step_idx))
 end
 
 local function SetCurrentObjective(step, step_idx)
@@ -132,14 +136,18 @@ local function SetCurrentObjective(step, step_idx)
 end
 
 local function CleanupCurrentObjective()
-    for obj_id, child in pairs(_bo_objective_data.sub_objectives) do
-        print("Deleting handler for child " .. tostring(obj_id) .. " (check " .. tostring(child.check.id) .. ")")
+    for check_id, child in pairs(_bo_objective_data.sub_objectives) do
+        print("Cleaning up check " .. tostring(check_id))
         local handle = GetCheckHandle(child.check)
         if handle ~= nil then
             handle.deactivate(child)
         end
-        -- Maybe defer deleting?
-        Obj_Delete(obj_id)
+
+        local obj_id = _bo_objective_data.check_obj_id_map[check_id]
+        if obj_id ~= nil then
+            -- Maybe defer deleting?
+            Obj_Delete(obj_id)
+        end
     end
     _bo_objective_data.check_obj_id_map = {}
     _bo_objective_data.sub_objectives = {}
@@ -154,12 +162,10 @@ end
 -----------------------------------------------------------------------
 
 function BuildOrder_Objectives_MarkComplete(check_id, status)
-    if _bo_objective_data.check_obj_id_map[check_id] == nil then
-        print("Attempt to mark unallocated check complete: " .. check_id)
-        return
+    _bo_objective_data.sub_objectives[check_id].completed = status
+    if _bo_objective_data.check_obj_id_map[check_id] ~= nil then
+        SetObjectiveComplete(_bo_objective_data.check_obj_id_map[check_id], status)
     end
-
-    SetObjectiveComplete(_bo_objective_data.check_obj_id_map[check_id], status)
 end
 
 function BuildOrder_Objectives_OnInit()
@@ -244,25 +250,28 @@ end
 -- Either need to add a poll for checking internal tracking, or add some
 -- other method for setting the state
 -- TODO: Could be worth having poll for everything that just check event state
+-- An alternative way of dealing with the obj_id problem
 function BuildOrder_Objectives_CheckCompletion()
     local step_completed = true
 
-    for id, child in pairs(_bo_objective_data.sub_objectives) do
+    for check_id, child in pairs(_bo_objective_data.sub_objectives) do
         -- Although most checks are done via event responders
         -- a few have to be done through polling
         if child.poll_handle ~= nil then
-            print("Polling check " .. tostring(child.check.id))
+            print("Polling check " .. tostring(check_id))
             local completed = child:poll_handle()
             if completed ~= child.completed then
-                print("Check " .. tostring(child.check.id) .. " switched status: Was=" .. tostring(child.completed))
+                print("Check " .. tostring(check_id) .. " switched status: Was=" .. tostring(child.completed))
                 SetObjectiveComplete(id, completed)
             end
             child.completed = completed
         else
-            local status = Obj_GetState(id)
-            print("Checking objective state for completion: " .. tostring(status) .. "-" .. tostring(OS_Complete))
-            -- TODO: Not sure if this is correct
-            child.completed = (status == OS_Complete)
+            local obj_id = _bo_objective_data.check_obj_id_map[check_id]
+            if obj_id ~= nil then
+                local state = Obj_GetState(obj_id)
+                print("Checking objective state for completion: "..tostring(state).."-"..tostring(OS_Complete))
+                child.completed = (state == OS_Complete)
+            end
         end
 
         print("Checking completion with optional=" .. tostring(child.check.optional))

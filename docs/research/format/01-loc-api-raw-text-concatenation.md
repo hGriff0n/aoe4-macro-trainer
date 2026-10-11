@@ -125,7 +125,7 @@ local function ToLoc(v)                       -- mirrors event_cues.scar _Return
 end
 ```
 
-This repo already uses the first approach. A mod key `143 = "%1TEXT%"` (`assets/locdb/Macro Trainer_en.csv:31`) is called as `Loc_FormatText(BO_LOC_StringId(143), step.title)` (`assets/scar/build_orders/objectives.scar:124`), and mod keys are built as `"$<modguid>:<id>"` (`localization.scar:11-12`). [INF] Unverified.
+This repo already uses the first approach. A mod key `143 = "%1TEXT%"` (`assets/locdb/Macro Trainer_en.csv:31`) is called as `Loc_FormatText(BoLoc_StringId(143), step.title)` (`assets/scar/build_orders/objectives.scar:124`), and mod keys are built as `"$<modguid>:<id>"` (`localization.scar:11-12`). [INF] Unverified.
 
 ---
 
@@ -156,7 +156,7 @@ None of the `%1TEXT%%2TEXT%` keys are referenced by indexed official SCAR. They 
 local JOIN2 = 11252837   -- "%1TEXT%%2TEXT%"
 local title = Loc_FormatText(JOIN2, Loc_GetString("$11161290"), Text_FromLua(" (custom)"))
 -- or, with raw strings directly as args [INF]:
-local line  = Loc_FormatText(JOIN2, BO_LOC_ResourceName(res), " x" .. tostring(n))
+local line  = Loc_FormatText(JOIN2, BoLoc_ResourceName(res), " x" .. tostring(n))
 ```
 
 ### 3.2 Idioms and pitfalls

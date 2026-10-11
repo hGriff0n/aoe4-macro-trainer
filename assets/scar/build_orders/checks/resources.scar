@@ -66,7 +66,7 @@ function BuildOrder_Check_Resources_GetText(obj)
     print("[ResourceCheck] Assembling objective text")
     local payload = obj.check.payload
     return Loc_FormatText(
-        BO_LOC_StringId(_COLLECT_RES_FORMAT_ID),
+        BoLoc_ModStringId(_COLLECT_RES_FORMAT_ID),
         payload.count,
         BoLoc_RawString(_bo_resources_data[obj.check.id].type)
     )

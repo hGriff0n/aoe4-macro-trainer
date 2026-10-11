@@ -4,6 +4,7 @@
 import("utils/dynimport.scar")
 
 DynImport("build_orders/localization.scar")
+DynImport("build_orders/checks/utils/events.scar")
 DynImport("build_orders/checks/utils/pbg.scar")
 
 
@@ -29,18 +30,18 @@ local function IsInvalidEvent(event)
     return event == nil or event.upgrade == nil or event.executer ~= nil
 end
 
-local function AddQueuedListener()
+local function AddQueuedListener(check_id)
     if _bo_upgrades_data.num_queued_listeners == 0 then
-        print("[AgeUpCheck] Adding upgrade queue listener: check=" .. tostring(obj.check.id))
+        print("[UpgradeCheck] Adding upgrade queue listener from check="..tostring(check_id))
         Rule_AddGlobalEvent(OnUpgradeQueued, GE_UpgradeStart)
     end
     _bo_upgrades_data.num_queued_listeners =
         _bo_upgrades_data.num_queued_listeners + 1
 end
 
-local function AddCancelListener()
+local function AddCancelListener(check_id)
     if _bo_upgrades_data.num_cancel_listeners == 0 then
-        print("[AgeUpCheck] Adding upgrade cancel listener: check=" .. tostring(obj.check.id))
+        print("[UpgradeCheck] Adding upgrade cancel listener from check="..tostring(check_id))
         Rule_AddGlobalEvent(
             OnUpgradeCancelled, GE_UpgradeCancelled)
     end
@@ -48,9 +49,9 @@ local function AddCancelListener()
         _bo_upgrades_data.num_cancel_listeners + 1
 end
 
-local function AddCompletedListener()
+local function AddCompletedListener(check_id)
     if _bo_upgrades_data.num_research_listeners == 0 then
-        print("[AgeUpCheck] Adding upgrade done listener: check=" .. tostring(obj.check.id))
+        print("[UpgradeCheck] Adding upgrade done listener from check="..tostring(check_id))
         Rule_AddGlobalEvent(
             OnUpgradeFinished, GE_UpgradeComplete)
     end
@@ -58,42 +59,31 @@ local function AddCompletedListener()
         _bo_upgrades_data.num_research_listeners + 1
 end
 
-local function DropQueuedListener()
+local function DropQueuedListener(check_id)
     _bo_upgrades_data.num_queued_listeners =
         _bo_upgrades_data.num_queued_listeners - 1
     if _bo_upgrades_data.num_queued_listeners == 0 then
-        print("[AgeUpCheck] All listeners dropped - removing queue event listener: check=" .. tostring(obj.check.id))
+        print("[UpgradeCheck] All listeners dropped - removing queue event listener from check=" .. tostring(check_id))
         Rule_RemoveGlobalEvent(OnUpgradeQueued)
     end
 end
 
-local function DropCancelListener()
+local function DropCancelListener(check_id)
     _bo_upgrades_data.num_cancel_listeners =
         _bo_upgrades_data.num_cancel_listeners - 1
     if _bo_upgrades_data.num_cancel_listeners == 0 then
-        print("[AgeUpCheck] All listeners dropped - removing cancel event listener: check=" .. tostring(obj.check.id))
+        print("[UpgradeCheck] All listeners dropped - removing cancel event listener from check="..tostring(check_id))
         Rule_RemoveGlobalEvent(OnUpgradeCancelled)
     end
 end
 
-local function DropCompletedListener()
+local function DropCompletedListener(check_id)
     _bo_upgrades_data.num_research_listeners =
         _bo_upgrades_data.num_research_listeners - 1
     if _bo_upgrades_data.num_research_listeners == 0 then
-        print("[AgeUpCheck] All listeners dropped - removing done event listener: check=" .. tostring(obj.check.id))
+        print("[UpgradeCheck] All listeners dropped - removing done event listener from check="..tostring(check_id))
         Rule_RemoveGlobalEvent(OnUpgradeFinished)
     end
-end
-
--- TODO: Same in age_up.scar
-local function GetExecuterOwner(event)
-    if event.executer.PlayerID ~= nil then
-        return context.executer
-    end
-    if event.executer.EntityID ~= nil then
-        return Entity_GetPlayerOwner(context.executer)
-    end
-    return nil
 end
 
 local function DeactivateCheck(check_id)
@@ -102,33 +92,32 @@ local function DeactivateCheck(check_id)
         return
     end
 
-    print("[AgeUpCheck] Deleted check=" .. tostring(obj.check.id))
+    print("[UpgradeCheck] Deleted check="..tostring(check_id))
     _bo_upgrades_data.techs[check_id] = nil
 
     -- Remove the check from being considered by the event
     -- This also removes the event if all listeners are dropped
     if state.queued then
-        if state.completed then
-            DropCancelListener()
+        if state.listening_cancel then
+            DropCancelListener(check_id)
         else
-            DropQueuedListener()
+            DropQueuedListener(check_id)
         end
-    else
-        DropCompletedListener()
     end
+    DropCompletedListener(check_id)
 end
 
-local function IsUpgradeCompleted(player, pbg, queued)
-    print("[AgeUpCheck] Checking if player already researched: check=" .. tostring(obj.check.id))
-    local has_upgrade = Player_HasUpgrade(player, pbg)
+-- TODO: same as ageup.scar
+local function IsUpgradeCompleted(player, pbg, check_id)
+    print("[UpgradeCheck] Checking if player already researched: check="..tostring(check_id))
+    return Player_HasUpgrade(player, pbg)
+end
 
-    -- We only need to check the player's current queues if they don't already
-    -- have the upgrade and the check is on the queuing.
-    if has_upgrade or not queued then
-        return has_upgrade
-    end
-
-    print("[AgeUpCheck] Checking if upgrade currently queued: check=" .. tostring(obj.check.id))
+-- TODO: same as ageup.scar
+-- TODO: ageup.scar needs this function
+-- technically, needs `IsUpgradeCompleted | IsUpgradeCurrentlyQueued`
+local function IsUpgradeCurrentlyQueued(player, pbg, check_id)
+    print("[UpgradeCheck] Checking if upgrade currently queued: check="..tostring(check_id))
     local queued_upgrade = false
     EGroup_ForEach(
         Player_GetEntities(player),
@@ -147,7 +136,7 @@ local function IsUpgradeCompleted(player, pbg, queued)
                     if (type == PITEM_Upgrade or type == PITEM_PlayerUpgrade)
                         and Mod_Pbg_Equals(item, pbg)
                     then
-                        print("[AgeUpCheck] Found upgrade in queue: check=" .. tostring(obj.check.id))
+                        print("[UpgradeCheck] Found upgrade in queue: check="..tostring(check_id))
                         queued_upgrade = true
                         return
                     end
@@ -190,11 +179,10 @@ function BuildOrder_Check_Upgrades_Activate(obj, player)
         return false
     end
 
-    -- TODO: `Activate` is called before `CreateObjective`, so this
-    -- techically doesn't work. We want this case to be auto-marked
-    -- as complete even if we don't need any resolution
-    if IsUpgradeCompleted(player, pbgs[1], payload.queued) then
-        print("[AgeUpCheck] Already completed check=" .. tostring(obj.check.id))
+    -- In case the player researched the upgrade before we got to this point
+    -- If so, we don't need to do anything more as you can't unresearch techs
+    if IsUpgradeCompleted(player, pbgs[1], obj.check.id) then
+        print("[UpgradeCheck] Already completed check="..tostring(obj.check.id))
         BuildOrder_Objectives_MarkComplete(obj.check.id, true)
         return true
     end
@@ -204,15 +192,21 @@ function BuildOrder_Check_Upgrades_Activate(obj, player)
         pbg = pbgs[1],
         queued = payload.queued,
         player = player,
-        completed = false
+        listening_cancel = false
     }
 
-    -- TODO: Check if the event is already queued
-    if payload.queued then
-        AddQueuedListener()
-    else
-        AddCompletedListener()
+    -- TODO: Potentially unsure on the logic here
+    if IsUpgradeCurrentlyQueued(player, pbgs[1], obj.check.id) then
+        AddCancelListener(obj.check.id)
+        _bo_upgrades_data.techs[obj.check.id].listening_cancel = true
+
+        if payload.queued then
+            BuildOrder_Objectives_MarkComplete(obj.check.id, true)
+        end
+    elseif payload.queued then
+        AddQueuedListener(obj.check.id)
     end
+    AddCompletedListener(obj.check.id)
 
     return true
 end
@@ -224,16 +218,16 @@ function BuildOrder_Check_Upgrades_Deactivate(obj)
     end
 end
 
--- TODO: Is the `.pbg.pbg` correct?
 function BuildOrder_Check_Upgrades_GetText(obj)
     print("[UpgradeCheck] Assembling objective text")
     local payload = obj.check.payload
-    local tech_name = Mod_Pbg_ScreenName(payload.pbg.pbg, payload.id, BP_GetUpgradeUIInfo)
+    local tech_name = Mod_Pbg_ScreenName(
+        payload.id, payload.pbg.pbg, BP_GetUpgradeUIInfo)
 
     if payload.queued then
-        return Loc_FormatText(BO_LOC_StringId(_QUEUE_RESEARCH_FORMAT_ID), tech_name)
+        return Loc_FormatText(BoLoc_ModStringId(_QUEUE_RESEARCH_FORMAT_ID), tech_name)
     else
-        return Loc_FormatText(BO_LOC_StringId(_RESEARCH_FORMAT_ID), tech_name)
+        return Loc_FormatText(BoLoc_ModStringId(_RESEARCH_FORMAT_ID), tech_name)
     end
 end
 
@@ -242,61 +236,59 @@ end
 -- We have one event handle active for all checks in a given step
 -- but we call activate/deactivate for each one
 function OnUpgradeQueued(event)
-    print("[AgeUpCheck] Received upgrade queue event: " .. tostring(event))
+    print("[UpgradeCheck] Received upgrade queue event: "..tostring(event))
     -- TODO: Might want to use slightly different check
     if IsInvalidEvent(event) then
         return
     end
 
-    local owner = GetExecuterOwner(event)
+    local owner = BoEvents_GetExecuterOwner(event)
     for check_id, state in pairs(_bo_upgrades_data.techs) do
         if owner ~= state.player then
-            print("[AgeUpCheck] Wrong owner for check. leaving early")
+            print("[UpgradeCheck] Wrong owner for check. leaving early")
             return
         end
 
-        if not state.completed
-            and state.queued
-            and Mod_Pbg_Equals(event.upgrade, state.upgrade)
+        if state.queued
+           and Mod_Pbg_Equals(event.upgrade, state.upgrade)
         then
             -- TODO: Wants a more nuanced debug line
-            print("[AgeUpCheck] Found expected event. Marking " .. tostring(check_id) .. " complete")
-            state.completed = true
+            print("[UpgradeCheck] Found expected upgrade in event. Marking "..tostring(check_id).." complete")
             BuildOrder_Objectives_MarkComplete(check_id, true)
-            DropQueuedListener()
-            AddCancelListener()
+            state.listening_cancel = true
+            DropQueuedListener(check_id)
+            AddCancelListener(check_id)
         else
-            print("[AgeUpCheck] Event not for expected upgrade.")
+            print("[UpgradeCheck] Event not for expected upgrade.")
         end
     end
 end
 
 function OnUpgradeCancelled(event)
-    print("[AgeUpCheck] Received upgrade cancel event: " .. tostring(event))
+    print("[UpgradeCheck] Received upgrade cancel event: "..tostring(event))
     -- TODO: Might want to use slightly different check
     if IsInvalidEvent(event) then
         return
     end
 
-    local owner = GetExecuterOwner(context)
+    local owner = BoEvents_GetExecuterOwner(event)
     for check_id, state in pairs(_bo_upgrades_data.techs) do
         if owner ~= state.player then
-            print("[AgeUpCheck] Wrong owner for check. leaving early")
+            print("[UpgradeCheck] Wrong owner for check. leaving early")
             return
         end
 
-        if state.completed
-            and state.queued
-            and Mod_Pbg_Equals(event.upgrade, state.upgrade)
+        if state.queued
+           and Mod_Pbg_Equals(event.upgrade, state.upgrade)
         then
             -- TODO: Wants a more nuanced debug line
-            print("[AgeUpCheck] Found expected event. Marking " .. tostring(check_id) .. " complete")
-            state.completed = false
+            print("[UpgradeCheck] Found expected upgrade in event. Marking "..tostring(check_id).." complete")
             BuildOrder_Objectives_MarkComplete(check_id, false)
-            DropCancelListener()
-            AddQueuedListener()
+            state.listening_cancel = false
+            DropCancelListener(check_id)
+            AddQueuedListener(check_id)
         else
-            print("[AgeUpCheck] Event not for expected upgrade.")
+            print("[UpgradeCheck] Event not for expected upgrade.")
         end
     end
 end
@@ -304,25 +296,25 @@ end
 -- TODO: I think these loops where i deactivate the check in the middle
 -- are incorrect. Just collect ids to delete and then run it
 function OnUpgradeFinished(event)
-    print("[AgeUpCheck] Received upgrade done event: " .. tostring(event))
+    print("[UpgradeCheck] Received upgrade done event: "..tostring(event))
     -- TODO: Might want to use slightly different check
     if IsInvalidEvent(event) then
         return
     end
 
-    local owner = GetExecuterOwner(context)
+    local owner = BoEvents_GetExecuterOwner(event)
     for check_id, state in pairs(_bo_upgrades_data.techs) do
         if owner ~= state.player then
-            print("[AgeUpCheck] Wrong owner for check. leaving early")
+            print("[UpgradeCheck] Wrong owner for check. leaving early")
             return
         end
 
         if Mod_Pbg_Equals(event.upgrade, state.upgrade) then
-            print("[AgeUpCheck] Found expected event. Marking " .. tostring(check_id) .. " complete")
+            print("[UpgradeCheck] Found expected event. Marking "..tostring(check_id).." complete")
             BuildOrder_Objectives_MarkComplete(check_id, true)
-            DeactivateCheck(check_id)
+            DeactivateCheck(check_id, true)
         else
-            print("[AgeUpCheck] Event not for expected upgrade.")
+            print("[UpgradeCheck] Event not for expected upgrade.")
         end
     end
 end
@@ -330,12 +322,3 @@ end
 -----------------------------------------------------------------------
 -- Mod Implementation
 -----------------------------------------------------------------------
-
--- TODO: Could this be the way to resolve the `obj_id` issue???
-function Upgrades_SetCheckComplete(state, complete)
-    if state.checkComplete == complete then
-        return
-    end
-    state.checkComplete = complete
-    BuildOrder_SetCheckComplete(state.checkID, complete)
-end

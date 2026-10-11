@@ -1,29 +1,74 @@
 import("utils/dynimport.scar")
 
 local _RAW_TEXT_ID = 11252841
+local _OR_DELIM_ID = 153
 
--- TODO: Probably move to scar/utils/...
-local function _RawString(s)
+local _JOIN_IDS = {
+	concat = 11252837,
+	kv = 11168874,
+	sentence = 11204790,
+	list = 11226734,
+	fncall = 999426,
+	fraction = 11004775
+}
+
+local function _ModStringIdImpl(db_id)
+	return "$dfb5645698a84afb91cf7a2dfb0f4a4e:" .. tostring(db_id)
+end
+
+local function _RawStringImpl(s)
 	return Loc_FormatText(_RAW_TEXT_ID, s)
 end
 
-function BO_LOC_StringId(db_id)
-	return "$dfb5645698a84afb91cf7a2dfb0f4a4e:" .. tostring(db_id)
+local function _JoinIdFromDelimiter(delim)
+	if delim == nil then
+		return _JOIN_IDS.concat
+	elseif delim == "." then
+		return _JOIN_IDS.sentence
+	elseif delim == "/" then
+		return _JOIN_IDS.fraction
+	elseif delim == "|" then
+		return _ModStringId(_OR_DELIM_ID)
+	else
+		return _JOIN_IDS.list
+	end
+end
+
+local function _JoinStringsImpl(strs, join_id, formatter)
+	local k, v = next(strs)
+	local text = formatter(k, v)
+	
+	k, v = next(strs)
+	while k ~= nil do
+		text = Loc_FormatText(_JOIN_IDS.concat[1], text, formatter(k, v))
+		k, v = next(strs)
+	end
+
+	return text
+end
+
+function BoLoc_ModStringId(db_id)
+	return _ModStringIdImpl(db_id)
 end
 
 function BoLoc_IsLocString(s)
 	return scartype_tostring(s) == "LOCSTRING"
 end
 
+function BoLoc_CheckStr(s)
+	return _RawStringImpl(s ~= nil and s or "missing value")
+end
+
 function BoLoc_RawString(elem)
-	if elem == nil then
-		return _RawString("missing value")
-	end
 	if BoLoc_IsLocString(elem) then
 		return elem
 	end
 	if type(elem) ~= "string" then
-		return _RawString(tostring(elem))
+		return _RawStringImpl(tostring(elem))
 	end
-	return _RawString(elem)
+	return _RawStringImpl(elem)
+end
+
+function BoLoc_JoinStrings(strs, formatter, delim)
+	return _JoinStringsImpl(strs, _JoinIdFromDelimiter(delim), formatter)
 end

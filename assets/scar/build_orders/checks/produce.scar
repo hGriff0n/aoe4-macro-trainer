@@ -161,21 +161,21 @@ function BuildOrder_Check_Produce_GetText(obj)
     print("[ProduceCheck] Assembling objective text")
     print("Getting text for produce check")
     local payload = obj.check.payload
-    local prace = Player_GetRace(unit.player)
     local unit_text = Mod_Pbg_ScreenName(
-        unit ~= nil and unit.pbgs ~= nil and #unit.pbgs > 0 and unit.pbgs[1] or nil,
         id,
-        function(pbg) return BP_GetSquadUIInfo(pbg, prace) end
+        unit ~= nil and unit.pbgs ~= nil and #unit.pbgs > 0 and unit.pbgs[1] or nil,
+        BP_GetSquadUIInfo,
+        unit.player
     )
 
     if payload.constant then
-        return Loc_FormatText(BO_LOC_StringId(_CONSTANT_PROD_FORMAT), unit_text)
+        return Loc_FormatText(BoLoc_ModStringId(_CONSTANT_PROD_FORMAT), unit_text)
     elseif payload.queued then
         return Loc_FormatText(
-            BO_LOC_StringId(_QUEUE_UNIT_FORMAT_ID), payload.count, unit_text)
+            BoLoc_ModStringId(_QUEUE_UNIT_FORMAT_ID), payload.count, unit_text)
     else
         return Loc_FormatText(
-            BO_LOC_StringId(_PROD_UNIT_FORMAT_ID), payload.count, unit_text)
+            BoLoc_ModStringId(_PROD_UNIT_FORMAT_ID), payload.count, unit_text)
     end
 end
 
@@ -204,7 +204,7 @@ function BuildOrder_Check_Produce_BuildEventHandle(event)
     end
 end
 
--- TODO: Need to test what the
+-- TODO: Need to test what the event provides?
 -- Only used for checking the number of queued elements
 -- Don't need to check built because a unit has to be queued first
 function BuildOrder_Check_Produce_EntityCommandEventHandle(event)

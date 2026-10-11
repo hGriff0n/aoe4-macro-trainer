@@ -4,8 +4,8 @@ local _pbg_cache = {}
 function Mod_Pbg_Resolve(id, blueprint_getter)
     local pbgs = {}
     if _pbg_cache[id] == nil then
-        local found, pbg = blueprint_getter(id)
-        if found and pbg ~= nil then
+        local pbg = blueprint_getter(id)
+        if pbg ~= nil then
             _pbg_cache[id] = pbg
         end
     end
@@ -23,7 +23,6 @@ function Mod_Pbg_ResolveAll(ids, blueprint_getter)
     return pbgs
 end
 
--- Same as buildings.scar, but without entity resolution
 function Mod_Pbg_Equals(left, right)
     return left ~= nil and right ~= nil
         and left.PropertyBagGroupID == right.PropertyBagGroupID
@@ -41,13 +40,21 @@ function Mod_Pbg_MatchesAny(pbgs, blueprint)
 end
 
 -- TODO: There's probably some way to identify building/etc. from pbg
-function Mod_Pbg_ScreenName(pbg, id, ui_accessor)
+-- `player` is optional, defaulting to nil if not provided
+function Mod_Pbg_ScreenName(id, pbg, ui_accessor, player)
+    local prace = nil
+    if player ~= nil then
+        prace = Player_GetRace(player)
+    end
+
     if pbg ~= nil then
-        local resolved, uiInfo = ui_accessor(pbg)
+        -- Note: "Extra" arguments are ignored if `ui_accessor` takes only 1 arg
+        local resolved, uiInfo = ui_accessor(pbg, prace)
         if uiInfo ~= nil and uiInfo.screenName ~= nil then
             return uiInfo.screenName
         end
     end
+
     print("Missing localization string for " .. tostring(id))
-    return BuildOrder_RawText(tostring(id))
+    return BoLoc_RawString(id)
 end

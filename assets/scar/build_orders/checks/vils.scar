@@ -58,7 +58,7 @@ local function _vilcheck(player, req, reader)
 end
 
 local function _res_obj_text(res, count)
-    return Loc_FormatText(BO_LOC_StringId(_VIL_1RES_ID), count, BoLoc_RawString(res))
+    return Loc_FormatText(BoLoc_ModStringId(_VIL_1RES_ID), Loc_FormatInteger(count), BoLoc_RawString(res))
 end
 
 -----------------------------------------------------------------------
@@ -111,9 +111,11 @@ function BuildOrder_Check_Vils_GetText(obj)
 
     k, v = next(res, k)
     while k ~= nil do
-        text = Loc_FormatText(BO_LOC_StringId(_OR_DELIM_ID), text, _res_obj_text(v.res, v.count))
+        text = Loc_FormatText(BoLoc_ModStringId(_OR_DELIM_ID), text, _res_obj_text(v.res, v.count))
         k, v = next(res, k)
     end
+
+    -- TODO: Rewrite to use `BoLoc_JoinStrings`
 
     return text
 end

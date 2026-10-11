@@ -46,7 +46,6 @@ end
 -- TODO: This could be done via events if we got an event
 -- whenever any building is deleted/destroyed
 function BuildOrder_Check_Buildings_Activate(obj, player)
-    -- TODO: Potentially a race-condition?
     if _bo_buildings_data.buildings[obj.check.id] ~= nil then
         return false
     end
@@ -78,16 +77,16 @@ end
 function BuildOrder_Check_Buildings_GetText(obj)
     print("Getting text for building check")
 
+    local payload = obj.check.payload
     local building = _bo_buildings_data.buildings[obj.check.id]
     local building_name = Mod_Pbg_ScreenName(
-        building~= nil and building.pbg or nil,
         payload.id,
+        building ~= nil and building.pbg or nil,
         BP_GetEntityUIInfo
     )
 
-    local payload = obj.check.payload
     return Loc_FormatText(
-        BO_LOC_StringId(_BUILDINGS_FORMAT_ID), payload.count, building_name)
+        BoLoc_ModStringId(_BUILDINGS_FORMAT_ID), payload.count, building_name)
 end
 
 -- TODO: Would be ideal if we could do all checks in one go

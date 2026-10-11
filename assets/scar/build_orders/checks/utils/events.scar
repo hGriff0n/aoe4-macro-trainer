@@ -1,0 +1,12 @@
+
+import("utils/dynimport.scar")
+
+function BoEvents_GetExecuterOwner(event)
+    if event.executer.PlayerID ~= nil then
+        return event.executer
+    end
+    if event.executer.EntityID ~= nil then
+        return Entity_GetPlayerOwner(event.executer)
+    end
+    return nil
+end

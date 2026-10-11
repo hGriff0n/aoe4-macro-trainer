@@ -10,6 +10,7 @@ function Mod_Sim_Pause()
 end
 
 -- TODO: Technically this is incorrect - we should get sim rate in `Pause`
+-- Needs to figure out the `GetSimRate` function - `Misc_GetSimRate`?
 function Mod_Sim_Unpause()
     return Mod_Sim_SetRate(NORMAL_SIM_RATE)
 end

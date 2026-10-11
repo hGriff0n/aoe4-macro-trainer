@@ -34,14 +34,6 @@ local function MatchesAnyBlueprint(pbgs, blueprint)
     return false
 end
 
-local function _ScreenNameWrapper(units, id, player)
-    local prace = Player_GetRace(player)
-    local _unit = not (units == nil or units.pbgs == nil or #units.pbgs <= 0)
-        and units.pbgs[1] or nil
-    return Mod_Pbg_ScreenName(
-        unit, id, function(pbg) return BP_GetSquadUIInfo(pbg, prace) end)
-end
-
 -----------------------------------------------------------------------
 -- Mod Interface
 -----------------------------------------------------------------------
@@ -100,9 +92,12 @@ function BuildOrder_Check_Units_GetText(obj)
         _bo_units_data.units[obj.check.id], payload.id
     )
     local units = _bo_units_data.units[obj.check.id]
-    local unit_text = _ScreenNameWrapper(units, payload.id, units ~= nil and units.player)
+    local unit = (not (units == nil or units.pbg == nil or #units.pbgs < 1))
+        and units.pbgs[1] or nil
+    local unit_text = Mod_Pbg_ScreenName(
+        id, unit, BP_GetSquadUIInfo, unit ~= nil and unit.player or nil)
     return Loc_FormatText(
-        BO_LOC_StringId(_ACTIVE_UNITS_FORMAT_ID),
+        BoLoc_ModStringId(_ACTIVE_UNITS_FORMAT_ID),
         payload.count,
         unit_text
     )
