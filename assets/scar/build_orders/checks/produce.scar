@@ -105,7 +105,6 @@ function BuildOrder_Check_Produce_Activate(obj, player)
 
     print("[ProduceCheck] Registered check="..tostring(obj.check.id))
     _bo_units_data.units[obj.check.id] = {
-        obj_id = obj.obj_id,
         player = player,
         pbgs = pbgs,
         minimum = payload.count ~= nil and payload.count or 1,
@@ -197,8 +196,8 @@ function BuildOrder_Check_Produce_BuildEventHandle(event)
             -- TODO: We'll want to redo this for constant 
             -- if we ever get to adding telemetry
             if state.num_built >= state.minimum then
-                print("[ProduceCheck] Expected num events seen. Marking "..tostring(state.obj_id).." complete")
-                Obj_SetState(state.obj_id, OS_Complete)
+                print("[ProduceCheck] Expected num events seen. Marking "..tostring(check_id).." complete")
+                BuildOrder_Objectives_MarkComplete(check_id, true)
                 DeactivateCheck(check_id)
             end
         end
@@ -248,8 +247,8 @@ function BuildOrder_Check_Produce_EntityCommandEventHandle(event)
         )
 
         if num_queued >= state.minimum then
-            print("[ProduceCheck] Expected num events seen. Marking "..tostring(state.obj_id).." complete")
-            Obj_SetState(state.obj_id, OS_Complete)
+            print("[ProduceCheck] Expected num events seen. Marking "..tostring(check_id).." complete")
+            BuildOrder_Objectives_MarkComplete(check_id, true)
             DeactivateCheck(check_id)
         end
         ::continue::

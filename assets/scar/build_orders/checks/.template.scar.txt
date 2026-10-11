@@ -41,7 +41,6 @@ import("utils/dynimport.scar")
 --end
 
 ---- child = {
-----   obj_id
 ----   check
 ----   parent_id
 ----   completed

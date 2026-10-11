@@ -19,6 +19,7 @@ _bo_objective_data = {
     -- For objective_tracking
     current_objective = nil,
     sub_objectives = {},
+    check_obj_id_map = {},
     -- Check handler
     registered_checks = {}
 }
@@ -78,20 +79,13 @@ local function GetCheckHandle(check)
     return _bo_objective_data.registered_checks[check.kind]
 end
 
--- TODO: A lot of checks rely on accessing the `obj_id` value even though
--- they copy it before it is set
 local function AddCheckSubObjective(check, faction)
     local handles = GetCheckHandle(check)
     if handles == nil then
         return
     end
 
-    -- Create the child without the `obj_id` field set.
-    -- Doing it this way allows for calling `Activate` before `GetText`
-    -- and therefore we can reuse internal state, such as resolving
-    -- entity ids, in the implementation of the text handler
     local child_obj = {
-        obj_id = nil,
         parent_id = _bo_objective_data.current_objective,
         check = check,
         completed = false,
@@ -108,15 +102,16 @@ local function AddCheckSubObjective(check, faction)
 	-- TODO: Temporarily disable localization so I can check that things load
     -- local text = handles.format_check_text(child_obj)
 	local text = Loc_GetString(BO_LOC_StringId(27))
-    child_obj.obj_id = CreateObjective(
+    local obj_id = CreateObjective(
         text,
         faction,
         _bo_objective_data.current_objective,
         "buildOrderCheck"
     )
+    _bo_objective_data.check_obj_id_map[child_obj.check.id] = obj_id
 
-    print("Created sub-objective " .. tostring(child_obj.obj_id) .. " for check " .. tostring(child_obj.check.id))
-    _bo_objective_data.sub_objectives[child_obj.obj_id] = child_obj
+    print("Created sub-objective " .. tostring(obj_id) .. " for check " .. tostring(child_obj.check.id))
+    _bo_objective_data.sub_objectives[obj_id] = child_obj
 end
 
 local function GetStepText(step, step_idx)
@@ -143,14 +138,15 @@ local function SetCurrentObjective(step, step_idx)
 end
 
 local function CleanupCurrentObjective()
-    for id, child in ipairs(_bo_objective_data.sub_objectives) do
-        print("Deleting handler for child " .. tostring(id) .. " (check " .. tostring(child.check.id) .. ")")
+    for obj_id, child in ipairs(_bo_objective_data.sub_objectives) do
+        print("Deleting handler for child " .. tostring(obj_id) .. " (check " .. tostring(child.check.id) .. ")")
         local handle = GetCheckHandle(child.check)
         if handle ~= nil then
             handle.deactivate(child)
         end
-        Obj_Delete(id)
+        Obj_Delete(obj_id)
     end
+    _bo_objective_data.check_obj_id_map = {}
     _bo_objective_data.sub_objectives = {}
 
     print("Deleting current objective " .. tostring(_bo_objective_data.current_objective))
@@ -161,6 +157,15 @@ end
 -----------------------------------------------------------------------
 -- Mod Interface
 -----------------------------------------------------------------------
+
+function BuildOrder_Objectives_MarkComplete(check_id, status)
+    if _bo_objective_data.check_obj_id_map[check_id] == nil then
+        print("Attempt to mark unallocated check complete: "..check_id)
+        return
+    end
+
+    SetObjectiveComplete(_bo_objective_data.check_obj_id_map[check_id], status)
+end
 
 function BuildOrder_Objectives_OnInit()
     -- BuildOrder_Check_AgeUp_Register()
@@ -261,9 +266,10 @@ function BuildOrder_Objectives_CheckCompletion()
         else
             print("Checking objective state for completion: "..tostring(OS_GetState(id)).."-"..tostring(OS_Complete))
             -- TODO: Not sure if this is correct
-            child.completed = OS_GetState(id) == OS_Complete
+            child.completed = (Obj_GetState(id) == OS_Complete)
         end
 
+        print("Checking completion with optional="..tostring(child.check.optional))
         if not child.completed and not child.check.optional then
             step_completed = false
         end

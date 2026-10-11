@@ -76,7 +76,6 @@ function BuildOrder_Check_Built_Activate(obj, player)
 
     print("[BuiltCheck] Registered check="..tostring(obj.check.id))
     _bo_built_data.buildings[obj.check.id] = {
-        obj_id = obj.obj_id,
         pbg = pbgs[1],
         count = obj.check.payload.count,
         player = player,
@@ -130,8 +129,8 @@ function BuildOrder_Check_Built_EventHandle(event)
         end
 
         if state.count == 0 then
-            print("[BuiltCheck] Expected num events seen. Marking "..tostring(state.obj_id).." complete")
-            Obj_SetState(state.obj_id, OS_Complete)
+            print("[BuiltCheck] Expected num events seen. Marking "..tostring(check_id).." complete")
+            BuildOrder_Objectives_MarkComplete(check_id, true)
             DeactivateCheck(check_id)
         end
     end

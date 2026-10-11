@@ -95,8 +95,7 @@ function BuildOrder_Check_AgeUp_Validate(check)
     return (t.id ~= nil or t.oneof ~= nil) and t.trigger ~= nil
 end
 
--- child = {
---   obj_id
+-- obj = {
 --   check
 --   parent_id
 --   completed
@@ -108,17 +107,18 @@ function BuildOrder_Check_AgeUp_Activate(obj, player)
         return false
     end
 
+    local check = obj.check
     local resolver = check.payload.trigger == "upgrade" and
         BP_GetUpgradeBlueprint or BP_GetEntityBlueprint
     local pbgs = BuildOrder_ResolvePayloadBlueprints(
         check.payload, resolver)
     if pbgs == nil or #pbgs == 0 then
-        print("[AgeUpCheck] Failed to resolve pbg: check="..tostring(obj.check.id).." pbg="..tostring(obj.check.payload.id))
+        print("[AgeUpCheck] Failed to resolve pbg: check="..tostring(check.id).." pbg="..tostring(check.payload.id))
         return false
     end
 
     _bo_ageup_data = {
-        obj_id = obj.obj_id,
+        id = check.id,
         pbgs = pbgs,
         trigger = check.payload.trigger,
         resolver = resolver,
@@ -128,17 +128,17 @@ function BuildOrder_Check_AgeUp_Activate(obj, player)
     -- TODO: This has the issue with `obj_id` not being created yet
     local completed = CheckAlreadyCompleted()
     if completed then
-        print("[AgeUpCheck] Already completed check="..tostring(obj.check.id))
-        Obj_SetState(obj.obj_id, OS_Complete)
+        print("[AgeUpCheck] Already completed check="..tostring(check.id))
+        BuildOrder_Objectives_MarkComplete(check.id, true)
         BuildOrder_Check_AgeUp_Deactivate(obj)
         return true
     end
 
     if _bo_ageup_data.trigger == "upgrade" then
-        print("[AgeUpCheck] Registered Adding upgrade event listener: check="..tostring(obj.check.id))
+        print("[AgeUpCheck] Registered Adding upgrade event listener: check="..tostring(check.id))
         Rule_AddGlobalEvent(OnUpgradeStart, GE_UpgradeStart)
     else
-        print("[AgeUpCheck] Adding construction event listener: check="..tostring(obj.check.id))
+        print("[AgeUpCheck] Adding construction event listener: check="..tostring(check.id))
         Rule_AddGlobalEvent(OnConstructionStart, GE_ConstructionStart)
     end
 
@@ -197,8 +197,8 @@ function OnConstructionStart(event)
 
     local match = Mod_Pbg_MatchesAny(_bo_ageup_data.pbgs, event.pbg)
     if match ~= nil then
-        print("[AgeUpCheck] Found expected event. Marking "..tostring(_bo_ageup_data.obj_id).." complete")
-        Obj_SetState(_bo_ageup_data.obj_id, OS_Complete)
+        print("[AgeUpCheck] Found expected event. Marking "..tostring(_bo_ageup_data.id).." complete")
+        BuildOrder_Objectives_MarkComplete(_bo_ageup_data.id, true)
         BuildOrder_Check_AgeUp_Deactivate(nil)
     else
         print("[AgeUpCheck] Building pbg not one of the expected ids. Skipping.")
@@ -225,8 +225,8 @@ function OnUpgradeStart(event)
 
     local match = Mod_Pbg_MatchesAny(_bo_ageup_data.pbgs, event.pbg)
     if match ~= nil then
-        print("[AgeUpCheck] Found expected event. Marking "..tostring(_bo_ageup_data.obj_id).." complete")
-        Obj_SetState(_bo_ageup_data.obj_id, OS_Complete)
+        print("[AgeUpCheck] Found expected event. Marking "..tostring(_bo_ageup_data.id).." complete")
+        BuildOrder_Objectives_MarkComplete(_bo_ageup_data.id, true)
         BuildOrder_Check_AgeUp_Deactivate(nil)
     else
         print("[AgeUpCheck] Event pbg not one of the expected ids. Skipping.")
