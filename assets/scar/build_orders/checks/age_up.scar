@@ -12,7 +12,7 @@ DynImport("utils/localization.scar")
 -- Data
 -----------------------------------------------------------------------
 
-_bo_ageup_data = {}
+_bo_ageup_data = nil
 
 local _AGE_FORMAT_ID = 161
 
@@ -22,13 +22,13 @@ local _AGE_FORMAT_ID = 161
 
 -- TODO: same as upgrades.scar
 local function IsUpgradeCompleted(player, pbg, check_id)
-    print("[AgeUpCheck] Checking if player already researched: check="..tostring(check_id))
+    print("[AgeUpCheck] Checking if player already researched: check=" .. tostring(check_id))
     return Player_HasUpgrade(player, pbg)
 end
 
 -- TODO: Same as upgrades.scar
 local function IsUpgradeCurrentlyQueued(player, pbg, check_id)
-    print("[AgeUpCheck] Checking if upgrade currently queued: check="..tostring(check_id))
+    print("[AgeUpCheck] Checking if upgrade currently queued: check=" .. tostring(check_id))
     local queued_upgrade = false
     EGroup_ForEach(
         Player_GetEntities(player),
@@ -47,7 +47,7 @@ local function IsUpgradeCurrentlyQueued(player, pbg, check_id)
                     if (type == PITEM_Upgrade or type == PITEM_PlayerUpgrade)
                         and Mod_Pbg_Equals(item, pbg)
                     then
-                        print("[UpgradeCheck] Found upgrade in queue: check="..tostring(check_id))
+                        print("[UpgradeCheck] Found upgrade in queue: check=" .. tostring(check_id))
                         queued_upgrade = true
                         return
                     end
@@ -67,7 +67,8 @@ local function CheckUpgradeResearched(check_id)
 
     for _, pbg in ipairs(_bo_ageup_data.pbgs) do
         if IsUpgradeStarted(_bo_ageup_data.player, pbg, check_id) then
-            print("[AgeUpCheck] Player already started aging up via "..Loc_ToAnsi(pbg.screenName)..": check="..tostring(check_id))
+            print("[AgeUpCheck] Player already started aging up via " ..
+                Loc_ToAnsi(pbg.screenName) .. ": check=" .. tostring(check_id))
             return true
         end
     end
@@ -85,9 +86,10 @@ local function CheckConstructionStarted(check_id)
         function(group, index, entity)
             if Entity_GetPlayerOwner(entity) == state.player
                 and Entity_IsBuilding(entity)
-                and Mod_Pbg_Equals(state.pbgs, Entity_GetBlueprint(entity)) ~= nil
+                and Mod_Pbg_MatchesAny(state.pbgs, Entity_GetBlueprint(entity)) ~= nil
             then
-                print("[AgeUpCheck] Player already built landmark "..Loc_ToAnsi(entity.screenName)..": check="..tostring(check_id))
+                print("[AgeUpCheck] Player already built landmark " ..
+                    Loc_ToAnsi(entity.screenName) .. ": check=" .. tostring(check_id))
                 found_landmark = true
             end
         end
@@ -96,13 +98,18 @@ local function CheckConstructionStarted(check_id)
     return found_landmark
 end
 
-local function CheckAlreadyCompleted(check_id)
-    if _bo_ageup_data.trigger == "upgrade" then
-        return CheckUpgradeResearched(check_id)
+local function switch_trigger(trigger, for_tech, for_build)
+    if trigger == "upgrade" then
+        return for_tech
     else
-        return CheckConstructionStarted(check_id)
+        return for_build
     end
 end
+
+local function CheckAlreadyCompleted(check_id)
+    return switch_trigger(_bo_ageup_data.trigger, CheckUpgradeResearched, CheckConstructionStarted)(check_id)
+end
+
 
 -----------------------------------------------------------------------
 -- Mod Interface
@@ -115,7 +122,7 @@ function BuildOrder_Check_AgeUp_Register()
         BuildOrder_Check_AgeUp_Deactivate,
         BuildOrder_Check_AgeUp_GetText,
         BuildOrder_Check_AgeUp_Validate,
-        BuildOrder_Check_AgeUp_PollCompletion
+        nil -- no poll_completion_handle handler
     )
 end
 
@@ -138,10 +145,8 @@ function BuildOrder_Check_AgeUp_Activate(obj, player)
     end
 
     local check = obj.check
-    local resolver = check.payload.trigger == "upgrade" and
-        BP_GetUpgradeBlueprint or BP_GetEntityBlueprint
-    local pbgs = BuildOrder_ResolvePayloadBlueprints(
-        check.payload, resolver)
+    local resolver = switch_trigger(check.payload.trigger, BP_GetUpgradeBlueprint, BP_GetEntityBlueprint)
+    local pbgs = Mod_Pbg_ResolveAll(check.payload.oneof or { check.payload.id }, resolver)
     if pbgs == nil or #pbgs == 0 then
         print("[AgeUpCheck] Failed to resolve pbg: check=" .. tostring(check.id) .. " pbg=" .. tostring(check.payload.id))
         return false
@@ -163,13 +168,17 @@ function BuildOrder_Check_AgeUp_Activate(obj, player)
         return true
     end
 
-    if _bo_ageup_data.trigger == "upgrade" then
-        print("[AgeUpCheck] Registered Adding upgrade event listener: check=" .. tostring(check.id))
-        Rule_AddGlobalEvent(OnUpgradeStart, GE_UpgradeStart)
-    else
-        print("[AgeUpCheck] Adding construction event listener: check=" .. tostring(check.id))
-        Rule_AddGlobalEvent(OnConstructionStart, GE_ConstructionStart)
-    end
+    switch_trigger(
+        _bo_ageup_data.trigger,
+        function()
+            print("[AgeUpCheck] Registered upgrade event listener: check=" .. tostring(check.id))
+            Rule_AddGlobalEvent(BuildOrder_Check_AgeUp_OnUpgradeStart, GE_UpgradeStart)
+        end,
+        function()
+            print("[AgeUpCheck] Registered construction event listener: check=" .. tostring(check.id))
+            Rule_AddGlobalEvent(BuildOrder_Check_AgeUp_OnConstructionStart, GE_ConstructionStart)
+        end
+    )()
 
     return true
 end
@@ -179,48 +188,51 @@ function BuildOrder_Check_AgeUp_Deactivate(obj)
         return
     end
 
-    if _bo_ageup_data.trigger == "upgrade" then
-        print("[AgeUpCheck] Removing upgrade listener for check " .. tostring(obj.check.id))
-        Rule_RemoveGlobalEvent(OnUpgradeStart)
-    else
-        print("[AgeUpCheck] Removing construction listener for check " .. tostring(obj.check.id))
-        Rule_RemoveGlobalEvent(OnConstructionStart)
-    end
+    switch_trigger(
+        _bo_ageup_data.trigger,
+        function()
+            print("[AgeUpCheck] Removing upgrade listener for check " .. tostring(_bo_ageup_data.id))
+            Rule_RemoveGlobalEvent(BuildOrder_Check_AgeUp_OnUpgradeStart)
+        end,
+        function()
+            print("[AgeUpCheck] Removing construction listener for age up check " .. tostring(_bo_ageup_data.id))
+            Rule_RemoveGlobalEvent(BuildOrder_Check_AgeUp_OnConstructionStart)
+        end
+    )()
 
-    print("[AgeUpCheck] Deleted check=" .. tostring(obj.check.id))
+    print("[AgeUpCheck] Deleted check=" .. tostring(_bo_ageup_data.id))
     _bo_ageup_data = nil
 end
 
 function BuildOrder_Check_AgeUp_GetText(obj)
     print("[AgeUpCheck] Assembling objective text")
-    local targetKind = "entity"
-    if obj.check.payload.trigger == "upgrade" then
-        targetKind = "upgrade"
-    end
     return Loc_FormatText(
-        -- TODO: Update the localization id
-        BUILD_ORDER_LOC_KEYS.ageUp,
-        -- TODO: This implementation is not updated
+        BoLoc_ModStringId(_AGE_FORMAT_ID),
         BuildOrder_TargetNames(
-            obj.check.payload, targetKind, _bo_ageup_data)
+            obj.check.payload, obj.check.payload.trigger, _bo_ageup_data)
     )
 end
 
-function OnConstructionStart(event)
+function BuildOrder_Check_AgeUp_OnConstructionStart(event)
+    if _bo_ageup_data == nil then
+        print("[AgeUpCheck] Age Up listener wasn't deregistered. This should never happen. Removing listener now.")
+        Rule_RemoveGlobalEvent(BuildOrder_Check_AgeUp_OnConstructionStart)
+        return
+    end
+
     print("[AgeUpCheck] Received construction event: " .. tostring(event))
-    if _bo_ageup_data == nil
-        or event == nil
+    if event == nil
         or event.player == nil
         or event.pbg == nil
         or event.entity == nil
         or event.entity.EntityID == nil
     then
-        print("[AgeUpCheck] No/invalid check tracked for child " .. tostring(obj.check.id))
+        print("[AgeUpCheck] Invalid event data for age up for check=" .. tostring(_bo_ageup_data.id))
         return
     end
 
     if event.player ~= _bo_ageup_data.player then
-        print("[AgeUpCheck] Wrong owner for check. leaving early")
+        print("[AgeUpCheck] Wrong owner for check=" .. tostring(_bo_ageup_data.id) .. ". leaving early")
         return
     end
 
@@ -234,24 +246,26 @@ function OnConstructionStart(event)
     end
 end
 
-function OnUpgradeStart(event)
+function BuildOrder_Check_AgeUp_OnUpgradeStart(event)
     print("[AgeUpCheck] Received upgrade event: " .. tostring(event))
-    if _bo_ageup_data == nil
-        or event == nil
-        or event.executer == nil
-        or event.upgrade == nil
-    then
-        print("[AgeUpCheck] No/invalid check tracked for child " .. tostring(obj.check.id))
+    if _bo_ageup_data == nil then
+        print("[AgeUpCheck] Age Up listener wasn't deregistered. This should never happen. Removing listener now.")
+        Rule_RemoveGlobalEvent(BuildOrder_Check_AgeUp_OnUpgradeStart)
+        return
+    end
+
+    if event == nil or event.executer == nil or event.upgrade == nil then
+        print("[AgeUpCheck] Invalid event data for age up for check=" .. tostring(_bo_ageup_data.id))
         return
     end
 
     local owner = BoEvents_GetExecuterOwner(event)
     if owner ~= _bo_ageup_data.player then
-        print("[AgeUpCheck] Wrong owner for check. leaving early")
+        print("[AgeUpCheck] Wrong owner for check=" .. tostring(_bo_ageup_data.id) .. ". leaving early")
         return
     end
 
-    local match = Mod_Pbg_MatchesAny(_bo_ageup_data.pbgs, event.pbg)
+    local match = Mod_Pbg_MatchesAny(_bo_ageup_data.pbgs, event.upgrade)
     if match ~= nil then
         print("[AgeUpCheck] Found expected event. Marking " .. tostring(_bo_ageup_data.id) .. " complete")
         BuildOrder_Objectives_MarkComplete(_bo_ageup_data.id, true)
@@ -265,30 +279,17 @@ end
 -- Mod Implementation
 -----------------------------------------------------------------------
 
-local function get_ui_resolver(kind)
-    if kind == "entity" then
-        return BP_GetEntityUIInfo
-    else
-        return BP_GetUpgradeUIInfo
-    end
-end
-
--- TODO: Might want to add an "or" join?
 function BuildOrder_TargetNames(payload, kind, context)
-    local names = {}
-    local joined = false
-        
-    local ui_resolver = get_ui_resolver(kind)
+    local ui_resolver = switch_trigger(kind, BP_GetUpgradeUIInfo, BP_GetEntityUIInfo)
     if payload.id ~= nil then
-        names[1] = Mod_Pbg_ScreenName(id, context.pbgs[1], ui_resolver)
-
+        return Mod_Pbg_ScreenName(payload.id, context.pbgs[1], ui_resolver)
     elseif payload.oneof ~= nil then
-        joined = true
+        local names = {}
         for i, id in ipairs(payload.oneof) do
             names[#names + 1] = Mod_Pbg_ScreenName(id, context.pbgs[i], ui_resolver)
         end
+        return BoLoc_JoinStrings(names, "/")
     end
 
-    -- TODO: The interface changed
-    return BoLoc_JoinStrings(names, "/")
+    return BoLoc_String("Unknown target")
 end

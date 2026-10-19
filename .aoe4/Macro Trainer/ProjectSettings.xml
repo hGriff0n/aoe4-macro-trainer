@@ -8,7 +8,7 @@
 				<d2p1:KeyValueOfstringArrayOfstringty7Ep6D1>
 					<d2p1:Key>AssetExplorerGeneric</d2p1:Key>
 					<d2p1:Value>
-						<d2p1:string>assets\locdb</d2p1:string>
+						<d2p1:string>assets\locdb\Macro Trainer.locdb</d2p1:string>
 						<d2p1:string>assets\scar\build_orders\checks</d2p1:string>
 						<d2p1:string>assets\scar\winconditions</d2p1:string>
 					</d2p1:Value>
@@ -23,6 +23,7 @@
 	</PluginSettings>
 	<RecentFiles>
 		<History xmlns:d3p1="http://schemas.microsoft.com/2003/10/Serialization/Arrays">
+			<d3p1:string>D:\github\aoemod\aoe4-macro-trainer\assets\locdb\Macro Trainer.locdb</d3p1:string>
 			<d3p1:string>E:\Docs\github\aoemod\aoe4-macro-trainer\assets\scar\build_orders\objectives.scar</d3p1:string>
 			<d3p1:string>E:\Docs\github\aoemod\aoe4-macro-trainer\assets\scar\build_orders\checks\vils.scar</d3p1:string>
 			<d3p1:string>E:\Docs\github\aoemod\aoe4-macro-trainer\assets\scar\build_orders\localization.scar</d3p1:string>
@@ -32,7 +33,6 @@
 			<d3p1:string>E:\Docs\github\aoemod\aoe4-macro-trainer\assets\scar\build_orders\checks\units.scar</d3p1:string>
 			<d3p1:string>E:\Docs\github\aoemod\aoe4-macro-trainer\assets\scar\build_orders\checks\buildings.scar</d3p1:string>
 			<d3p1:string>E:\Docs\github\aoemod\aoe4-macro-trainer\assets\scar\build_orders\checks\rallypoint.scar</d3p1:string>
-			<d3p1:string>E:\Docs\github\aoemod\aoe4-macro-trainer\assets\scar\build_orders\checks\hints.scar</d3p1:string>
 		</History>
 	</RecentFiles>
 </ProjectSettings>

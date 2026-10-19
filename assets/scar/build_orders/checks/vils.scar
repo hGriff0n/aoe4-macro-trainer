@@ -96,7 +96,7 @@ end
 
 function BuildOrder_Check_Vils_GetText(obj)
     return BoLoc_ConcatStrings(
-        "Assign ", BoLoc_JoinStrings(obj.check.payload, _resource_pair_formatter, "|"))
+        "Assign ", BoLoc_JoinStrings(obj.check.payload, "|", _resource_pair_formatter))
 end
 
 function BuildOrder_Check_Vils_PollCompletion(obj)

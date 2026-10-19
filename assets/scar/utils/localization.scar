@@ -83,6 +83,6 @@ function BoLoc_ConcatStrings(s1, s2)
 	return Loc_FormatText(_JOIN_IDS.concat, BoLoc_String(s1), BoLoc_String(s2))
 end
 
-function BoLoc_JoinStrings(strs, formatter, delim)
-	return _JoinStringsImpl(strs, BoLoc_DelimId(delim), formatter)
+function BoLoc_JoinStrings(strs, delim, formatter)
+	return _JoinStringsImpl(strs, BoLoc_DelimId(delim), formatter or function(k, v) return v end)
 end

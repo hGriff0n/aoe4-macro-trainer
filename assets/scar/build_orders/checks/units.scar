@@ -68,7 +68,7 @@ function BuildOrder_Check_Units_Activate(obj, player)
 
     if #state.pbgs == 0 then
         print("[UnitCheck] Failed to activate. No pbgs resolved for check=" ..
-        tostring(obj.check.id) .. " pbg=" .. tostring(payload.ids[1]))
+            tostring(obj.check.id) .. " pbg=" .. tostring(payload.ids[1]))
         return false
     end
     print("[UnitCheck] Registered check=" .. tostring(obj.check.id))
@@ -88,17 +88,13 @@ end
 function BuildOrder_Check_Units_GetText(obj)
     print("[UnitCheck] Assembling objective text")
     local payload = obj.check.payload
-    local unit_text = UnitName(
-        _bo_units_data.units[obj.check.id], payload.id
-    )
     local units = _bo_units_data.units[obj.check.id]
-    local unit = (not (units == nil or units.pbg == nil or #units.pbgs < 1))
-        and units.pbgs[1] or nil
+    local unit = units ~= nil and units.pbgs[1] or nil
     local unit_text = Mod_Pbg_ScreenName(
         id, unit, BP_GetSquadUIInfo, unit ~= nil and unit.player or nil)
     return Loc_FormatText(
         BoLoc_ModStringId(_ACTIVE_UNITS_FORMAT_ID),
-        payload.count,
+        Loc_FormatInteger(payload.count or 1),
         unit_text
     )
 end

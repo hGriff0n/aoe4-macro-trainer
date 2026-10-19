@@ -1,4 +1,3 @@
-
 local _pbg_cache = {}
 
 function Mod_Pbg_Resolve(id, blueprint_getter)
@@ -17,7 +16,7 @@ function Mod_Pbg_ResolveAll(ids, blueprint_getter)
     for _, id in ipairs(ids) do
         local _pbg = Mod_Pbg_Resolve(id, blueprint_getter)
         if _pbg ~= nil then
-            pbgs[#pbgs+1] = _pbg
+            pbgs[#pbgs + 1] = _pbg
         end
     end
     return pbgs
@@ -48,8 +47,7 @@ function Mod_Pbg_ScreenName(id, pbg, ui_accessor, player)
     end
 
     if pbg ~= nil then
-        -- Note: "Extra" arguments are ignored if `ui_accessor` takes only 1 arg
-        local resolved, uiInfo = ui_accessor(pbg, prace)
+        local uiInfo = prace == nil and ui_accessor(pbg) or ui_accessor(pbg, prace)
         if uiInfo ~= nil and uiInfo.screenName ~= nil then
             return uiInfo.screenName
         end

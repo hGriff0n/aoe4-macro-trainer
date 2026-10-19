@@ -67,7 +67,7 @@ function BuildOrder_Check_Resources_GetText(obj)
     local payload = obj.check.payload
     return Loc_FormatText(
         BoLoc_ModStringId(_COLLECT_RES_FORMAT_ID),
-        payload.count,
+        Loc_FormatInteger(payload.count),
         BoLoc_String(_bo_resources_data[obj.check.id].type)
     )
 end

@@ -1,4 +1,4 @@
-local absoluteDir = "E:/Docs/github/aoemod/aoe4-macro-trainer/assets/scar/"
+local absoluteDir = "D:/github/aoemod/aoe4-macro-trainer/assets/scar/"
 
 Import_UseAbsoluteDir = true
 

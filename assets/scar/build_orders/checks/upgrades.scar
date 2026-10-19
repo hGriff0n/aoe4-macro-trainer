@@ -32,8 +32,8 @@ end
 
 local function AddQueuedListener(check_id)
     if _bo_upgrades_data.num_queued_listeners == 0 then
-        print("[UpgradeCheck] Adding upgrade queue listener from check="..tostring(check_id))
-        Rule_AddGlobalEvent(OnUpgradeQueued, GE_UpgradeStart)
+        print("[UpgradeCheck] Adding upgrade queue listener from check=" .. tostring(check_id))
+        Rule_AddGlobalEvent(BuildOrder_Check_Upgrades_OnUpgradeQueued, GE_UpgradeStart)
     end
     _bo_upgrades_data.num_queued_listeners =
         _bo_upgrades_data.num_queued_listeners + 1
@@ -41,9 +41,9 @@ end
 
 local function AddCancelListener(check_id)
     if _bo_upgrades_data.num_cancel_listeners == 0 then
-        print("[UpgradeCheck] Adding upgrade cancel listener from check="..tostring(check_id))
+        print("[UpgradeCheck] Adding upgrade cancel listener from check=" .. tostring(check_id))
         Rule_AddGlobalEvent(
-            OnUpgradeCancelled, GE_UpgradeCancelled)
+            BuildOrder_Check_Upgrades_OnUpgradeCancelled, GE_UpgradeCancelled)
     end
     _bo_upgrades_data.num_cancel_listeners =
         _bo_upgrades_data.num_cancel_listeners + 1
@@ -51,9 +51,9 @@ end
 
 local function AddCompletedListener(check_id)
     if _bo_upgrades_data.num_research_listeners == 0 then
-        print("[UpgradeCheck] Adding upgrade done listener from check="..tostring(check_id))
+        print("[UpgradeCheck] Adding upgrade done listener from check=" .. tostring(check_id))
         Rule_AddGlobalEvent(
-            OnUpgradeFinished, GE_UpgradeComplete)
+            BuildOrder_Check_Upgrades_OnUpgradeFinished, GE_UpgradeComplete)
     end
     _bo_upgrades_data.num_research_listeners =
         _bo_upgrades_data.num_research_listeners + 1
@@ -64,7 +64,7 @@ local function DropQueuedListener(check_id)
         _bo_upgrades_data.num_queued_listeners - 1
     if _bo_upgrades_data.num_queued_listeners == 0 then
         print("[UpgradeCheck] All listeners dropped - removing queue event listener from check=" .. tostring(check_id))
-        Rule_RemoveGlobalEvent(OnUpgradeQueued)
+        Rule_RemoveGlobalEvent(BuildOrder_Check_Upgrades_OnUpgradeQueued)
     end
 end
 
@@ -72,8 +72,8 @@ local function DropCancelListener(check_id)
     _bo_upgrades_data.num_cancel_listeners =
         _bo_upgrades_data.num_cancel_listeners - 1
     if _bo_upgrades_data.num_cancel_listeners == 0 then
-        print("[UpgradeCheck] All listeners dropped - removing cancel event listener from check="..tostring(check_id))
-        Rule_RemoveGlobalEvent(OnUpgradeCancelled)
+        print("[UpgradeCheck] All listeners dropped - removing cancel event listener from check=" .. tostring(check_id))
+        Rule_RemoveGlobalEvent(BuildOrder_Check_Upgrades_OnUpgradeCancelled)
     end
 end
 
@@ -81,8 +81,8 @@ local function DropCompletedListener(check_id)
     _bo_upgrades_data.num_research_listeners =
         _bo_upgrades_data.num_research_listeners - 1
     if _bo_upgrades_data.num_research_listeners == 0 then
-        print("[UpgradeCheck] All listeners dropped - removing done event listener from check="..tostring(check_id))
-        Rule_RemoveGlobalEvent(OnUpgradeFinished)
+        print("[UpgradeCheck] All listeners dropped - removing done event listener from check=" .. tostring(check_id))
+        Rule_RemoveGlobalEvent(BuildOrder_Check_Upgrades_OnUpgradeFinished)
     end
 end
 
@@ -92,7 +92,7 @@ local function DeactivateCheck(check_id)
         return
     end
 
-    print("[UpgradeCheck] Deleted check="..tostring(check_id))
+    print("[UpgradeCheck] Deleted check=" .. tostring(check_id))
     _bo_upgrades_data.techs[check_id] = nil
 
     -- Remove the check from being considered by the event
@@ -109,7 +109,7 @@ end
 
 -- TODO: same as ageup.scar
 local function IsUpgradeCompleted(player, pbg, check_id)
-    print("[UpgradeCheck] Checking if player already researched: check="..tostring(check_id))
+    print("[UpgradeCheck] Checking if player already researched: check=" .. tostring(check_id))
     return Player_HasUpgrade(player, pbg)
 end
 
@@ -117,7 +117,7 @@ end
 -- TODO: ageup.scar needs this function
 -- technically, needs `IsUpgradeCompleted | IsUpgradeCurrentlyQueued`
 local function IsUpgradeCurrentlyQueued(player, pbg, check_id)
-    print("[UpgradeCheck] Checking if upgrade currently queued: check="..tostring(check_id))
+    print("[UpgradeCheck] Checking if upgrade currently queued: check=" .. tostring(check_id))
     local queued_upgrade = false
     EGroup_ForEach(
         Player_GetEntities(player),
@@ -136,7 +136,7 @@ local function IsUpgradeCurrentlyQueued(player, pbg, check_id)
                     if (type == PITEM_Upgrade or type == PITEM_PlayerUpgrade)
                         and Mod_Pbg_Equals(item, pbg)
                     then
-                        print("[UpgradeCheck] Found upgrade in queue: check="..tostring(check_id))
+                        print("[UpgradeCheck] Found upgrade in queue: check=" .. tostring(check_id))
                         queued_upgrade = true
                         return
                     end
@@ -173,7 +173,7 @@ function BuildOrder_Check_Upgrades_Activate(obj, player)
     end
 
     local payload = obj.check.payload
-    local pbg = Mod_Pbg_Resolve(payload.id)
+    local pbg = Mod_Pbg_Resolve(payload.id, BP_GetUpgradeBlueprint)
     if pbg == nil then
         print("[BuiltCheck] Failed to resolve pbg: check=" .. tostring(obj.check.id) .. " pbg=" .. tostring(payload.id))
         return false
@@ -182,7 +182,7 @@ function BuildOrder_Check_Upgrades_Activate(obj, player)
     -- In case the player researched the upgrade before we got to this point
     -- If so, we don't need to do anything more as you can't unresearch techs
     if IsUpgradeCompleted(player, pbgs[1], obj.check.id) then
-        print("[UpgradeCheck] Already completed check="..tostring(obj.check.id))
+        print("[UpgradeCheck] Already completed check=" .. tostring(obj.check.id))
         BuildOrder_Objectives_MarkComplete(obj.check.id, true)
         return true
     end
@@ -235,8 +235,8 @@ end
 -- TODO: Implement if check is through events
 -- We have one event handle active for all checks in a given step
 -- but we call activate/deactivate for each one
-function OnUpgradeQueued(event)
-    print("[UpgradeCheck] Received upgrade queue event: "..tostring(event))
+function BuildOrder_Check_Upgrades_OnUpgradeQueued(event)
+    print("[UpgradeCheck] Received upgrade queue event: " .. tostring(event))
     -- TODO: Might want to use slightly different check
     if IsInvalidEvent(event) then
         return
@@ -250,10 +250,10 @@ function OnUpgradeQueued(event)
         end
 
         if state.queued
-           and Mod_Pbg_Equals(event.upgrade, state.upgrade)
+            and Mod_Pbg_Equals(event.upgrade, state.upgrade)
         then
             -- TODO: Wants a more nuanced debug line
-            print("[UpgradeCheck] Found expected upgrade in event. Marking "..tostring(check_id).." complete")
+            print("[UpgradeCheck] Found expected upgrade in event. Marking " .. tostring(check_id) .. " complete")
             BuildOrder_Objectives_MarkComplete(check_id, true)
             state.listening_cancel = true
             DropQueuedListener(check_id)
@@ -264,8 +264,8 @@ function OnUpgradeQueued(event)
     end
 end
 
-function OnUpgradeCancelled(event)
-    print("[UpgradeCheck] Received upgrade cancel event: "..tostring(event))
+function BuildOrder_Check_Upgrades_OnUpgradeCancelled(event)
+    print("[UpgradeCheck] Received upgrade cancel event: " .. tostring(event))
     -- TODO: Might want to use slightly different check
     if IsInvalidEvent(event) then
         return
@@ -279,10 +279,10 @@ function OnUpgradeCancelled(event)
         end
 
         if state.queued
-           and Mod_Pbg_Equals(event.upgrade, state.upgrade)
+            and Mod_Pbg_Equals(event.upgrade, state.upgrade)
         then
             -- TODO: Wants a more nuanced debug line
-            print("[UpgradeCheck] Found expected upgrade in event. Marking "..tostring(check_id).." complete")
+            print("[UpgradeCheck] Found expected upgrade in event. Marking " .. tostring(check_id) .. " complete")
             BuildOrder_Objectives_MarkComplete(check_id, false)
             state.listening_cancel = false
             DropCancelListener(check_id)
@@ -295,8 +295,8 @@ end
 
 -- TODO: I think these loops where i deactivate the check in the middle
 -- are incorrect. Just collect ids to delete and then run it
-function OnUpgradeFinished(event)
-    print("[UpgradeCheck] Received upgrade done event: "..tostring(event))
+function BuildOrder_Check_Upgrades_OnUpgradeFinished(event)
+    print("[UpgradeCheck] Received upgrade done event: " .. tostring(event))
     -- TODO: Might want to use slightly different check
     if IsInvalidEvent(event) then
         return
@@ -310,7 +310,7 @@ function OnUpgradeFinished(event)
         end
 
         if Mod_Pbg_Equals(event.upgrade, state.upgrade) then
-            print("[UpgradeCheck] Found expected event. Marking "..tostring(check_id).." complete")
+            print("[UpgradeCheck] Found expected event. Marking " .. tostring(check_id) .. " complete")
             BuildOrder_Objectives_MarkComplete(check_id, true)
             DeactivateCheck(check_id, true)
         else

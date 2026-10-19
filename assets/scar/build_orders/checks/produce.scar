@@ -14,13 +14,13 @@ DynImport("build_orders/checks/utils/pbg.scar")
 
 _bo_produce_data = {
     units = {},
-    num_build_listeners = false,
-    num_command_listeners = false
+    num_build_listeners = 0,
+    num_command_listeners = 0
 }
 
 local _CONSTANT_PROD_FORMAT_ID = 166
 local _QUEUE_UNIT_FORMAT_ID = 165
-local _PROD_UNIT_FORMAT = 164
+local _PROD_UNIT_FORMAT_ID = 164
 
 -----------------------------------------------------------------------
 -- Local Helper Functions
@@ -47,7 +47,7 @@ local function DeactivateCheck(check_id)
                 _bo_produce_data.num_build_listeners - 1
         end
 
-        print("[ProduceCheck] Deleted check=" .. tostring(obj.check.id))
+        print("[ProduceCheck] Deleted check=" .. tostring(check_id))
         _bo_produce_data.units[check_id] = nil
     end
 
@@ -105,7 +105,7 @@ function BuildOrder_Check_Produce_Activate(obj, player)
     end
 
     print("[ProduceCheck] Registered check=" .. tostring(obj.check.id))
-    _bo_units_data.units[obj.check.id] = {
+    _bo_produce_data.units[obj.check.id] = {
         player = player,
         pbgs = pbgs,
         minimum = payload.count ~= nil and payload.count or 1,
@@ -117,32 +117,32 @@ function BuildOrder_Check_Produce_Activate(obj, player)
     -- we only check for a single unit to be produced. "Constant"
     -- production is more of an optimization to be tracked via metrics
     if payload.constant then
-        _bo_units_data.units[obj.check.id].count = 1
+        _bo_produce_data.units[obj.check.id].minimum = 1
     end
 
     -- TODO: Might want to send both cases through the build events
     -- It's fine to only send queued checks through command though
     if payload.queued then
-        _bo_units_data.listening_for_command_event = true
-        if _bo_units_data.num_command_listeners == 0 then
+        _bo_produce_data.listening_for_command_event = true
+        if _bo_produce_data.num_command_listeners == 0 then
             print("[ProduceCheck] Adding queue event listener: check=" .. tostring(obj.check.id))
             Rule_AddGlobalEvent(
                 BuildOrder_Check_Produce_EntityCommandEventHandle,
                 GE_EntityCommandIssued
             )
         end
-        _bo_units_data.num_command_listeners =
-            _bo_units_data.num_command_listeners + 1
+        _bo_produce_data.num_command_listeners =
+            _bo_produce_data.num_command_listeners + 1
     else
-        if _bo_units_data.num_build_listeners == 0 then
+        if _bo_produce_data.num_build_listeners == 0 then
             print("[ProduceCheck] Adding unit build listener: check=" .. tostring(obj.check.id))
             Rule_AddGlobalEvent(
                 BuildOrder_Check_Produce_BuildEventHandle,
                 GE_BuildItemComplete
             )
         end
-        _bo_units_data.num_build_listeners =
-            _bo_units_data.num_build_listeners + 1
+        _bo_produce_data.num_build_listeners =
+            _bo_produce_data.num_build_listeners + 1
     end
 
     return true
@@ -150,8 +150,8 @@ end
 
 function BuildOrder_Check_Produce_Deactivate(obj)
     print("[ProduceCheck] Requested deactivation of check " .. tostring(obj.check.id))
-    if _bo_units_data.num_build_listeners > 0
-        or _bo_units_data.num_command_listeners > 0
+    if _bo_produce_data.num_build_listeners > 0
+        or _bo_produce_data.num_command_listeners > 0
     then
         DeactivateCheck(obj.check.id)
     end
@@ -161,21 +161,22 @@ function BuildOrder_Check_Produce_GetText(obj)
     print("[ProduceCheck] Assembling objective text")
     print("Getting text for produce check")
     local payload = obj.check.payload
+    local units = _bo_produce_data.units[obj.check.id]
     local unit_text = Mod_Pbg_ScreenName(
-        id,
-        unit ~= nil and unit.pbgs ~= nil and #unit.pbgs > 0 and unit.pbgs[1] or nil,
+        payload.ids[1],
+        units ~= nil and units.pbgs[1] or nil,
         BP_GetSquadUIInfo,
-        unit.player
+        units ~= nil and units.player or nil
     )
 
     if payload.constant then
-        return Loc_FormatText(BoLoc_ModStringId(_CONSTANT_PROD_FORMAT), unit_text)
+        return Loc_FormatText(BoLoc_ModStringId(_CONSTANT_PROD_FORMAT_ID), unit_text)
     elseif payload.queued then
         return Loc_FormatText(
-            BoLoc_ModStringId(_QUEUE_UNIT_FORMAT_ID), payload.count, unit_text)
+            BoLoc_ModStringId(_QUEUE_UNIT_FORMAT_ID), Loc_FormatInteger(payload.count or 1), unit_text)
     else
         return Loc_FormatText(
-            BoLoc_ModStringId(_PROD_UNIT_FORMAT_ID), payload.count, unit_text)
+            BoLoc_ModStringId(_PROD_UNIT_FORMAT_ID), Loc_FormatInteger(payload.count or 1), unit_text)
     end
 end
 
@@ -237,7 +238,7 @@ function BuildOrder_Check_Produce_EntityCommandEventHandle(event)
             Player_GetEntities(state.player),
             function(groupID, entityIndex, entity)
                 local queue_size = Entity_GetProductionQueueSize(entity)
-                for index = 0, queueSize - 1 do
+                for index = 0, queue_size - 1 do
                     if QueuedItemIsCheckMatch(entity, index, state.pbgs)
                     then
                         num_queued = num_queued + 1

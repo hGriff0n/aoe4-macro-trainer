@@ -29,7 +29,7 @@ function BuildOrder_Check_Rallypoint_Register()
         BuildOrder_Check_Rallypoint_Deactivate,
         BuildOrder_Check_Rallypoint_GetText,
         BuildOrder_Check_Rallypoint_Validate,
-        nil
+        function() return true end -- For now, just autocomplete
     )
 end
 
