@@ -110,6 +110,20 @@ local function CheckAlreadyCompleted(check_id)
     return switch_trigger(_bo_ageup_data.trigger, CheckUpgradeResearched, CheckConstructionStarted)(check_id)
 end
 
+local function IsInvalidConstructionEvent(event)
+    return event == nil
+        or event.player == nil
+        or event.pbg == nil
+        or event.entity == nil
+        or event.entity.EntityID == nil
+end
+
+local function IsInvalidUpgradeEvent(event)
+    return event == nil
+        or event.executer == nil
+        or event.upgrade == nil
+end
+
 
 -----------------------------------------------------------------------
 -- Mod Interface
@@ -145,13 +159,22 @@ function BuildOrder_Check_AgeUp_Activate(obj, player)
     end
 
     local check = obj.check
+    local ids = check.payload.oneof or { check.payload.id }
     local resolver = switch_trigger(check.payload.trigger, BP_GetUpgradeBlueprint, BP_GetEntityBlueprint)
-    local pbgs = Mod_Pbg_ResolveAll(check.payload.oneof or { check.payload.id }, resolver)
+    local pbgs = Mod_Pbg_ResolveAll(ids, resolver)
     if pbgs == nil or #pbgs == 0 then
-        print("[AgeUpCheck] Failed to resolve pbg: check=" .. tostring(check.id) .. " pbg=" .. tostring(check.payload.id))
+        -- TODO: join instead
+        print("[AgeUpCheck] Failed to resolve pbg: check=" .. tostring(check.id) .. " pbg=" .. tostring(ids))
         return false
     end
 
+    if CheckAlreadyCompleted(check.id) then
+        print("[AgeUpCheck] Already completed check=" .. tostring(check.id))
+        BuildOrder_Objectives_MarkComplete(check.id, true)
+        return true
+    end
+
+    print("[AgeUpCheck] Registered check=" .. tostring(obj.check.id))
     _bo_ageup_data = {
         id = check.id,
         pbgs = pbgs,
@@ -159,23 +182,12 @@ function BuildOrder_Check_AgeUp_Activate(obj, player)
         resolver = resolver,
         player = player
     }
-
-    local completed = CheckAlreadyCompleted(check.id)
-    if completed then
-        print("[AgeUpCheck] Already completed check=" .. tostring(check.id))
-        BuildOrder_Objectives_MarkComplete(check.id, true)
-        BuildOrder_Check_AgeUp_Deactivate(obj)
-        return true
-    end
-
     switch_trigger(
         _bo_ageup_data.trigger,
         function()
-            print("[AgeUpCheck] Registered upgrade event listener: check=" .. tostring(check.id))
             Rule_AddGlobalEvent(BuildOrder_Check_AgeUp_OnUpgradeStart, GE_UpgradeStart)
         end,
         function()
-            print("[AgeUpCheck] Registered construction event listener: check=" .. tostring(check.id))
             Rule_AddGlobalEvent(BuildOrder_Check_AgeUp_OnConstructionStart, GE_ConstructionStart)
         end
     )()
@@ -191,11 +203,9 @@ function BuildOrder_Check_AgeUp_Deactivate(obj)
     switch_trigger(
         _bo_ageup_data.trigger,
         function()
-            print("[AgeUpCheck] Removing upgrade listener for check " .. tostring(_bo_ageup_data.id))
             Rule_RemoveGlobalEvent(BuildOrder_Check_AgeUp_OnUpgradeStart)
         end,
         function()
-            print("[AgeUpCheck] Removing construction listener for age up check " .. tostring(_bo_ageup_data.id))
             Rule_RemoveGlobalEvent(BuildOrder_Check_AgeUp_OnConstructionStart)
         end
     )()
@@ -204,6 +214,7 @@ function BuildOrder_Check_AgeUp_Deactivate(obj)
     _bo_ageup_data = nil
 end
 
+-- TODO: Needs to support vilager hints (can we reuse upgrades and built respectively?)
 function BuildOrder_Check_AgeUp_GetText(obj)
     print("[AgeUpCheck] Assembling objective text")
     return Loc_FormatText(
@@ -214,35 +225,22 @@ function BuildOrder_Check_AgeUp_GetText(obj)
 end
 
 function BuildOrder_Check_AgeUp_OnConstructionStart(event)
+    print("[AgeUpCheck] Received construction event: " .. tostring(event))
     if _bo_ageup_data == nil then
-        print("[AgeUpCheck] Age Up listener wasn't deregistered. This should never happen. Removing listener now.")
+        print("[AgeUpCheck] No active check but listener wasn't deregistered. Ignoring and removing listener.")
         Rule_RemoveGlobalEvent(BuildOrder_Check_AgeUp_OnConstructionStart)
         return
     end
 
-    print("[AgeUpCheck] Received construction event: " .. tostring(event))
-    if event == nil
-        or event.player == nil
-        or event.pbg == nil
-        or event.entity == nil
-        or event.entity.EntityID == nil
-    then
-        print("[AgeUpCheck] Invalid event data for age up for check=" .. tostring(_bo_ageup_data.id))
-        return
-    end
-
-    if event.player ~= _bo_ageup_data.player then
-        print("[AgeUpCheck] Wrong owner for check=" .. tostring(_bo_ageup_data.id) .. ". leaving early")
+    if IsInvalidConstructionEvent(event) or event.player ~= _bo_ageup_data.player then
         return
     end
 
     local match = Mod_Pbg_MatchesAny(_bo_ageup_data.pbgs, event.pbg)
     if match ~= nil then
-        print("[AgeUpCheck] Found expected event. Marking " .. tostring(_bo_ageup_data.id) .. " complete")
+        print("[AgeUpCheck] Expected ageup construction started. Marking " .. tostring(_bo_ageup_data.id) .. " complete")
         BuildOrder_Objectives_MarkComplete(_bo_ageup_data.id, true)
         BuildOrder_Check_AgeUp_Deactivate(nil)
-    else
-        print("[AgeUpCheck] Building pbg not one of the expected ids. Skipping.")
     end
 end
 
@@ -254,24 +252,14 @@ function BuildOrder_Check_AgeUp_OnUpgradeStart(event)
         return
     end
 
-    if event == nil or event.executer == nil or event.upgrade == nil then
-        print("[AgeUpCheck] Invalid event data for age up for check=" .. tostring(_bo_ageup_data.id))
+    if IsInvalidUpgradeEvent(event) or BoEvents_GetExecuterOwner(event) ~= _bo_ageup_data.player then
         return
     end
 
-    local owner = BoEvents_GetExecuterOwner(event)
-    if owner ~= _bo_ageup_data.player then
-        print("[AgeUpCheck] Wrong owner for check=" .. tostring(_bo_ageup_data.id) .. ". leaving early")
-        return
-    end
-
-    local match = Mod_Pbg_MatchesAny(_bo_ageup_data.pbgs, event.upgrade)
-    if match ~= nil then
-        print("[AgeUpCheck] Found expected event. Marking " .. tostring(_bo_ageup_data.id) .. " complete")
+    if Mod_Pbg_MatchesAny(_bo_ageup_data.pbgs, event.upgrade) ~= nil then
+        print("[AgeUpCheck] Expected ageup upgrade started. Marking " .. tostring(_bo_ageup_data.id) .. " complete")
         BuildOrder_Objectives_MarkComplete(_bo_ageup_data.id, true)
         BuildOrder_Check_AgeUp_Deactivate(nil)
-    else
-        print("[AgeUpCheck] Event pbg not one of the expected ids. Skipping.")
     end
 end
 

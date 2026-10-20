@@ -71,14 +71,14 @@ function BuildOrder_Check_Built_Activate(obj, player)
     local pbg = Mod_Pbg_Resolve(payload.id, BP_GetEntityBlueprint)
     if pbg == nil then
         print("[BuiltCheck] Failed to resolve pbg: check=" ..
-            tostring(obj.check.id) .. " pbg=" .. tostring(obj.check.payload.id))
+            tostring(obj.check.id) .. " pbg=" .. tostring(payload.id))
         return false
     end
 
     print("[BuiltCheck] Registered check=" .. tostring(obj.check.id))
     _bo_built_data.buildings[obj.check.id] = {
         pbg = pbg,
-        count = obj.check.payload.count or 1,
+        count = payload.count or 1,
         player = player,
     }
 
@@ -94,14 +94,10 @@ function BuildOrder_Check_Built_Activate(obj, player)
 end
 
 function BuildOrder_Check_Built_Deactivate(obj)
-    print("[BuiltCheck] Requested deactivation of check " .. tostring(obj.check.id))
-    if _bo_built_data.event_registered then
-        DeactivateCheck(obj.check.id)
-    end
+    DeactivateCheck(obj.check.id)
 end
 
 function BuildOrder_Check_Built_GetText(obj)
-    print("[BuiltCheck] Assembling objective text")
     local payload = obj.check.payload
     local building = _bo_built_data.buildings[obj.check.id]
     local building_name = Mod_Pbg_ScreenName(
@@ -119,7 +115,6 @@ end
 function BuildOrder_Check_Built_OnConstructionComplete(event)
     print("[BuiltCheck] Received event: " .. tostring(event))
     if IsInvalidEvent(event) then
-        print("[BuiltCheck] Invalid event received")
         return
     end
 
@@ -127,12 +122,11 @@ function BuildOrder_Check_Built_OnConstructionComplete(event)
         if event.player == state.player
             and Mod_Pbg_Equals(state.pbg, event.pbg)
         then
-            print("[BuiltCheck] Found matching listener")
             state.count = state.count - 1
         end
 
         if state.count == 0 then
-            print("[BuiltCheck] Expected num events seen. Marking " .. tostring(check_id) .. " complete")
+            print("[BuiltCheck] Expected construction events seen. Marking " .. tostring(check_id) .. " complete")
             BuildOrder_Objectives_MarkComplete(check_id, true)
             DeactivateCheck(check_id)
         end

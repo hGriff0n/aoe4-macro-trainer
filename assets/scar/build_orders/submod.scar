@@ -75,6 +75,7 @@ local function LoadDatastore(id)
 	return Game_RetrieveTableData(id, false)
 end
 
+-- This is unused for the moment but we plan to have a in-game ui to build/edit build orders
 local function SaveDatastore(id, bo_list)
 	Game_StoreTableData(id, {
 		schema_version = BUILD_ORDER_DATASTORE_SCHEMA_VERSION,
@@ -103,7 +104,7 @@ end
 
 local function SpawnBuildOrderSelector(player)
 	if _buildorder_data.waiting_selection then
-		print("skipping spawning build order selection menu because it is already open")
+		print("[BuildOrder] skipping spawning build order selection menu because it is already open")
 		return false
 	end
 
@@ -120,21 +121,15 @@ end
 
 local function GetIdParameter(parameter)
 	if type(parameter) == "table" then
-		print("Getting id parameter from table")
-		for k, v in pairs(parameter) do
-			print(k .. " = " .. v)
-		end
 		return parameter.id or parameter.value
 	end
 	if type(parameter) == "string" then
-		print("Getting id parameter from string: " .. parameter)
 		return parameter
 	end
 	return nil
 end
 
 local function FinishGameStart()
-	print("Starting game")
 	_buildorder_data.waiting_selection = false
 	Rule_Remove(BuildOrder_PauseNextTick)
 	BuildOrderSelectorUI_Hide()
@@ -142,118 +137,33 @@ local function FinishGameStart()
 	Mod_Sim_Unpause()
 
 	-- TODO: Is there any state I need to pass through?
+	print("[BuildOrder] Calling remaining game start hooks")
 	for _, hook in ipairs(_buildorder_data.start_hooks) do
 		hook()
 	end
 	return true
 end
 
-local function get_civs(bolist)
-	local civs = {}
-	for id, bo in pairs(bolist) do
-		print("seen build order " .. id)
-		if civs[bo.civ] == nil then
-			civs[bo.civ] = true
+local function group_build_orders_by_civ(bo_list)
+	local bos_by_civ = {}
+	for id, bo in pairs(bo_list) do
+		local civ = string.lower(bo.civ)
+		if bos_by_civ[civ] == nil then
+			bos_by_civ[civ] = {}
+		end
+		bos_by_civ[civ][id] = bo
+	end
+	return bos_by_civ
+end
+
+local function log_loaded_build_orders(bos_by_civ)
+	for civid, bos in pairs(bos_by_civ) do
+		print("[BuildOrder] Loaded build orders for civilization=" .. civid)
+		for id, _ in pairs(bos) do
+			print(" - " .. id)
 		end
 	end
-	return civs
 end
-
------------------------------------------------------------------------
--- Mod Interface
------------------------------------------------------------------------
-
-function BuildOrder_OnInit()
-	BuildOrder_Objectives_OnInit()
-end
-
-function BuildOrder_OnGameStart(start_hooks)
-	if _buildorder_data.game_started then
-		return false
-	end
-
-	local bo_data = LoadDatastore(BUILD_ORDER_DATASTORE_ID)
-	print("loaded datastore: available civs " .. Mod_Debug_PrintKeys(get_civs(bo_data.build_orders)))
-
-	-- Grabs the configured build orders that the player can use for their
-	-- current civilization to present for selection immediately on start
-	-- We cannot do this in the settings menu as those values are
-	-- populated without loading the mod's logic
-	local player = Game_GetLocalPlayer()
-	_buildorder_data.build_order_options =
-		BuildOrder_FilterCompatibleBuildOrders(bo_data, player)
-
-	-- Add rule to automatically pause the game on the next tick
-	-- We cannot pause immediately as the ui would otherwise not load
-	Rule_Remove(BuildOrder_PauseNextTick)
-	Rule_Add(BuildOrder_PauseNextTick)
-
-	-- Spawn the build order selection modal for user
-	_buildorder_data.start_hooks = start_hooks
-	return SpawnBuildOrderSelector(player)
-end
-
-function BuildOrder_Stop()
-	if not _buildorder_data.game_started then
-		return false
-	end
-
-	BuildOrderSelectorUI_Stop()
-	Rule_Remove(BuildOrder_PauseNextTick)
-
-	_buildorder_data.game_started = false
-	_buildorder_data.waiting_selection = false
-	_buildorder_data.build_order_options = {}
-	_buildorder_data.start_hooks = {}
-end
-
--- I think this has to be part of the interface since it's used in rules?
-function BuildOrder_PauseNextTick()
-	Rule_RemoveMe()
-	print("Pausing for build order selection")
-	if _buildorder_data.waiting_selection then
-		Mod_Sim_Pause()
-	end
-end
-
-function BuildOrder_ContinueWithoutBuildOrder()
-	print("Entered no bo callback")
-	if not _buildorder_data.waiting_selection then
-		print("Skipping because we're not waiting on bo selection")
-		return false
-	end
-
-	return FinishGameStart()
-end
-
-function BuildOrder_StartGame(parameter)
-	print("Entered bo callback")
-	if not _buildorder_data.waiting_selection then
-		print("Skipping because we're not waiting on bo selection")
-		return false
-	end
-
-	local selected = GetIdParameter(parameter)
-	if selected == nil then
-		print("Failed to extract selected build order id")
-		return false
-	end
-
-	for _, bo in ipairs(_buildorder_data.build_order_options) do
-		if bo ~= nil and bo.id == selected then
-			print("Starting game with build order " .. tostring(selected))
-			BuildOrder_Objectives_Start(bo, Game_GetLocalPlayer())
-			return FinishGameStart()
-		end
-	end
-
-	print("No build order selected, continuing without build order")
-	return BuildOrder_ContinueWithoutBuildOrder()
-end
-
------------------------------------------------------------------------
--- Mod Implementation
------------------------------------------------------------------------
 
 local function AllItemsPassFilter(list, fn)
 	for _, item in ipairs(list) do
@@ -293,26 +203,109 @@ local function IsValidBuildOrder(bo)
 		and AllItemsPassFilter(bo.steps, IsValidBuildOrderStep)
 end
 
-function BuildOrder_FilterCompatibleBuildOrders(bo_data, player)
+-----------------------------------------------------------------------
+-- Mod Interface
+-----------------------------------------------------------------------
+
+function BuildOrder_OnInit()
+	BuildOrder_Objectives_OnInit()
+end
+
+function BuildOrder_OnGameStart(start_hooks)
+	if _buildorder_data.game_started then
+		return false
+	end
+
+	local bo_data = LoadDatastore(BUILD_ORDER_DATASTORE_ID)
+	local bos_by_civ = group_build_orders_by_civ(bo_data.build_orders)
+	log_loaded_build_orders(bos_by_civ)
+
+	-- Grabs the configured build orders that the player can use for their
+	-- current civilization to present for selection immediately on start
+	-- We cannot do this in the settings menu as those values are
+	-- populated without loading the mod's logic
+	local player = Game_GetLocalPlayer()
+	_buildorder_data.build_order_options =
+		BuildOrder_FilterCompatibleBuildOrders(bos_by_civ, player)
+
+	-- Add rule to automatically pause the game on the next tick
+	-- We cannot pause immediately as the ui would otherwise not load
+	Rule_Remove(BuildOrder_PauseNextTick)
+	Rule_Add(BuildOrder_PauseNextTick)
+
+	-- Spawn the build order selection modal for user
+	_buildorder_data.start_hooks = start_hooks
+	return SpawnBuildOrderSelector(player)
+end
+
+function BuildOrder_Stop()
+	if not _buildorder_data.game_started then
+		return
+	end
+
+	BuildOrderSelectorUI_Stop()
+	Rule_Remove(BuildOrder_PauseNextTick)
+
+	_buildorder_data.game_started = false
+	_buildorder_data.waiting_selection = false
+	_buildorder_data.build_order_options = {}
+	_buildorder_data.start_hooks = {}
+end
+
+function BuildOrder_ContinueWithoutBuildOrder()
+	if not _buildorder_data.waiting_selection then
+		return false
+	end
+
+	print("[BuildOrder] Continuing without build order selected")
+	return FinishGameStart()
+end
+
+function BuildOrder_StartGame(parameter)
+	if not _buildorder_data.waiting_selection then
+		return false
+	end
+
+	local selected = GetIdParameter(parameter)
+	if selected == nil then
+		print("[BuildOrder] Failed to extract selected build order id")
+		return false
+	end
+
+	for _, bo in ipairs(_buildorder_data.build_order_options) do
+		if bo ~= nil and bo.id == selected then
+			print("[BuildOrder] Starting game with build order " .. tostring(selected))
+			BuildOrder_Objectives_Start(bo, Game_GetLocalPlayer())
+			return FinishGameStart()
+		end
+	end
+
+	return BuildOrder_ContinueWithoutBuildOrder()
+end
+
+-----------------------------------------------------------------------
+-- Mod Implementation
+-----------------------------------------------------------------------
+
+function BuildOrder_FilterCompatibleBuildOrders(bos_by_civ, player)
 	local playerciv = CanonicalCivID(player)
-	print("Player is playing as " .. playerciv)
 
 	local valid_bos = {}
-	for id, bo in pairs(bo_data.build_orders) do
-		if not IsValidBuildOrder(bo) then
-			print("BuildOrder: skipping invalid build order " .. tostring(id))
-			goto continue
-		end
-		if string.lower(bo.civ) == playerciv then
+	for id, bo in pairs(bos_by_civ[playerciv] or {}) do
+		if IsValidBuildOrder(bo) then
 			valid_bos[#valid_bos + 1] = bo
+		else
+			print("[BuildOrder] skipping invalid build order " .. tostring(id))
 		end
-		::continue::
-		-- if string.lower(bo.civ) == playerciv and
-		-- 	IsValidBuildOrder(id, bo)
-		-- then
-		-- 	valid_bos[#valid_bos + 1] = bo
-		-- end
 	end
 
 	return valid_bos
+end
+
+function BuildOrder_PauseNextTick()
+	Rule_RemoveMe()
+	print("[BuildOrder] Pausing for build order selection menu")
+	if _buildorder_data.waiting_selection then
+		Mod_Sim_Pause()
+	end
 end

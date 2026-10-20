@@ -1,5 +1,3 @@
-import("utils/debug.scar")
-
 local _pbg_cache = {}
 
 function Mod_Pbg_Resolve(id, blueprint_getter)
@@ -24,18 +22,7 @@ function Mod_Pbg_ResolveAll(ids, blueprint_getter)
     return pbgs
 end
 
-function Mod_Pbg_Equals(left, right, debug)
-    if debug ~= nil then
-        print("[PBG] Comparing PBGs:")
-        print("[PBG] Want: " .. tostring(left))
-        Mod_Debug_PrintTable(left, "  ")
-        print("[PBG] Got: " .. tostring(right))
-        Mod_Debug_PrintTable(right, "  ")
-        print("[PBG] Comparison result: " .. tostring(left ~= nil and right ~= nil
-            and left.PropertyBagGroupID == right.PropertyBagGroupID
-            and left.PropertyBagGroupModPackID == right.PropertyBagGroupModPackID
-            and left.PropertyBagGroupType == right.PropertyBagGroupType))
-    end
+function Mod_Pbg_Equals(left, right)
     return left ~= nil and right ~= nil
         and left.PropertyBagGroupID == right.PropertyBagGroupID
         and left.PropertyBagGroupModPackID == right.PropertyBagGroupModPackID

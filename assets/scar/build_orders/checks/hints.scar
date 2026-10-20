@@ -46,7 +46,6 @@ function BuildOrder_Check_Hints_Deactivate(obj)
 end
 
 function BuildOrder_Check_Hints_GetText(obj)
-    print("Getting text for hints check")
     return Loc_FormatText(BoLoc_ModStringId(_HINT_TEXT_FORMAT_ID), BoLoc_String(obj.check.payload.text))
 end
 

@@ -52,11 +52,12 @@ function BuildOrder_Check_Buildings_Activate(obj, player)
 
     local pbg = Mod_Pbg_Resolve(obj.check.payload.id, BP_GetEntityBlueprint)
     if pbg == nil then
-        print("[BuildingCheck] Failed to resolve pbg: check="..tostring(obj.check.id).." pbg="..tostring(obj.check.payload.id))
+        print("[BuildingCheck] Failed to resolve pbg: check=" ..
+            tostring(obj.check.id) .. " pbg=" .. tostring(obj.check.payload.id))
         return false
     end
 
-    print("[BuildingCheck] Registered check="..tostring(obj.check.id))
+    print("[BuildingCheck] Registered check=" .. tostring(obj.check.id))
     _bo_buildings_data.buildings[obj.check.id] = {
         pbg = pbg,
         count = obj.check.payload.count,
@@ -66,12 +67,9 @@ function BuildOrder_Check_Buildings_Activate(obj, player)
 end
 
 function BuildOrder_Check_Buildings_Deactivate(obj)
-    if _bo_buildings_data.buildings[obj.check.id] == nil then
-        return
+    if _bo_buildings_data.buildings[obj.check.id] ~= nil then
+        _bo_buildings_data.buildings[obj.check.id] = nil
     end
-
-    print("[BuildingCheck] Deleted check="..tostring(obj.check.id))
-    _bo_buildings_data.buildings[obj.check.id] = nil
 end
 
 function BuildOrder_Check_Buildings_GetText(obj)
@@ -93,7 +91,7 @@ end
 function BuildOrder_Check_Buildings_PollCompletion(obj)
     local state = _bo_buildings_data[obj.check.id].buildings
     if state == nil then
-        print("[BuildingCheck] No check tracked for child "..obj.check.id)
+        print("[BuildingCheck] No check tracked for child " .. obj.check.id)
         return false
     end
 
@@ -112,7 +110,7 @@ function BuildOrder_Check_Buildings_PollCompletion(obj)
         end
     )
 
-    print("[BuildingCheck] Found "..tostring(count).." buildings. Want="..tostring(obj.check.payload.count))
+    print("[BuildingCheck] Found " .. tostring(count) .. " buildings. Want=" .. tostring(obj.check.payload.count))
     return count >= obj.check.payload.count
 end
 

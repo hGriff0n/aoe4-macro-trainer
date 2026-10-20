@@ -58,7 +58,8 @@ local function CreateObjective(title, faction, parent_id, kind, completed)
 end
 
 local function LogMissingHandler(check)
-    print("BuildOrder: no registered handler for " .. tostring(check.kind) .. " (check " .. tostring(check.id) .. ")")
+    print("[Objectives] BuildOrder: no registered handler for " ..
+        tostring(check.kind) .. " (check " .. tostring(check.id) .. ")")
 end
 
 local function InitializeState(bo, player)
@@ -95,12 +96,13 @@ local function AddCheckSubObjective(check, faction)
     -- If the activation doesn't work, don't add the child objective
     if not handles.activate(child_obj, _bo_objective_data.local_player) then
         _bo_objective_data.sub_objectives[check.id] = nil
-        print("Skipping objective for check " .. tostring(child_obj.check.id) .. " because activation failed")
+        print("[Objectives] Skipping objective for check " ..
+            tostring(child_obj.check.id) .. " because activation failed")
         return
     end
 
     -- Now get the text to create the child objective for the check
-    local text = handles.format_check_text(child_obj)
+    local text = handles.get_objective_text(child_obj)
     if child_obj.check.optional then
         text = Loc_FormatText(BoLoc_ModStringId(_OPTIONAL_CHECK_FORMAT_ID), text)
     end
@@ -113,7 +115,7 @@ local function AddCheckSubObjective(check, faction)
     )
     _bo_objective_data.check_obj_id_map[child_obj.check.id] = obj_id
 
-    print("Created sub-objective " .. tostring(obj_id) .. " for check " .. tostring(child_obj.check.id))
+    print("[Objectives] Created sub-objective " .. tostring(obj_id) .. " for check " .. tostring(child_obj.check.id))
 end
 
 local function GetStepTitleText(step, step_idx)
@@ -131,7 +133,8 @@ local function SetCurrentObjective(step, step_idx)
         0,
         "buildOrderStep"
     )
-    print("Created objective " .. tostring(_bo_objective_data.current_objective) .. " for step " .. tostring(step_idx))
+    print("[Objectives] Created objective " ..
+        tostring(_bo_objective_data.current_objective) .. " for step " .. tostring(step_idx))
 
     for _, check in ipairs(step.checks) do
         AddCheckSubObjective(check, faction)
@@ -140,7 +143,7 @@ end
 
 local function CleanupCurrentObjective()
     for check_id, child in pairs(_bo_objective_data.sub_objectives) do
-        print("Cleaning up check " .. tostring(check_id))
+        print("[Objectives] Cleaning up check " .. tostring(check_id))
         local handle = GetCheckHandle(child.check)
         if handle ~= nil then
             handle.deactivate(child)
@@ -155,7 +158,7 @@ local function CleanupCurrentObjective()
     _bo_objective_data.check_obj_id_map = {}
     _bo_objective_data.sub_objectives = {}
 
-    print("Deleting current objective " .. tostring(_bo_objective_data.current_objective))
+    print("[Objectives] Deleting current objective " .. tostring(_bo_objective_data.current_objective))
     Obj_Delete(_bo_objective_data.current_objective)
     _bo_objective_data.current_objective = nil
 end
@@ -182,7 +185,7 @@ function BuildOrder_Objectives_OnInit()
     BuildOrder_Check_Units_Register()
     BuildOrder_Check_Upgrades_Register()
     BuildOrder_Check_Vils_Register()
-    print("Registered handlers: " .. Mod_Debug_PrintKeys(_bo_objective_data.registered_checks))
+    print("[Objectives] Registered handlers: " .. Mod_Debug_PrintKeys(_bo_objective_data.registered_checks))
 end
 
 function BuildOrder_Objectives_ValidateCheck(check)
@@ -195,12 +198,8 @@ function BuildOrder_Objectives_ValidateCheck(check)
 end
 
 function BuildOrder_Objectives_Start(bo, player)
-    if bo == nil then
-        print("BuildOrder: no build order provided, skipping")
-        return
-    end
-    if player == nil then
-        print("BuildOrder: no player provided, skipping")
+    if bo == nil or player == nil then
+        print("[Objectives] BuildOrder: no build order provided, skipping")
         return
     end
 
@@ -222,15 +221,13 @@ function BuildOrder_Objectives_Stop()
 end
 
 function BuildOrder_Objectives_NextStep()
-    print("Progressing to next step in build order")
+    print("[Objectives] Progressing to next step in build order")
     if _bo_objective_data.build_order == nil then
-        print("Stopping because there is no build order")
         return
     end
 
     -- Cleanup the current objective data first
     if _bo_objective_data.current_objective ~= nil then
-        print("Cleaning up current objective")
         CleanupCurrentObjective()
     end
 
@@ -240,7 +237,7 @@ function BuildOrder_Objectives_NextStep()
 
     local step = _bo_objective_data.build_order.steps[step_idx]
     if step == nil then
-        print("Stopping because there are no more steps")
+        print("[Objectives] Build order completed - no more steps.")
         BuildOrder_Objectives_Stop()
         return
     end
@@ -248,12 +245,6 @@ function BuildOrder_Objectives_NextStep()
     SetCurrentObjective(step, step_idx)
 end
 
--- TODO: All steps auto-complete currently
--- TODO: We don't have a way to set completion status from event handlers
--- Either need to add a poll for checking internal tracking, or add some
--- other method for setting the state
--- TODO: Could be worth having poll for everything that just check event state
--- An alternative way of dealing with the obj_id problem
 function BuildOrder_Objectives_CheckCompletion()
     local step_completed = true
 
@@ -261,38 +252,33 @@ function BuildOrder_Objectives_CheckCompletion()
         -- Although most checks are done via event responders
         -- a few have to be done through polling
         if child.poll_handle ~= nil then
-            -- print("Polling check " .. tostring(check_id))
             local completed = child:poll_handle()
             if completed ~= child.completed then
-                print("Check " .. tostring(check_id) .. " switched status: Was=" .. tostring(child.completed))
                 local obj_id = _bo_objective_data.check_obj_id_map[check_id]
                 if obj_id ~= nil then
-                    print("Updating objective " .. tostring(obj_id) .. " to completed=" .. tostring(completed))
                     SetObjectiveComplete(obj_id, completed)
                 end
-                SetObjectiveComplete(obj_id, completed)
             end
             child.completed = completed
         else
             local obj_id = _bo_objective_data.check_obj_id_map[check_id]
             if obj_id ~= nil then
                 local state = Obj_GetState(obj_id)
-                -- print("Checking objective state for completion: " .. tostring(state) .. "-" .. tostring(OS_Complete))
                 child.completed = (state == OS_Complete)
             end
         end
 
-        -- print("Checking completion with optional=" .. tostring(child.check.optional))
+        -- A check is only completed if all non-optional sub_objectives are completed
         if not child.completed and not child.check.optional then
             step_completed = false
         end
     end
 
-    -- If all required checks pass, then we can mark the step completed
-    -- and move on to the next one (assuming there is any)
+    -- If no required sub_objectives are incomplete, then we try to move to the next step
     if step_completed then
-        print("All sub-objectives for step " ..
-            _bo_objective_data.current_objective .. " have completed. Marking objective as complete")
+        print("[Objectives] All sub-objectives for step " ..
+            _bo_objective_data.current_objective ..
+            " have completed. Marking objective as complete and loading next step")
         Obj_SetState(_bo_objective_data.current_objective, OS_Complete)
         BuildOrder_Objectives_NextStep()
     end
@@ -315,7 +301,7 @@ function BuildOrder_Objectives_RegisterCheckHandlers(kind, start_handle, stop_ha
         deactivate = stop_handle,
         -- Called when needing to populate the check's
         -- objective text
-        format_check_text = text_handle,
+        get_objective_text = text_handle,
         -- Called to validate the check's payload
         validate = validate_handle,
         -- Required if a check is not implemented via event subscription

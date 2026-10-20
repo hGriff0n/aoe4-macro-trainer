@@ -173,16 +173,16 @@ BO_UI_XAML = [[
 -----------------------------------------------------------------------
 
 local function BuildOrderSelectorUI_InvokeCallback(key, parameter)
-	print("Running requested ui callback `" .. key .. "`")
+	print("[SelectorUI] Running requested ui callback `" .. key .. "`")
 	local callbackName = _selector_data.callbacks[key]
 	if type(callbackName) ~= "string" then
-		print("Not calling callback because it is not a string")
+		print("[SelectorUI] Not calling callback because it is not a string")
 		return false
 	end
 	if type(callbackName) ~= "string" or
 		type(_G[callbackName]) ~= "function"
 	then
-		print("Not calling callback because it is not callable: " .. type(_G[callbackName]))
+		print("[SelectorUI] Not calling callback because it is not callable: " .. type(_G[callbackName]))
 		return false
 	end
 	return _G[callbackName](parameter)
@@ -192,7 +192,6 @@ end
 -- SelectedValuePath) rather than binding SelectedItem[id], which crashed on reselection.
 -- Don't pass SelectedIndex: int command parameters never reach Lua.
 function BuildOrderSelectorUI_DispatchStartGame(parameter)
-	print("Dispatching start game with parameter: " .. tostring(parameter))
 	return BuildOrderSelectorUI_InvokeCallback("start_game", parameter)
 end
 
@@ -206,7 +205,7 @@ end
 
 function BuildOrderSelectorUI_Show(model)
 	if not type(model) == "table" then
-		print("Skipping because `model` is not a table")
+		print("[SelectorUI] Skipping because `model` is not a table")
 		return false
 	end
 
@@ -220,11 +219,11 @@ function BuildOrderSelectorUI_Show(model)
 end
 
 function BuildOrderSelectorUI_Hide()
-	print("Trying to hide ui")
+	print("[SelectorUI] Trying to hide ui")
 	if _selector_data.created_ui then
 		UI_Remove(_selector_data.ui_name)
 	else
-		print("Not hiding ui because it was never created")
+		print("[SelectorUI] UI wasn't created and is thus hidden by default")
 	end
 
 	_selector_data.created_ui = false
@@ -278,7 +277,7 @@ function BuildOrderSelectorUI_EnsureCreated()
 
 	local success = pcall(BuildOrderSelectorUI_CreatePresenter)
 	if not success then
-		print("Failed to create presenter")
+		print("[SelectorUI] Failed to create presenter")
 		BuildOrderSelectorUI_Hide()
 		return false
 	end

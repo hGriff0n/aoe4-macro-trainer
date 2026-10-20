@@ -86,12 +86,9 @@ function BuildOrder_Check_Vils_Activate(obj, player)
 end
 
 function BuildOrder_Check_Vils_Deactivate(obj)
-    if _bo_vils_data[obj.check.id] == nil then
-        return
+    if _bo_vils_data[obj.check.id] ~= nil then
+        _bo_vils_data[obj.check.id] = nil
     end
-
-    print("[VilCheck] Deleted check=" .. tostring(obj.check.id))
-    _bo_vils_data[obj.check.id] = nil
 end
 
 function BuildOrder_Check_Vils_GetText(obj)
@@ -102,7 +99,6 @@ end
 function BuildOrder_Check_Vils_PollCompletion(obj)
     local state = _bo_vils_data[obj.check.id]
     if state == nil then
-        print("[VilCheck] No check tracked for child " .. tostring(obj.check.id))
         return false
     end
 

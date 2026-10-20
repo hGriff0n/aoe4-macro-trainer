@@ -36,31 +36,6 @@ local function QueuedItemIsCheckMatch(entity, index, pbgs)
             pbgs, Entity_GetProductionQueueItem(entity, index)) ~= nil
 end
 
-local function DeactivateCheck(check_id)
-    if _bo_produce_data.units[check_id] ~= nil then
-        if _bo_produce_data.units[check_id].queued then
-            _bo_produce_data.num_command_listeners =
-                _bo_produce_data.num_command_listeners - 1
-        else
-            _bo_produce_data.num_build_listeners =
-                _bo_produce_data.num_build_listeners - 1
-        end
-
-        print("[ProduceCheck] Deleted check=" .. tostring(check_id))
-        _bo_produce_data.units[check_id] = nil
-    end
-
-    -- Only remove the event handler if all checks are deactivated
-    -- since a single step can have multiple checks of the same kind
-    if _bo_produce_data.num_build_listeners == 0 then
-        print("[ProduceCheck] All build checks deactiated, removing listener")
-        Rule_RemoveGlobalEvent(BuildOrder_Check_Produce_OnBuildItemComplete)
-    elseif _bo_produce_data.num_command_listeners == 0 then
-        print("[ProduceCheck] All entity checks deactiated, removing listener")
-        Rule_RemoveGlobalEvent(BuildOrder_Check_Produce_OnEntityCommandIssued)
-    end
-end
-
 -----------------------------------------------------------------------
 -- Mod Interface
 -----------------------------------------------------------------------
@@ -120,9 +95,7 @@ function BuildOrder_Check_Produce_Activate(obj, player)
     -- TODO: Might want to send both cases through the build events
     -- It's fine to only send queued checks through command though
     if payload.queued then
-        _bo_produce_data.listening_for_command_event = true
         if _bo_produce_data.num_command_listeners == 0 then
-            print("[ProduceCheck] Adding queue event listener: check=" .. tostring(obj.check.id))
             Rule_AddGlobalEvent(
                 BuildOrder_Check_Produce_OnEntityCommandIssued,
                 GE_EntityCommandIssued
@@ -132,7 +105,6 @@ function BuildOrder_Check_Produce_Activate(obj, player)
             _bo_produce_data.num_command_listeners + 1
     else
         if _bo_produce_data.num_build_listeners == 0 then
-            print("[ProduceCheck] Adding unit build listener: check=" .. tostring(obj.check.id))
             Rule_AddGlobalEvent(
                 BuildOrder_Check_Produce_OnBuildItemComplete,
                 GE_BuildItemComplete
@@ -146,17 +118,33 @@ function BuildOrder_Check_Produce_Activate(obj, player)
 end
 
 function BuildOrder_Check_Produce_Deactivate(obj)
-    print("[ProduceCheck] Requested deactivation of check " .. tostring(obj.check.id))
-    if _bo_produce_data.num_build_listeners > 0
-        or _bo_produce_data.num_command_listeners > 0
-    then
-        DeactivateCheck(obj.check.id)
+    local check_id = obj.check.id
+    if _bo_produce_data.units[check_id] == nil then
+        return
     end
+
+    -- Only remove the event handler if all checks are deactivated
+    -- since a single step can have multiple checks of the same kind
+    if _bo_produce_data.units[check_id].queued then
+        _bo_produce_data.num_command_listeners =
+            _bo_produce_data.num_command_listeners - 1
+        if _bo_produce_data.num_command_listeners == 0 then
+            print("[ProduceCheck] All entity checks deactiated, removing listener")
+            Rule_RemoveGlobalEvent(BuildOrder_Check_Produce_OnEntityCommandIssued)
+        end
+    else
+        _bo_produce_data.num_build_listeners =
+            _bo_produce_data.num_build_listeners - 1
+        if _bo_produce_data.num_build_listeners == 0 then
+            print("[ProduceCheck] All build checks deactiated, removing listener")
+            Rule_RemoveGlobalEvent(BuildOrder_Check_Produce_OnBuildItemComplete)
+        end
+    end
+
+    _bo_produce_data.units[check_id] = nil
 end
 
 function BuildOrder_Check_Produce_GetText(obj)
-    print("[ProduceCheck] Assembling objective text")
-    print("Getting text for produce check")
     local payload = obj.check.payload
     local units = _bo_produce_data.units[obj.check.id]
     local unit_text = Mod_Pbg_ScreenName(
@@ -180,7 +168,6 @@ end
 function BuildOrder_Check_Produce_OnBuildItemComplete(event)
     print("[ProduceCheck] Received unit build event: " .. tostring(event))
     if IsInvalidEvent(event) then
-        print("[ProduceCheck] Invalid event received, leaving early")
         return
     end
 
@@ -188,7 +175,6 @@ function BuildOrder_Check_Produce_OnBuildItemComplete(event)
         -- TODO: Might be worth skipping the `state.queued` filter
         if event.player == state.player and not state.queued then
             if Mod_Pbg_MatchesAny(state.pbgs, event.pbg) ~= nil then
-                print("[ProduceCheck] Found matching listener")
                 state.num_built = state.num_built + 1
                 return
             end
@@ -212,14 +198,12 @@ end
 -- Don't need to check built because a unit has to be queued first
 function BuildOrder_Check_Produce_OnEntityCommandIssued(event)
     print("[ProduceCheck] Received entity command event: " .. tostring(event))
-    Mod_Debug_PrintTable(event)
     if IsInvalidEvent(event) then
         return
     end
 
     local owner = Entity_GetPlayerOwner(event.entity)
     if owner == nil or not Entity_HasProductionQueue(event.entity) then
-        print("[AgeUpCheck] Wrong owner for check. leaving early")
         return
     end
 
@@ -241,8 +225,7 @@ function BuildOrder_Check_Produce_OnEntityCommandIssued(event)
             function(groupID, entityIndex, entity)
                 local queue_size = Entity_GetProductionQueueSize(entity)
                 for index = 0, queue_size - 1 do
-                    if QueuedItemIsCheckMatch(entity, index, state.pbgs)
-                    then
+                    if QueuedItemIsCheckMatch(entity, index, state.pbgs) then
                         num_queued = num_queued + 1
                     end
                 end

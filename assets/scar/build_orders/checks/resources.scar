@@ -72,16 +72,12 @@ function BuildOrder_Check_Resources_Activate(obj, player)
 end
 
 function BuildOrder_Check_Resources_Deactivate(obj)
-    if _bo_resources_data[obj.check.id] == nil then
-        return
+    if _bo_resources_data[obj.check.id] ~= nil then
+        _bo_resources_data[obj.check.id] = nil
     end
-
-    print("[ResourceCheck] Deleted check=" .. tostring(obj.check.id))
-    _bo_resources_data[obj.check.id] = nil
 end
 
 function BuildOrder_Check_Resources_GetText(obj)
-    print("[ResourceCheck] Assembling objective text")
     local payload = obj.check.payload
     return Loc_FormatText(
         BoLoc_ModStringId(_COLLECT_RES_FORMAT_ID),
@@ -94,12 +90,10 @@ end
 function BuildOrder_Check_Resources_PollCompletion(obj)
     local res = _bo_resources_data[obj.check.id]
     if res == nil then
-        print("[ResourceCheck] No check tracked for child " .. obj.check.id)
         return false
     end
 
-    local current = Player_GetResource(res.player, res.type)
-    return current >= res.count
+    return Player_GetResource(res.player, res.type) >= res.count
 end
 
 -----------------------------------------------------------------------

@@ -41,6 +41,7 @@ end
 -- TODO: Implement rallypoint check. For now, just auto-complete
 function BuildOrder_Check_Rallypoint_Activate(obj, player)
     obj.completed = true
+    print("[RallyCheck] Registered check=" .. tostring(obj.check.id))
     return true
 end
 

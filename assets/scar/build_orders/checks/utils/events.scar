@@ -1,6 +1,3 @@
-
-import("utils/dynimport.scar")
-
 function BoEvents_GetExecuterOwner(event)
     if event.executer.PlayerID ~= nil then
         return event.executer
