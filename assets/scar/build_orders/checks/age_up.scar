@@ -168,12 +168,6 @@ function BuildOrder_Check_AgeUp_Activate(obj, player)
         return false
     end
 
-    if CheckAlreadyCompleted(check.id) then
-        print("[AgeUpCheck] Already completed check=" .. tostring(check.id))
-        BuildOrder_Objectives_MarkComplete(check.id, true)
-        return true
-    end
-
     print("[AgeUpCheck] Registered check=" .. tostring(obj.check.id))
     _bo_ageup_data = {
         id = check.id,
@@ -182,6 +176,13 @@ function BuildOrder_Check_AgeUp_Activate(obj, player)
         resolver = resolver,
         player = player
     }
+    if CheckAlreadyCompleted(check.id) then
+        print("[AgeUpCheck] Already completed check=" .. tostring(check.id))
+        BuildOrder_Objectives_MarkComplete(check.id, true)
+        _bo_ageup_data = nil
+        return true
+    end
+
     switch_trigger(
         _bo_ageup_data.trigger,
         function()
