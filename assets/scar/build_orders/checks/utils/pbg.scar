@@ -1,3 +1,5 @@
+import("utils/debug.scar")
+
 local _pbg_cache = {}
 
 function Mod_Pbg_Resolve(id, blueprint_getter)
@@ -22,7 +24,18 @@ function Mod_Pbg_ResolveAll(ids, blueprint_getter)
     return pbgs
 end
 
-function Mod_Pbg_Equals(left, right)
+function Mod_Pbg_Equals(left, right, debug)
+    if debug ~= nil then
+        print("[PBG] Comparing PBGs:")
+        print("[PBG] Want: " .. tostring(left))
+        Mod_Debug_PrintTable(left, "  ")
+        print("[PBG] Got: " .. tostring(right))
+        Mod_Debug_PrintTable(right, "  ")
+        print("[PBG] Comparison result: " .. tostring(left ~= nil and right ~= nil
+            and left.PropertyBagGroupID == right.PropertyBagGroupID
+            and left.PropertyBagGroupModPackID == right.PropertyBagGroupModPackID
+            and left.PropertyBagGroupType == right.PropertyBagGroupType))
+    end
     return left ~= nil and right ~= nil
         and left.PropertyBagGroupID == right.PropertyBagGroupID
         and left.PropertyBagGroupModPackID == right.PropertyBagGroupModPackID
@@ -53,6 +66,6 @@ function Mod_Pbg_ScreenName(id, pbg, ui_accessor, player)
         end
     end
 
-    print("Missing localization string for " .. tostring(id))
+    print("[PBG] Missing localization string for " .. tostring(id))
     return BoLoc_String(id)
 end

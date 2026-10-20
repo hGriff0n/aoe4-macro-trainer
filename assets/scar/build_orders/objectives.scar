@@ -25,6 +25,7 @@ _bo_objective_data = {
 }
 
 local _STEP_FORMAT_ID = 144
+local _OPTIONAL_CHECK_FORMAT_ID = 146
 
 -----------------------------------------------------------------------
 -- Helper Functions
@@ -98,9 +99,11 @@ local function AddCheckSubObjective(check, faction)
         return
     end
 
-    -- Now get the text to create the child objective
-    -- TODO: These need to handle `check.optional`
+    -- Now get the text to create the child objective for the check
     local text = handles.format_check_text(child_obj)
+    if child_obj.check.optional then
+        text = Loc_FormatText(BoLoc_ModStringId(_OPTIONAL_CHECK_FORMAT_ID), text)
+    end
     local obj_id = CreateObjective(
         text,
         faction,
@@ -113,7 +116,7 @@ local function AddCheckSubObjective(check, faction)
     print("Created sub-objective " .. tostring(obj_id) .. " for check " .. tostring(child_obj.check.id))
 end
 
-local function GetStepText(step, step_idx)
+local function GetStepTitleText(step, step_idx)
     if step.title ~= nil then
         return BoLoc_String(step.title)
     end
@@ -123,7 +126,7 @@ end
 local function SetCurrentObjective(step, step_idx)
     local faction = Player_GetRaceName(_bo_objective_data.local_player)
     _bo_objective_data.current_objective = CreateObjective(
-        GetStepText(step, step_idx),
+        GetStepTitleText(step, step_idx),
         faction,
         0,
         "buildOrderStep"
@@ -170,14 +173,14 @@ end
 
 function BuildOrder_Objectives_OnInit()
     BuildOrder_Check_AgeUp_Register()
-    -- BuildOrder_Check_Buildings_Register()
+    -- BuildOrder_Check_Buildings_Register() -- currently unimplemented
     BuildOrder_Check_Built_Register()
     BuildOrder_Check_Hints_Register()
     BuildOrder_Check_Produce_Register()
     BuildOrder_Check_Rallypoint_Register()
-    -- BuildOrder_Check_Resources_Register()
-    -- BuildOrder_Check_Units_Register()
-    -- BuildOrder_Check_Upgrades_Register()
+    BuildOrder_Check_Resources_Register()
+    BuildOrder_Check_Units_Register()
+    BuildOrder_Check_Upgrades_Register()
     BuildOrder_Check_Vils_Register()
     print("Registered handlers: " .. Mod_Debug_PrintKeys(_bo_objective_data.registered_checks))
 end
@@ -258,7 +261,7 @@ function BuildOrder_Objectives_CheckCompletion()
         -- Although most checks are done via event responders
         -- a few have to be done through polling
         if child.poll_handle ~= nil then
-            print("Polling check " .. tostring(check_id))
+            -- print("Polling check " .. tostring(check_id))
             local completed = child:poll_handle()
             if completed ~= child.completed then
                 print("Check " .. tostring(check_id) .. " switched status: Was=" .. tostring(child.completed))
@@ -274,12 +277,12 @@ function BuildOrder_Objectives_CheckCompletion()
             local obj_id = _bo_objective_data.check_obj_id_map[check_id]
             if obj_id ~= nil then
                 local state = Obj_GetState(obj_id)
-                print("Checking objective state for completion: " .. tostring(state) .. "-" .. tostring(OS_Complete))
+                -- print("Checking objective state for completion: " .. tostring(state) .. "-" .. tostring(OS_Complete))
                 child.completed = (state == OS_Complete)
             end
         end
 
-        print("Checking completion with optional=" .. tostring(child.check.optional))
+        -- print("Checking completion with optional=" .. tostring(child.check.optional))
         if not child.completed and not child.check.optional then
             step_completed = false
         end

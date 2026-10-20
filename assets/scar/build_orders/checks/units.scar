@@ -5,6 +5,7 @@ import("utils/dynimport.scar")
 
 DynImport("utils/localization.scar")
 DynImport("build_orders/checks/utils/pbg.scar")
+DynImport("utils/debug.scar")
 
 
 -----------------------------------------------------------------------
@@ -12,7 +13,6 @@ DynImport("build_orders/checks/utils/pbg.scar")
 -----------------------------------------------------------------------
 
 _bo_units_data = {
-
 }
 
 local _ACTIVE_UNITS_FORMAT_ID = 167
@@ -55,7 +55,7 @@ function BuildOrder_Check_Units_Validate(check)
 end
 
 function BuildOrder_Check_Units_Activate(obj, player)
-    if _bo_units_data.units[obj.check.id] ~= nil then
+    if _bo_units_data[obj.check.id] ~= nil then
         return false
     end
 
@@ -63,7 +63,7 @@ function BuildOrder_Check_Units_Activate(obj, player)
     local state = {
         player = player,
         pbgs = Mod_Pbg_ResolveAll(payload.ids, BP_GetSquadBlueprint),
-        minimum = payload.count ~= nil and payload.count or 0,
+        minimum = payload.count or 1,
     }
 
     if #state.pbgs == 0 then
@@ -72,34 +72,33 @@ function BuildOrder_Check_Units_Activate(obj, player)
         return false
     end
     print("[UnitCheck] Registered check=" .. tostring(obj.check.id))
-    _bo_units_data.units[obj.check.id] = state
+    _bo_units_data[obj.check.id] = state
     return true
 end
 
 function BuildOrder_Check_Units_Deactivate(obj)
-    if _bo_units_data.units[obj.check.id] == nil then
+    if _bo_units_data[obj.check.id] == nil then
         return
     end
 
     print("[UnitCheck] Requested deactivation of check " .. tostring(obj.check.id))
-    _bo_units_data.units[obj.check.id] = nil
+    _bo_units_data[obj.check.id] = nil
 end
 
 function BuildOrder_Check_Units_GetText(obj)
     print("[UnitCheck] Assembling objective text")
-    local payload = obj.check.payload
-    local units = _bo_units_data.units[obj.check.id]
-    local unit = units ~= nil and units.pbgs[1] or nil
+    local check = _bo_units_data[obj.check.id]
+    local unit = check ~= nil and check.pbgs[1] or nil
     local unit_text = Mod_Pbg_ScreenName(
-        id, unit, BP_GetSquadUIInfo, unit ~= nil and unit.player or nil)
+        id, unit, BP_GetSquadUIInfo, check ~= nil and check.player or nil)
     return Loc_FormatText(
         BoLoc_ModStringId(_ACTIVE_UNITS_FORMAT_ID),
-        Loc_FormatInteger(payload.count or 1),
+        Loc_FormatInteger(check.minimum or 1),
         unit_text
     )
 end
 
--- TODO: Would be ideal if we could do all checks in one go
+-- TODO: Would be ideal if we could do all checks for a step in one go
 function BuildOrder_Check_Units_PollCompletion(obj)
     local state = _bo_units_data[obj.check.id]
     if state == nil then

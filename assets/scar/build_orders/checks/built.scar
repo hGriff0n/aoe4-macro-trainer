@@ -37,7 +37,7 @@ local function DeactivateCheck(check_id)
         and _bo_built_data.event_registered
     then
         print("[BuiltCheck] All checks deactiated, removing listener")
-        Rule_RemoveGlobalEvent(BuildOrder_Check_Built_EventHandle)
+        Rule_RemoveGlobalEvent(BuildOrder_Check_Built_OnConstructionComplete)
         _bo_built_data.event_registered = false
     end
 end
@@ -86,7 +86,7 @@ function BuildOrder_Check_Built_Activate(obj, player)
         print("[BuiltCheck] Adding event listener: check=" .. tostring(obj.check.id))
         _bo_built_data.event_registered = true
         Rule_AddGlobalEvent(
-            BuildOrder_Check_Built_EventHandle,
+            BuildOrder_Check_Built_OnConstructionComplete,
             GE_ConstructionComplete
         )
     end
@@ -116,7 +116,7 @@ end
 
 -- We have one event handle active for all checks in a given step
 -- but we call activate/deactivate for each one
-function BuildOrder_Check_Built_EventHandle(event)
+function BuildOrder_Check_Built_OnConstructionComplete(event)
     print("[BuiltCheck] Received event: " .. tostring(event))
     if IsInvalidEvent(event) then
         print("[BuiltCheck] Invalid event received")

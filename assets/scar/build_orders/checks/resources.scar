@@ -18,6 +18,23 @@ local _COLLECT_RES_FORMAT_ID = 155
 -- Local Helper Functions
 -----------------------------------------------------------------------
 
+local function GetResourceType(resource)
+    if resource == "food" then
+        return RT_Food
+    end
+    if resource == "gold" then
+        return RT_Gold
+    end
+    if resource == "wood" then
+        return RT_Wood
+    end
+    if resource == "stone" then
+        return RT_Stone
+    end
+    return nil
+end
+
+
 -----------------------------------------------------------------------
 -- Mod Interface
 -----------------------------------------------------------------------
@@ -47,7 +64,8 @@ function BuildOrder_Check_Resources_Activate(obj, player)
     print("[ResourceCheck] Registered check=" .. tostring(obj.check.id))
     _bo_resources_data[obj.check.id] = {
         player = player,
-        type = payload.resource,
+        resource = payload.resource,
+        type = GetResourceType(payload.resource),
         count = payload.count
     }
     return true
@@ -68,11 +86,11 @@ function BuildOrder_Check_Resources_GetText(obj)
     return Loc_FormatText(
         BoLoc_ModStringId(_COLLECT_RES_FORMAT_ID),
         Loc_FormatInteger(payload.count),
-        BoLoc_String(_bo_resources_data[obj.check.id].type)
+        BoLoc_String(payload.resource)
     )
 end
 
--- TODO: Would be ideal if we could do all checks in one go
+-- TODO: Would be ideal if we could do all checks for a step in one go
 function BuildOrder_Check_Resources_PollCompletion(obj)
     local res = _bo_resources_data[obj.check.id]
     if res == nil then
@@ -81,8 +99,6 @@ function BuildOrder_Check_Resources_PollCompletion(obj)
     end
 
     local current = Player_GetResource(res.player, res.type)
-    print("[ResourceCheck] Checking " ..
-        res.type .. " storage: Want=" .. tostring(res.count) .. " Got=" .. tostring(current))
     return current >= res.count
 end
 
