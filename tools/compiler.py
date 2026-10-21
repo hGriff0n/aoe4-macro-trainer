@@ -2,12 +2,11 @@ import argparse
 from pathlib import Path
 from typing import List, Optional
 
-import aoe4.build_orders.checks.register_all
-from aoe4.build_orders import datastore, yaml
+import aoe4.build_orders.checks.register_all  # this is required to register the checks
+from aoe4.build_orders import datastore, importer, yaml
 from aoe4.build_orders.datastore import Datastore
 from aoe4.build_orders.types import BuildOrder
 from aoe4 import files
-
 
 _DATASTORE_FILE = 'macroTrainerBuildOrders.rlt'
 
@@ -20,7 +19,7 @@ def _build_order(f: Path) -> Optional[BuildOrder]:
         return None
 
 
-# TODO: Ideally this would be agnostic to also allow urls
+# TODO: Allow for json files as long as they have the yaml schema
 def _comp_build_orders(p: Path) -> List[BuildOrder]:
     if p.is_dir():
         paths = sorted(f for f in p.rglob('*') if f.suffix in ('.yaml', '.yml'))
@@ -32,30 +31,50 @@ def _comp_build_orders(p: Path) -> List[BuildOrder]:
 # TODO: This currently overwrites the datastore on collisions. Do I want this?
 # The previous code instead raised an error, which seems excessive
 # Maybe record any overwritten orders to a temp file?
-def add_to_datastore(args, d: Datastore):
+def add_to_datastore(args, ds: Datastore):
     for path in args.inputs:
         for bo in _comp_build_orders(path):
-            d.build_orders[bo.id] = bo
-    datastore.save_datastore(d)
-    print(f'Saved {len(d.build_orders)} build orders to {d.filepath}')
+            ds.build_orders[bo.id] = bo
+    datastore.save_datastore(ds)
+    print(f'Saved {len(ds.build_orders)} build orders to {ds.filepath}')
 
 
-def list_datastore_build_orders(args, d: Datastore):
+def list_datastore_build_orders(args, ds: Datastore):
     print('Build Orders:')
-    print('\n'.join(f'- {id}' for id in d.build_orders))
+    print('\n'.join(f'- {id}' for id in ds.build_orders))
 
 
-def remove_from_datastore(args, d: Datastore):
+def remove_from_datastore(args, ds: Datastore):
     for id in args.ids:
-        d.build_orders.pop(id, None)
-    datastore.save_datastore(d)
+        ds.build_orders.pop(id, None)
+    datastore.save_datastore(ds)
 
 
 # TODO: Might need to handle invalid chars
 def decomp_datastore(args, ds: Datastore):
     args.output_dir.mkdir(parents=True, exist_ok=True)
     for id in args.ids:
-        yaml.save_build_order(ds.build_orders[id], args.output_dir / f'{id}.yaml')
+        if id in ds.build_orders[id]:
+            yaml.save_build_order(ds.build_orders[id], args.output_dir / f'{id}.yaml')
+        else:
+            print(f'No build order found with id={id}')
+
+
+def import_build_order(args, ds: Datastore):
+    if not (args.files or args.urls):
+        print(f'Must specify either `--files` or `--urls` when importing')
+        return
+
+    for bo in importer.import_build_orders(args.files, args.urls):
+        if bo is None:
+            # TODO: Would be good to provide index
+            print("Failed to parse one build order")
+            continue
+        if args.save_yaml:
+            yaml.save_build_order(bo, args.output_dir / f'{bo.id}.yaml')
+        ds.build_orders[bo.id] = bo
+    datastore.save_datastore(ds)
+    print(f'Saved {len(ds.build_orders)} build orders to {ds.filepath}')
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -77,6 +96,16 @@ def _parser() -> argparse.ArgumentParser:
     extract.set_defaults(func=decomp_datastore)
     extract.add_argument("ids", nargs="+")
     extract.add_argument("--output-dir", type=Path, default=Path.cwd())
+
+    importbo = commands.add_parser("import", help="import build order from RtsOverlay/aoe4guides/etc")
+    importbo.set_defaults(func=import_build_order)
+    # TODO: maybe unify these. At least require that one of them is set
+    importbo.add_argument("--files", nargs="*", type=Path)
+    # TODO: Require urls
+    importbo.add_argument("--urls", nargs="*", type=str)
+    # TODO: Double check syntax for boolean flags
+    importbo.add_argument("--save_yaml", type=bool, default=False)
+    importbo.add_argument("--output-dir", type=Path, default=Path.cwd())
 
     for command in (build, listbo, delete, extract):
         command.add_argument("--profile", type=str, help="User id in case multipler users are signed in on the same machine")
