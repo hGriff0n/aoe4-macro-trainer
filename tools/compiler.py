@@ -12,6 +12,52 @@ from aoe4 import files
 _DATASTORE_FILE = 'macroTrainerBuildOrders.rlt'
 
 
+def _build_order(f: Path) -> Optional[BuildOrder]:
+    try:
+        return yaml.load_build_order(f)
+    except Exception as e:
+        print(f'Error compiling build order at {f}: {e!r}')
+        return None
+
+
+# TODO: Ideally this would be agnostic to also allow urls
+def _comp_build_orders(p: Path) -> List[BuildOrder]:
+    if p.is_dir():
+        paths = sorted(f for f in p.rglob('*') if f.suffix in ('.yaml', '.yml'))
+    else:
+        paths = [p]
+    return [bo for bo in map(_build_order, paths) if bo is not None]
+
+
+# TODO: This currently overwrites the datastore on collisions. Do I want this?
+# The previous code instead raised an error, which seems excessive
+# Maybe record any overwritten orders to a temp file?
+def add_to_datastore(args, d: Datastore):
+    for path in args.inputs:
+        for bo in _comp_build_orders(path):
+            d.build_orders[bo.id] = bo
+    datastore.save_datastore(d)
+    print(f'Saved {len(d.build_orders)} build orders to {d.filepath}')
+
+
+def list_datastore_build_orders(args, d: Datastore):
+    print('Build Orders:')
+    print('\n'.join(f'- {id}' for id in d.build_orders))
+
+
+def remove_from_datastore(args, d: Datastore):
+    for id in args.ids:
+        d.build_orders.pop(id, None)
+    datastore.save_datastore(d)
+
+
+# TODO: Might need to handle invalid chars
+def decomp_datastore(args, ds: Datastore):
+    args.output_dir.mkdir(parents=True, exist_ok=True)
+    for id in args.ids:
+        yaml.save_build_order(ds.build_orders[id], args.output_dir / f'{id}.yaml')
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Manage Macro Trainer build orders")
 
@@ -38,53 +84,11 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-# TODO: Not sure on error handling
-def _build_order(f: Path) -> Optional[BuildOrder]:
-    try:
-        return yaml.load_build_order(f)
-    except Exception as e:
-        print(f'Skipping {f}: {e!r}')
-        return None
-
-# TODO: Ideally this would be agnostic to also allow urls
-def _comp_build_orders(p: Path) -> List[BuildOrder]:
-    if p.is_dir():
-        paths = sorted(f for f in p.rglob('*') if f.suffix in ('.yaml', '.yml'))
-    else:
-        paths = [p]
-    return [bo for bo in map(_build_order, paths) if bo is not None]
-
-# TODO: Handle id collisions
-def add_to_datastore(args, d: Datastore):
-    for path in args.inputs:
-        for bo in _comp_build_orders(path):
-            d.build_orders[bo.id] = bo
-    datastore.save_datastore(d)
-    print(f'Saved {len(d.build_orders)} build orders to {d.filepath}')
-
-def list_datastore_build_orders(args, d: Datastore):
-    print('Build Orders:')
-    print('\n'.join(f'- {id}' for id in d.build_orders))
-
-def remove_from_datastore(args, d: Datastore):
-    for id in args.ids:
-        d.build_orders.pop(id, None)
-    datastore.save_datastore(d)
-
-# TODO: Might need to handle invalid chars
-def decomp_datastore(args, ds: Datastore):
-    args.output_dir.mkdir(parents=True, exist_ok=True)
-    for id in args.ids:
-        yaml.save_build_order(ds.build_orders[id], args.output_dir / f'{id}.yaml')
-
-def _resolve_datastore(args) -> Datastore:
-    dir = files.datastore_dir(profile_id=args.profile)
-    return datastore.load_datastore(dir / _DATASTORE_FILE)
-
 def main():
     args = _parser().parse_args()
-    d = _resolve_datastore(args)
-    args.func(args, d)
+    datastore_dir = files.datastore_dir(profile_id=args.profile)
+    bo_datastore = datastore.load_datastore(datastore_dir / _DATASTORE_FILE)
+    args.func(args, bo_datastore)
 
 
 if __name__ == '__main__':
