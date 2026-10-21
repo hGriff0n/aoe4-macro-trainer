@@ -16,13 +16,13 @@ def read_yaml(yaml_file: Path) -> Dict[str, Any]:
 
 
 # TODO: add error handling if not expected types?
-def load_build_order(bo_yaml: Path) -> BuildOrder:
-    data = read_yaml(bo_yaml)
+def build_order_from_yaml_dict(
+        yaml_repr: Dict[str, Any], default_id: str | None = None) -> BuildOrder:
     bo = BuildOrder(
-        id=data.get('id', bo_yaml.stem), civ=data['civ'],
-        title=data['title'], link=data.get('link'))
+        id=yaml_repr.get('id', default_id), civ=yaml_repr['civ'],
+        title=yaml_repr['title'], link=yaml_repr.get('link'))
 
-    for raw_step in data['steps']:
+    for raw_step in yaml_repr['steps']:
         step = BuildOrderStep(title=raw_step.pop('title', None))
 
         for check, check_data in raw_step.items():
@@ -35,6 +35,11 @@ def load_build_order(bo_yaml: Path) -> BuildOrder:
 
         bo.steps.append(step)
     return bo
+
+
+def load_build_order(bo_yaml: Path) -> BuildOrder:
+    data = read_yaml(bo_yaml, default_id=bo_yaml.stem)
+    return build_order_from_yaml_dict(data)
 
 
 def _step_to_yaml_dict(step: BuildOrderStep) -> Dict[str, Any]:

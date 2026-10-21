@@ -3,31 +3,39 @@ from pathlib import Path
 from typing import List, Optional
 
 import aoe4.build_orders.checks.register_all  # this is required to register the checks
-from aoe4.build_orders import datastore, importer, yaml
+from aoe4.build_orders import datastore, importer, json, yaml
 from aoe4.build_orders.datastore import Datastore
 from aoe4.build_orders.types import BuildOrder
 from aoe4 import files
 
+
 _DATASTORE_FILE = 'macroTrainerBuildOrders.rlt'
+_ALLOWED_SUFFIXES = (".yaml", ".yml", ".json")
 
 
 def _build_order(f: Path) -> Optional[BuildOrder]:
     try:
-        return yaml.load_build_order(f)
+        if f.suffix in (".yaml", "yml"):
+            return yaml.load_build_order(f)
+        if f.suffix in (".json"):
+            data = json.read_json(f)
+            return yaml.build_order_from_yaml_dict(data, default_id=f.stem)
+        return None
     except Exception as e:
         print(f'Error compiling build order at {f}: {e!r}')
         return None
 
 
-# TODO: Allow for json files as long as they have the yaml schema
 def _comp_build_orders(p: Path) -> List[BuildOrder]:
+    paths = []
     if p.is_dir():
-        paths = sorted(f for f in p.rglob('*') if f.suffix in ('.yaml', '.yml'))
-    else:
+        paths = sorted(f for f in p.rglob('*') if f.suffix in _ALLOWED_SUFFIXES)
+    elif p.suffix in _ALLOWED_SUFFIXES:
         paths = [p]
     return [bo for bo in map(_build_order, paths) if bo is not None]
 
 
+# TODO: Add a dry_run mode
 # TODO: This currently overwrites the datastore on collisions. Do I want this?
 # The previous code instead raised an error, which seems excessive
 # Maybe record any overwritten orders to a temp file?
