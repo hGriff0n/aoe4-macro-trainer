@@ -9,11 +9,15 @@ from aoe4.build_orders.types import BuildOrder, BuildOrderStep, CheckRegistry
 _registered_checks = CheckRegistry()
 
 
+# TODO: Do I need to add error handling? like with json.py
+def read_yaml(yaml_file: Path) -> Dict[str, Any]:
+    with yaml_file.open('r', encoding='utf-8') as f:
+        return yaml.safe_load(f)
+
+
 # TODO: add error handling if not expected types?
 def load_build_order(bo_yaml: Path) -> BuildOrder:
-    with bo_yaml.open('r', encoding='utf-8') as f:
-        data = yaml.safe_load(f)
-
+    data = read_yaml(bo_yaml)
     bo = BuildOrder(
         id=data.get('id', bo_yaml.stem), civ=data['civ'],
         title=data['title'], link=data.get('link'))
