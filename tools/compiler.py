@@ -1,6 +1,6 @@
 import argparse
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 import aoe4.build_orders.checks.register_all  # this is required to register the checks
 from aoe4.build_orders import datastore, importer, json, yaml
@@ -13,11 +13,16 @@ _DATASTORE_FILE = 'macroTrainerBuildOrders.rlt'
 _ALLOWED_SUFFIXES = (".yaml", ".yml", ".json")
 
 
+def _file_ext(p: Path) -> str:
+    return p.suffix.lower()
+
+
 def _build_order(f: Path) -> Optional[BuildOrder]:
     try:
-        if f.suffix in (".yaml", "yml"):
+        ext = _file_ext(f)
+        if ext in (".yaml", "yml"):
             return yaml.load_build_order(f)
-        if f.suffix in (".json"):
+        if ext in (".json"):
             data = json.read_json(f)
             return yaml.build_order_from_yaml_dict(data, default_id=f.stem)
         return None
@@ -29,22 +34,34 @@ def _build_order(f: Path) -> Optional[BuildOrder]:
 def _comp_build_orders(p: Path) -> List[BuildOrder]:
     paths = []
     if p.is_dir():
-        paths = sorted(f for f in p.rglob('*') if f.suffix in _ALLOWED_SUFFIXES)
-    elif p.suffix in _ALLOWED_SUFFIXES:
+        paths = sorted(f for f in p.rglob('*') if _file_ext(f) in _ALLOWED_SUFFIXES)
+    elif _file_ext(p) in _ALLOWED_SUFFIXES:
         paths = [p]
     return [bo for bo in map(_build_order, paths) if bo is not None]
 
 
-# TODO: Add a dry_run mode
+def _add_bo_respecting_dry_run(ds: Datastore, bo: BuildOrder, dry_run: bool):
+    if not dry_run:
+        ds.build_orders[bo.id] = bo
+
+    elif bo.id in ds.build_orders:
+        print(f"(*) Overwritting/updating build order `{bo.id}`")
+        # TODO: Report what the diffs are???
+
+    else:
+        print(f"(+) Added new build order `{bo.id}`")
+
+
 # TODO: This currently overwrites the datastore on collisions. Do I want this?
 # The previous code instead raised an error, which seems excessive
 # Maybe record any overwritten orders to a temp file?
 def add_to_datastore(args, ds: Datastore):
     for path in args.inputs:
         for bo in _comp_build_orders(path):
-            ds.build_orders[bo.id] = bo
-    datastore.save_datastore(ds)
-    print(f'Saved {len(ds.build_orders)} build orders to {ds.filepath}')
+            _add_bo_respecting_dry_run(ds, bo, args.dry_run)
+
+    if not args.dry_run:
+        datastore.save_datastore(ds)
 
 
 def list_datastore_build_orders(args, ds: Datastore):
@@ -53,8 +70,17 @@ def list_datastore_build_orders(args, ds: Datastore):
 
 
 def remove_from_datastore(args, ds: Datastore):
+    if args.dry_run:
+        for id in args.ids:
+            if id in ds.build_orders:
+                print(f'(-) Deleted build order `{id}`')
+            else:
+                print(f'(?) No build order found with id={id}')
+        return
+
     for id in args.ids:
         ds.build_orders.pop(id, None)
+
     datastore.save_datastore(ds)
 
 
@@ -74,15 +100,12 @@ def import_build_order(args, ds: Datastore):
         return
 
     for bo in importer.import_build_orders(args.files, args.urls):
-        if bo is None:
-            # TODO: Would be good to provide index
-            print("Failed to parse one build order")
-            continue
         if args.save_yaml:
             yaml.save_build_order(bo, args.output_dir / f'{bo.id}.yaml')
-        ds.build_orders[bo.id] = bo
-    datastore.save_datastore(ds)
-    print(f'Saved {len(ds.build_orders)} build orders to {ds.filepath}')
+        _add_bo_respecting_dry_run(ds, bo, args.dry_run)
+
+    if not args.dry_run:
+        datastore.save_datastore(ds)
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -92,6 +115,7 @@ def _parser() -> argparse.ArgumentParser:
     build = commands.add_parser("build", help="compile YAML into the datastore")
     build.set_defaults(func=add_to_datastore)
     build.add_argument("inputs", nargs="*", type=Path, default=[Path("build_orders")])
+    build.add_argument("--dry_run", action="store_true")
 
     listbo = commands.add_parser("list", help="list compiled build orders")
     listbo.set_defaults(func=list_datastore_build_orders)
@@ -99,6 +123,7 @@ def _parser() -> argparse.ArgumentParser:
     delete = commands.add_parser("delete", help="delete compiled build orders")
     delete.set_defaults(func=remove_from_datastore)
     delete.add_argument("ids", nargs="+")
+    delete.add_argument("--dry_run", action="store_true")
 
     extract = commands.add_parser("extract", help="extract normalized YAML")
     extract.set_defaults(func=decomp_datastore)
@@ -111,8 +136,8 @@ def _parser() -> argparse.ArgumentParser:
     importbo.add_argument("--files", nargs="*", type=Path)
     # TODO: Require urls
     importbo.add_argument("--urls", nargs="*", type=str)
-    # TODO: Double check syntax for boolean flags
-    importbo.add_argument("--save_yaml", type=bool, default=False)
+    importbo.add_argument("--save_yaml", action="store_true")
+    importbo.add_argument("--dry_run", action="store_true")
     importbo.add_argument("--output-dir", type=Path, default=Path.cwd())
 
     for command in (build, listbo, delete, extract):

@@ -92,3 +92,5 @@ def save_datastore(ds: Datastore):
     with ds.filepath.open('w', encoding='utf-8') as f:
         f.write(_PREFIX)
         f.write(luadata.serialize({ds.filepath.stem: data}, indent='    '))
+
+    print(f'Saved {len(ds.build_orders)} build orders to {ds.filepath}')

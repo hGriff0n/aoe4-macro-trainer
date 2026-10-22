@@ -14,16 +14,10 @@ from aoe4.build_orders.checks.other import HintCheck
 from aoe4.build_orders.checks.vils import VilCheck
 from aoe4.constants import CIVILIZATION_NAME_TO_ID_MAP
 
-## Two sources:
-## - RTS Overlay .bo file
-## - aoe4guides
-##   - url
-##   - json
 
 ###
 # Pull/Read Overlay files
 ###
-
 def _parse_url_into_parts(url: str) -> List[str]:
     try:
         parsed = urlsplit(url)
@@ -42,6 +36,7 @@ def _parse_url_into_parts(url: str) -> List[str]:
             f"{url}: expected an HTTPS aoe4guides.com build URL")
 
     return [p for p in parsed.path.split("/") if p]
+
 
 # Parses the provided aoe4guides url to extract the build_id
 def _parse_aoe4guide_url(url: str) -> str:
@@ -215,10 +210,20 @@ def _compile_step(step: Dict[str, Any]) -> BuildOrderStep:
             vils[res] = count
 
     notes = [_render_note(n) for n in step.get("notes", [])]
+    # TODO: Potentially extract check information (compiler:252)
+    checks = _try_extract_from_note(notes)
+    ## TODO(pr#18): Add `import_metadata{rule_set, extractions, diagnostics}`
     return BuildOrderStep(
-        checks=[HintCheck(hints=notes)] + (vils and [VilCheck(resources=vils)] or []),
+        checks=checks + [HintCheck(hints=notes)] + (
+            vils and [VilCheck(resources=vils)] or []),
         ideal_timing=ideal_timing
     )
+
+
+# TODO: Ai version has accumulating extraction  metadata in final build order
+# diagnostic was only set once
+def _try_extract_from_note(notes: List[str]) -> List[BuildOrderStep]:
+    return []
 
 
 def _compile_overlay(o: Dict[str, Any]) -> BuildOrder:
@@ -229,7 +234,6 @@ def _compile_overlay(o: Dict[str, Any]) -> BuildOrder:
     # TODO: Collect metadata (description, author, video, season, map, strategy)
     metadata: Dict[str, Any] = {}
 
-    # TODO: Cast to BuildOrder type
     title = o["name"]
     civ = _internal_civ_id(o["civilization"])
     return BuildOrder(
@@ -245,9 +249,22 @@ def _compile_overlay(o: Dict[str, Any]) -> BuildOrder:
 # Technically, this only works on the "overlay" format from the RTSOverlay
 # TODO: Crashes if any errors, should probably report failures and do partial success
 def import_build_orders(files: List[Path], urls: List[str]) -> List[BuildOrder]:
-    # TODO: Do we want to enforce `*.bo` and `*.json` paths?
-    overlays = [read_json(f) for f in files] + [_fetch_url(u) for u in urls]
-
-    return [
-        _compile_overlay(o) for o in overlays if o is not None
+    overlays = [
+        (f, read_json(f)) for f in files if f.suffix.lower() in (".bo", ".json")
+    ] + [
+        (u, _fetch_url(u)) for u in urls
     ]
+
+    bos = []
+    for src, o in overlays:            
+        if o is None:
+            print(f"Failed to fetch build order from {src}")
+            continue
+
+        bo = _compile_overlay(o)
+        if bo is None:
+            print(f"Failed to load build order from {src}")
+        else:
+            bos.append(bo)
+
+    return bos
