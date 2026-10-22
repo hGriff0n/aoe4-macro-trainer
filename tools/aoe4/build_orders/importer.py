@@ -126,73 +126,58 @@ def _fetch_url(url: AoE4Url) -> Dict[str, Any]:
 ###
 # Translating HTML/WEBP icons to renderable text
 ###
-# TODO: Probably also need to handle unit tokens but ai didn't find any hardcoded
 OVERLAY_NOTE_TOKEN = re.compile(r"@(?P<token>[^@\s/]+/(?P<name>[^@\s/]+))\.webp@")
-OVERLAY_FLAG_ICON = re.compile(r"civilization_flag/(?P<civ>[a-z][a-z][a-z])")
-OVERLAY_RESOURCE_ICON = re.compile(r"resource/(?P<resource>\w)")
-OVERLAY_TECH_ICON = re.compile(r"technology[^/]*/(?P<tech>\w)")
 
-# TODO: Need to find more examples (and for `resource_icons` and `tech_icons`)
-_KNOWN_CIV_ICONS_TEXT_MAP = {
-    "ayy": "Ayyubids",
-    "eng": "English",
-    "hos": "House of Lancaster",
-    "mon": "Mongols"
+# The default icon -> text translation is just replace(`-`, `_`) so most cases
+# are handled automatically. For the handful that aren't, we consult this table
+_KNOWN_ICON_TEXT_MAP = {
+    "units": {},
+    "building": {},
+    "resource": {
+        "berrybush": "berries",
+        "gaiatreeprototypetree": "tree",
+    },
+    "tech": {
+        "survival-techniques": "survival_techniques",
+        "safepassage": "safe_passage",
+    },
+    "civs": {
+        "ayy": "ayyubids",
+        "eng": "english",
+        "hos": "house_of_lancaster",
+        "mon": "mongols"
+    }
 }
-def _try_civ_flag_icon_to_text(token: str) -> str | None:
-    m = OVERLAY_FLAG_ICON.match(token)
-    if not m:
-        return None
-
-    civ = m.group("civ")
-    return _KNOWN_CIV_ICONS_TEXT_MAP.get(civ, civ.capitalize())
 
 
-_KNOWN_RESOURCE_ICONS_TEXT_MAP = {
-    "berrybush": "Berry Bush",
-    "gaiatreeprototypetree": "Tree"
-}
-def _try_resource_icon_to_text(token: str) -> str | None:
-    m = OVERLAY_RESOURCE_ICON.match(token)
-    if not m:
-        return None
-
-    res = m.group("resource")
-    return _KNOWN_RESOURCE_ICONS_TEXT_MAP.get(res, res.capitalize())
+def _default_overlay_icon_to_text(icon: str) -> str:
+    return icon.replace("-", "_")
 
 
-_KNOWN_TECH_ICONS_TEXT_MAP = {
-    "safepassage": "Safe Passage"
-}
-def _try_tech_icon_to_text(token: str) -> str | None:
-    m = OVERLAY_TECH_ICON.match(token)
-    if not m:
-        return None
-
-    tech = m.group("tech")
-    return _KNOWN_TECH_ICONS_TEXT_MAP.get(tech, tech.capitalize())
+def _try_icon_lookup_to_text(token: str, known_special: Dict[str, str]) -> str:
+    if token in known_special:
+        return known_special[token]
+    return _default_overlay_icon_to_text(token)
 
 
 def _convert_overlay_icon_to_text(token: str, name: str) -> str:
-    civ = _try_civ_flag_icon_to_text(token)
-    if civ:
-        return civ
-    res = _try_resource_icon_to_text(token)
-    if res:
-        return res
-    tech = _try_tech_icon_to_text(token)
-    if tech:
-        return tech
-    return name.replace("-", " ").replace("_", " ").title()
+    if token.startswith("unit"):
+        return _try_icon_lookup_to_text(name, _KNOWN_ICON_TEXT_MAP["units"])
+    if token.startswith("resource"):
+        return _try_icon_lookup_to_text(name, _KNOWN_ICON_TEXT_MAP["resource"])
+    if token.startswith("building"):
+        return _try_icon_lookup_to_text(name, _KNOWN_ICON_TEXT_MAP["building"])
+    if token.startswith("civilization_flag"):
+        return _try_icon_lookup_to_text(name, _KNOWN_ICON_TEXT_MAP["civ"])
+    if token.startswith("technology"):
+        return _try_icon_lookup_to_text(name, _KNOWN_ICON_TEXT_MAP["tech"])
+    return _default_overlay_icon_to_text(name)
 
 
 def _render_note(n: str) -> str:
     decoded = html.unescape(n)
     def _readable_token(m: re.Match[str]) -> str:
-        name = m.group("name")
-        if name.startswith("resource_"):
-            name = name.removeprefix("resource_")
-        label = _convert_overlay_icon_to_text(m.group("token"), name)
+        label = _convert_overlay_icon_to_text(m.group("token"), m.group("name"))
         if (
             m.start() > 0
             and (decoded[m.start() - 1].isalnum()

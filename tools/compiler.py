@@ -24,6 +24,7 @@ def _build_order(f: Path) -> Optional[BuildOrder]:
             return yaml.load_build_order(f)
         if ext in (".json"):
             data = json.read_json(f)
+            # TODO: ai used `identities` in `_compile_order`
             return yaml.build_order_from_yaml_dict(data, default_id=f.stem)
         return None
     except Exception as e:
@@ -89,6 +90,7 @@ def decomp_datastore(args, ds: Datastore):
     args.output_dir.mkdir(parents=True, exist_ok=True)
     for id in args.ids:
         if id in ds.build_orders[id]:
+            # TODO: ai used `identities` in `order_to_yaml`
             yaml.save_build_order(ds.build_orders[id], args.output_dir / f'{id}.yaml')
         else:
             print(f'No build order found with id={id}')

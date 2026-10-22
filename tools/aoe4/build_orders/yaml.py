@@ -9,12 +9,22 @@ from aoe4.build_orders.types import BuildOrder, BuildOrderStep, CheckRegistry
 _registered_checks = CheckRegistry()
 
 
-# TODO: Do I need to add error handling? like with json.py
+# TODO: Do I need to add error handling?
 def read_yaml(yaml_file: Path) -> Dict[str, Any]:
     with yaml_file.open('r', encoding='utf-8') as f:
         return yaml.safe_load(f)
 
 
+# TODO: ai used `identities` in `_compile_order`
+# - units -> _resolve_counted_squad
+# - buildings -> _resolve_identity_payload
+# - produce -> _resolve_counted_squad -> _resolve_squad_family_payload -> IdentityCatalog:resolve_squad_family
+# - upgrades -> _resolve_identity_payload
+# - age_up -> _structure_checks -> _resolve_identity_payload -> IdentityCatalog:resolve
+# - built -> _structure_checks -> _resolve_identity_payload
+#
+# Identities just looks to be a mapping from human ids to game ids
+# I'm not sure how it goes from `spearman2` to `spearman though`
 # TODO: add error handling if not expected types?
 def build_order_from_yaml_dict(
         yaml_repr: Dict[str, Any], default_id: str | None = None) -> BuildOrder:
@@ -60,6 +70,7 @@ def _step_to_yaml_dict(step: BuildOrderStep) -> Dict[str, Any]:
     return data
 
 
+# TODO: ai used `identities` in `order_to_yaml`
 def save_build_order(bo: BuildOrder, path: Path):
     data = {
         'id': bo.id,
