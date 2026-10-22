@@ -91,7 +91,7 @@ def _extract_http_error_reason(exc: HTTPError) -> str:
         return "request failed"
 
 
-def _fetch_url(url: AoE4Url) -> Dict[str, Any]:
+def _fetch_url(url: AoE4Url) -> Dict[str, Any] | None:
     request = Request(
         f"https://aoe4guides.com/api/builds/{url.build_id}?overlay=true",
         headers={"Accept": "application/json", "User-Agent": "aoe4-macro-trainer"}
@@ -100,17 +100,17 @@ def _fetch_url(url: AoE4Url) -> Dict[str, Any]:
         body = _make_aoe4_request(request, url.orig)
     except HTTPError as exc:
         reason = _extract_http_error_reason(exc)
-        raise ValueError(
-            f"{url.orig}: aoe4guides {reason} (HTTP {exc.code})") from exc
+        print(f"{url.orig}: aoe4guides {reason} (HTTP {exc.code})")
+        return None
     except URLError as exc:
-        raise ValueError(
-            f"{url.orig}: unable to reach aoe4guides: {exc.reason}") from exc
+        print(f"{url.orig}: unable to reach aoe4guides: {exc.reason}")
+        return None
     except UnicodeDecodeError as exc:
-        raise ValueError(
-            f"{url.orig}: aoe4guides returned non-UTF-8 data: {exc}") from exc
+        print(f"{url.orig}: aoe4guides returned non-UTF-8 data: {exc!r}")
+        return None
     except (HTTPException, IncompleteRead) as exc:
-        raise ValueError(
-            f"{url.orig}: aoe4guides response was interrupted: {exc}") from exc
+        print(f"{url.orig}: aoe4guides response was interrupted: {exc!r}")
+        return None
 
     try:
         overlay = parse_json(body)
@@ -119,8 +119,8 @@ def _fetch_url(url: AoE4Url) -> Dict[str, Any]:
         overlay["source"] = request.full_url
         return overlay
     except ValueError as exc:
-        raise ValueError(
-            f"{url.orig}: aoe4guides returned invalid Json: {exc}") from exc
+        print(f"{url.orig}: aoe4guides returned invalid Json: {exc!r}")
+        return None
 
 
 ###
@@ -130,6 +130,7 @@ OVERLAY_NOTE_TOKEN = re.compile(r"@(?P<token>[^@\s/]+/(?P<name>[^@\s/]+))\.webp@
 
 # The default icon -> text translation is just replace(`-`, `_`) so most cases
 # are handled automatically. For the handful that aren't, we consult this table
+# Interestingly, there's a "rally" resource
 _KNOWN_ICON_TEXT_MAP = {
     "units": {},
     "building": {},
@@ -164,11 +165,12 @@ def _convert_overlay_icon_to_text(token: str, name: str) -> str:
     if token.startswith("unit"):
         return _try_icon_lookup_to_text(name, _KNOWN_ICON_TEXT_MAP["units"])
     if token.startswith("resource"):
-        return _try_icon_lookup_to_text(name, _KNOWN_ICON_TEXT_MAP["resource"])
+        return _try_icon_lookup_to_text(
+            name.replace("resource_", ""), _KNOWN_ICON_TEXT_MAP["resource"])
     if token.startswith("building"):
         return _try_icon_lookup_to_text(name, _KNOWN_ICON_TEXT_MAP["building"])
     if token.startswith("civilization_flag"):
-        return _try_icon_lookup_to_text(name, _KNOWN_ICON_TEXT_MAP["civ"])
+        return _try_icon_lookup_to_text(name, _KNOWN_ICON_TEXT_MAP["civs"])
     if token.startswith("technology"):
         return _try_icon_lookup_to_text(name, _KNOWN_ICON_TEXT_MAP["tech"])
     return _default_overlay_icon_to_text(name)
@@ -217,9 +219,9 @@ def _compile_step(step: Dict[str, Any]) -> BuildOrderStep:
         if count > 0:
             vils[res] = count
 
-    notes = [_render_note(n) for n in step.get("notes", [])]
+    notes = list(filter(lambda n: n, (_render_note(n) for n in step.get("notes", []))))
     return BuildOrderStep(
-        checks=[HintCheck(hints=notes)] + (
+        checks=(notes and [HintCheck(hints=notes)] or []) + (
             vils and [VilCheck(resources=vils)] or []),
         ideal_timing=ideal_timing
     )
@@ -230,7 +232,7 @@ def _collect_metadata(o: Dict[str, Any]) -> Dict[str, Any]:
         "author", "video", "description", "season",
         "map", "strategy", "source", "link"
     )
-    return {k: o[k] for k in _META_FIELDS if k in o}
+    return {k: o[k] for k in _META_FIELDS if k in o and o[k]}
 
 
 def _compile_overlay(o: Dict[str, Any], link: str | None = None) -> BuildOrder:
@@ -251,25 +253,25 @@ def _compile_overlay(o: Dict[str, Any], link: str | None = None) -> BuildOrder:
 
 
 # Technically, this only works on the "overlay" format from the RTSOverlay
-# TODO: Crashes if any errors, should probably report failures and do partial success
 def import_build_orders(files: List[Path], urls: List[AoE4Url]) -> List[BuildOrder]:
     overlays = [
-        (f, read_json(f)) for f in files if f.suffix.lower() in (".bo", ".json")
+        (f, read_json(f)) for f in (files or [])
+            if f.suffix.lower() in (".bo", ".json")
     ] + [
-        (u, _fetch_url(u)) for u in urls
+        (u, _fetch_url(u)) for u in (urls or [])
     ]
 
     bos = []
     for src, o in overlays:            
         if o is None:
-            print(f"Failed to fetch build order from {src}")
+            print(f"(!) Failed to fetch build order from {src}")
             continue
-
         if isinstance(src, AoE4Url):
             o["link"] = src.orig
+
         bo = _compile_overlay(o)
         if bo is None:
-            print(f"Failed to load build order from {src}")
+            print(f"(!) Failed to load build order from {src}")
         else:
             bos.append(bo)
 

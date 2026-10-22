@@ -143,7 +143,7 @@ def _parser() -> argparse.ArgumentParser:
     importbo.add_argument("--dry_run", action="store_true")
     importbo.add_argument("--output-dir", type=Path, default=Path.cwd())
 
-    for command in (build, listbo, delete, extract):
+    for command in (build, listbo, delete, extract, importbo):
         command.add_argument("--profile", type=str, help="User id in case multipler users are signed in on the same machine")
 
     return parser
