@@ -163,7 +163,7 @@ function BuildOrder_Check_AgeUp_Activate(obj, player)
     local resolver = switch_trigger(check.payload.trigger, BP_GetUpgradeBlueprint, BP_GetEntityBlueprint)
     local pbgs = Mod_Pbg_ResolveAll(ids, resolver)
     if pbgs == nil or #pbgs == 0 then
-        -- TODO: join instead
+        -- TODO: table.concat instead
         print("[AgeUpCheck] Failed to resolve pbg: check=" .. tostring(check.id) .. " pbg=" .. tostring(ids))
         return false
     end

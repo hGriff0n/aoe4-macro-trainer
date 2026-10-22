@@ -54,7 +54,6 @@ For events:
 
 Every handler test includes an opponent event or opponent-owned matching entity and asserts that it cannot change the objective.
 
-<!-- TODO: Use for todo? -->
 ## Completion APIs
 
 Use the state-setting API for both latched and reversible checks:

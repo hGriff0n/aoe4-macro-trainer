@@ -32,25 +32,6 @@ import("utils/dynimport.scar")
 DynImport("simspeed/submod.scar")
 DynImport("build_orders/submod.scar")
 
--- TODO: Reworking local imports
--- I think there was something in the chat logs about these imports needing to be in the top-level file?
--- import("build_orders/datastore.scar")
--- import("utils/localization.scar")
--- import("build_orders/objective_engine.scar")
--- import("build_orders/selector_ui.scar")
--- import("build_orders/startup.scar")
--- import("build_orders/check_support.scar")
--- import("build_orders/checks/hints.scar")
--- import("build_orders/checks/rallypoint.scar")
--- import("build_orders/checks/resources.scar")
--- import("build_orders/checks/upgrades.scar")
--- import("build_orders/checks/units.scar")
--- import("build_orders/checks/produce.scar")
--- import("build_orders/checks/age_up.scar")
--- import("build_orders/checks/built.scar")
--- import("build_orders/checks/buildings.scar")
--- import("build_orders/checks/vils.scar")
-
 
 -----------------------------------------------------------------------
 -- Modding Required Functions
@@ -75,7 +56,6 @@ end
 -- Called on match initialization before handing control to the player
 function Mod_OnInit()
 	local options_selected = {}
-	-- TODO: Is this required
 	Setup_GetWinConditionOptions(options_selected)
 	Slowdown_InitFromSettings(options_selected)
 	BuildOrder_OnInit()

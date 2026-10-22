@@ -293,13 +293,14 @@ steps:
     def test_stores_optional_source_link(self) -> None:
         order = self.compile({"opening.yaml": """civ: English
 title: 2 TC
-link: https://example.com/build-orders/english-2-tc?version=2#opening
+meta:
+  link: https://example.com/build-orders/english-2-tc?version=2#opening
 steps:
   - hints: [Keep producing villagers]
 """}).build_orders[0]
 
         self.assertEqual(
-            order.link,
+            order.metadata["link"],
             "https://example.com/build-orders/english-2-tc?version=2#opening",
         )
 
@@ -310,15 +311,7 @@ steps:
   - hints: [Keep producing villagers]
 """}).build_orders[0]
 
-        self.assertIsNone(order.link)
-
-    def test_rejects_invalid_source_links(self) -> None:
-        for link in ('""', "example.com/build-order", "ftp://example.com/build-order"):
-            with self.subTest(link=link):
-                self.assert_invalid(
-                    f"civ: english\ntitle: x\nlink: {link}\nsteps:\n  - hints: [x]\n",
-                    "file.yaml: link: must be an absolute HTTP(S) URL",
-                )
+        self.assertIsNone(order.metadata.get("link"))
 
     def test_vils_mapping_compiles_one_aggregate_descriptor_in_resource_order(self) -> None:
         catalog = self.compile({"opening.yaml": """civ: English

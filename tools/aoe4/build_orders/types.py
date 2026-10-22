@@ -52,7 +52,8 @@ BuildOrderCheck = TypeVar("BuildOrderCheck", bound=BuildOrderCheckBase)
 @dataclass
 class BuildOrderStep:
     title: Optional[str] = None
-    checks: List[BuildOrderCheckBase] = field(default_factory=list)
+    checks: List[BuildOrderCheckBase] = field(default_factory=list),
+    ideal_timing: Optional[int] = None
 
 
 @dataclass
@@ -61,7 +62,7 @@ class BuildOrder:
     civ: str
     title: str
     steps: List[BuildOrderStep] = field(default_factory=list)
-    link: Optional[str] = None
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
 
 # Every "check" will export this factory
@@ -118,7 +119,6 @@ def check_factory(cls: type[BuildOrderCheck]) -> type[BuildOrderCheck]:
     return cls
 
 
-# TODO: Not sure if this singleton works correctly
 class CheckRegistry(object):
     _instance = None
 

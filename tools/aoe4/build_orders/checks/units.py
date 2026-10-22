@@ -29,7 +29,7 @@ class UnitCheck(BuildOrderCheckBase):
             'count': self.count,
         }]
 
-    # TODO: Validate ids are valid for civ
+    # TODO: Validate that the BuildOrder's civ can actually build the ids
     @staticmethod
     def validate_civ_id_access(ids: List[str], civ: str):
         pass

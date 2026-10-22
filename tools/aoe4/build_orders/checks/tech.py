@@ -10,7 +10,6 @@ from aoe4.constants import *
 @check_factory
 @dataclass
 class UpgradeCheck(BuildOrderCheckBase):
-    # TODO: Get data
     tech_id: str = ''
     queued: bool = False
 
@@ -33,7 +32,7 @@ class UpgradeCheck(BuildOrderCheckBase):
     def key() -> str:
         return "upgrades"
 
-    # TODO: Validate ids are valid for civ
+    # TODO: Validate that the BuildOrder's civ can actually research the ids
     @staticmethod
     def validate_civ_id_access(ids: List[str], civ: str):
         pass

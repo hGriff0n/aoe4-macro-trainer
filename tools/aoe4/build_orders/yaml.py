@@ -9,16 +9,22 @@ from aoe4.build_orders.types import BuildOrder, BuildOrderStep, CheckRegistry
 _registered_checks = CheckRegistry()
 
 
+# TODO: Do I need to add error handling? like with json.py
+def read_yaml(yaml_file: Path) -> Dict[str, Any]:
+    with yaml_file.open('r', encoding='utf-8') as f:
+        return yaml.safe_load(f)
+
+
 # TODO: add error handling if not expected types?
-def load_build_order(bo_yaml: Path) -> BuildOrder:
-    with bo_yaml.open('r', encoding='utf-8') as f:
-        data = yaml.safe_load(f)
-
+def build_order_from_yaml_dict(
+        yaml_repr: Dict[str, Any], default_id: str | None = None) -> BuildOrder:
     bo = BuildOrder(
-        id=data.get('id', bo_yaml.stem), civ=data['civ'],
-        title=data['title'], link=data.get('link'))
+        id=yaml_repr.get('id', default_id), civ=yaml_repr['civ'],
+        title=yaml_repr['title'], metadata=yaml_repr.get('meta', {}))
+    if 'link' in yaml_repr:
+        bo.metadata['link'] = yaml_repr['link']
 
-    for raw_step in data['steps']:
+    for raw_step in yaml_repr['steps']:
         step = BuildOrderStep(title=raw_step.pop('title', None))
 
         for check, check_data in raw_step.items():
@@ -31,6 +37,11 @@ def load_build_order(bo_yaml: Path) -> BuildOrder:
 
         bo.steps.append(step)
     return bo
+
+
+def load_build_order(bo_yaml: Path) -> BuildOrder:
+    data = read_yaml(bo_yaml, default_id=bo_yaml.stem)
+    return build_order_from_yaml_dict(data)
 
 
 def _step_to_yaml_dict(step: BuildOrderStep) -> Dict[str, Any]:
@@ -54,10 +65,9 @@ def save_build_order(bo: BuildOrder, path: Path):
         'id': bo.id,
         'civ': bo.civ,
         'title': bo.title,
-        'steps': []
+        'steps': [],
+        'meta': bo.metadata
     }
-    if bo.link:
-        data['link'] = bo.link
     for step in bo.steps:
         data['steps'].append(_step_to_yaml_dict(step))
 

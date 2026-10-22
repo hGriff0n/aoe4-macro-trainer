@@ -32,7 +32,7 @@ class AgeUpCheck(BuildOrderCheckBase):
             data['vils'] = self.vils
         return [data | ids_dict(self.age_ids)]
 
-    # TODO: Validate ids are valid for civ
+    # TODO: Validate that the BuildOrder's civ can actually build/research the ids
     @staticmethod
     def validate_civ_id_access(ids: List[str], civ: str):
         pass
