@@ -74,6 +74,8 @@ def _extract_http_error_reason(exc: HTTPError) -> str:
 
 
 def _fetch_url(url: str) -> Dict[str, Any]:
+    # Need to extract the build_id just in case the provided url doesn't
+    # match the expected API REST endpoint
     build_id = _parse_aoe4guide_url(url)
     # TODO: Validate build id against regex (`re.compile(r"^[A-Za-z0-9_-]+$")`)
 
@@ -210,20 +212,11 @@ def _compile_step(step: Dict[str, Any]) -> BuildOrderStep:
             vils[res] = count
 
     notes = [_render_note(n) for n in step.get("notes", [])]
-    # TODO: Potentially extract check information (compiler:252)
-    checks = _try_extract_from_note(notes)
-    ## TODO(pr#18): Add `import_metadata{rule_set, extractions, diagnostics}`
     return BuildOrderStep(
-        checks=checks + [HintCheck(hints=notes)] + (
+        checks=[HintCheck(hints=notes)] + (
             vils and [VilCheck(resources=vils)] or []),
         ideal_timing=ideal_timing
     )
-
-
-# TODO: Ai version has accumulating extraction  metadata in final build order
-# diagnostic was only set once
-def _try_extract_from_note(notes: List[str]) -> List[BuildOrderStep]:
-    return []
 
 
 def _compile_overlay(o: Dict[str, Any]) -> BuildOrder:
