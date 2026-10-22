@@ -44,7 +44,7 @@ def load_datastore(rt_file: Path) -> Datastore:
 
         for raw_step in raw_bo.get('steps', []):
             step = BuildOrderStep(
-                title=raw_step.get('title'), ideal_timing=raw_step.get('ideal_timing'))
+                title=raw_step.get('title'), ideal_timing=raw_step.get('igt'))
             for check in raw_step.get('checks', []):
                 if check['kind'] in _registered_checks:
                     step.checks.append(
@@ -65,6 +65,8 @@ def _build_step_to_datastore(step: BuildOrderStep) -> Dict[str, Any]:
     }
     if step.title:
         data['title'] = step.title
+    if step.ideal_timing:
+        data['igt'] = step.ideal_timing
     for check in step.checks:
         data['checks'].extend(
             _registered_checks[check.key()].to_datastore(check))

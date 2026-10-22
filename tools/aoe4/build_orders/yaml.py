@@ -35,7 +35,8 @@ def build_order_from_yaml_dict(
         bo.metadata['link'] = yaml_repr['link']
 
     for raw_step in yaml_repr['steps']:
-        step = BuildOrderStep(title=raw_step.pop('title', None))
+        step = BuildOrderStep(
+            title=raw_step.pop('title', None), ideal_timing=raw_step.pop('igt', None))
 
         for check, check_data in raw_step.items():
             if check in _registered_checks:
@@ -58,6 +59,8 @@ def _step_to_yaml_dict(step: BuildOrderStep) -> Dict[str, Any]:
     data = {}
     if step.title:
         data['title'] = step.title
+    if step.ideal_timing:
+        data['igt'] = step.ideal_timing
     for check in step.checks:
         payload = _registered_checks[check.key()].to_yaml(check)
         # Datastore splits checks up, so merge them back under one key
