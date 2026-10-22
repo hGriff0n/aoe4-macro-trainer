@@ -62,7 +62,6 @@ class BuildOrder:
     civ: str
     title: str
     steps: List[BuildOrderStep] = field(default_factory=list)
-    link: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 

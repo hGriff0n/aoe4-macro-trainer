@@ -241,24 +241,27 @@ def _compile_step(step: Dict[str, Any]) -> BuildOrderStep:
 
 
 def _collect_metadata(o: Dict[str, Any]) -> Dict[str, Any]:
-    _META_FIELDS = ("author", "video", "description", "season", "map", "strategy")
+    _META_FIELDS = (
+        "author", "video", "description", "season",
+        "map", "strategy", "source", "link"
+    )
     return {k: o[k] for k in _META_FIELDS if k in o}
 
 
-def _compile_overlay(o: Dict[str, Any]) -> BuildOrder:
+def _compile_overlay(o: Dict[str, Any], link: str | None = None) -> BuildOrder:
     bo = o.get("build_order", [])
     if not isinstance(bo, list):
         raise ValueError("Overlay.build_order must be a list")
 
     title = o["name"]
     civ = _internal_civ_id(o["civilization"])
+    meta = _collect_metadata(o)
     return BuildOrder(
         id=f"{civ}.{title}",
         civ=civ,
         title=title,
         steps=[_compile_step(step) for step in bo],
-        link=o.get("source"),
-        metadata=_collect_metadata(o)
+        metadata=meta
     )
 
 
@@ -277,6 +280,8 @@ def import_build_orders(files: List[Path], urls: List[AoE4Url]) -> List[BuildOrd
             print(f"Failed to fetch build order from {src}")
             continue
 
+        if isinstance(src, AoE4Url):
+            o["link"] = src.orig
         bo = _compile_overlay(o)
         if bo is None:
             print(f"Failed to load build order from {src}")

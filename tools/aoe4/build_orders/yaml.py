@@ -20,7 +20,9 @@ def build_order_from_yaml_dict(
         yaml_repr: Dict[str, Any], default_id: str | None = None) -> BuildOrder:
     bo = BuildOrder(
         id=yaml_repr.get('id', default_id), civ=yaml_repr['civ'],
-        title=yaml_repr['title'], link=yaml_repr.get('link'))
+        title=yaml_repr['title'], metadata=yaml_repr.get('meta', {}))
+    if 'link' in yaml_repr:
+        bo.metadata['link'] = yaml_repr['link']
 
     for raw_step in yaml_repr['steps']:
         step = BuildOrderStep(title=raw_step.pop('title', None))
@@ -63,10 +65,9 @@ def save_build_order(bo: BuildOrder, path: Path):
         'id': bo.id,
         'civ': bo.civ,
         'title': bo.title,
-        'steps': []
+        'steps': [],
+        'meta': bo.metadata
     }
-    if bo.link:
-        data['link'] = bo.link
     for step in bo.steps:
         data['steps'].append(_step_to_yaml_dict(step))
 

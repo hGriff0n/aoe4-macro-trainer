@@ -38,9 +38,13 @@ def load_datastore(rt_file: Path) -> Datastore:
     for id, raw_bo in data.get('build_orders', {}).items():
         bo = BuildOrder(
             id=id, civ=raw_bo['civ'], title=raw_bo['title'],
-            link=raw_bo.get('link'))
+            metadata=raw_bo.get('meta', {}))
+        if 'link' in raw_bo:
+            bo.metadata['link'] = raw_bo['link']
+
         for raw_step in raw_bo.get('steps', []):
-            step = BuildOrderStep(title=raw_step.get('title'))
+            step = BuildOrderStep(
+                title=raw_step.get('title'), ideal_timing=raw_step.get('ideal_timing'))
             for check in raw_step.get('checks', []):
                 if check['kind'] in _registered_checks:
                     step.checks.append(
@@ -71,10 +75,9 @@ def _build_order_to_datastore(bo: BuildOrder) -> Dict[str, Any]:
         'civ': bo.civ,
         'id': bo.id,
         'title': bo.title,
-        'steps': []
+        'steps': [],
+        'meta': bo.metadata
     }
-    if bo.link:
-        data['link'] = bo.link
     for step in bo.steps:
         data['steps'].append(_build_step_to_datastore(step))
     return data
