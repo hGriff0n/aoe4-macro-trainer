@@ -53,7 +53,7 @@ BuildOrderCheck = TypeVar("BuildOrderCheck", bound=BuildOrderCheckBase)
 class BuildOrderStep:
     title: Optional[str] = None
     checks: List[BuildOrderCheckBase] = field(default_factory=list),
-    ideal_timing: Optional[str] = None
+    ideal_timing: Optional[int] = None
 
 
 @dataclass
@@ -120,7 +120,6 @@ def check_factory(cls: type[BuildOrderCheck]) -> type[BuildOrderCheck]:
     return cls
 
 
-# TODO: Not sure if this singleton works correctly
 class CheckRegistry(object):
     _instance = None
 

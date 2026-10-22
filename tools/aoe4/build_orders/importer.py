@@ -1,4 +1,6 @@
 
+from argparse import ArgumentTypeError
+from dataclasses import dataclass
 import html
 from http.client import HTTPException, IncompleteRead
 from pathlib import Path
@@ -16,7 +18,7 @@ from aoe4.constants import CIVILIZATION_NAME_TO_ID_MAP
 
 
 ###
-# Pull/Read Overlay files
+# URL Validation
 ###
 def _parse_url_into_parts(url: str) -> List[str]:
     try:
@@ -49,6 +51,22 @@ def _parse_aoe4guide_url(url: str) -> str:
         raise URLError(f"{url}: failed to extract aoe4guides build_id from URL")
 
 
+@dataclass
+class AoE4Url:
+    build_id: str
+    orig: str
+
+    @staticmethod
+    def parse_arg(url: str) -> AoE4Url:
+        try:
+            return AoE4Url(build_id=_parse_aoe4guide_url(url), orig=url)
+        except Exception as exc:
+            raise ArgumentTypeError(f"Invalid URL: {exc}") from exc
+
+
+###
+# Pull/Read Overlay files
+###
 class RejectRedirectHandler(HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         return None
@@ -73,27 +91,26 @@ def _extract_http_error_reason(exc: HTTPError) -> str:
         return "request failed"
 
 
-def _fetch_url(url: str) -> Dict[str, Any]:
-    # Need to extract the build_id just in case the provided url doesn't
-    # match the expected API REST endpoint
-    build_id = _parse_aoe4guide_url(url)
-    # TODO: Validate build id against regex (`re.compile(r"^[A-Za-z0-9_-]+$")`)
-
+def _fetch_url(url: AoE4Url) -> Dict[str, Any]:
     request = Request(
-        f"https://aoe4guides.com/api/builds/{build_id}?overlay=true",
+        f"https://aoe4guides.com/api/builds/{url.build_id}?overlay=true",
         headers={"Accept": "application/json", "User-Agent": "aoe4-macro-trainer"}
     )
     try:
-        body = _make_aoe4_request(request, url)
+        body = _make_aoe4_request(request, url.orig)
     except HTTPError as exc:
         reason = _extract_http_error_reason(exc)
-        raise ValueError(f"{url}: aoe4guides {reason} (HTTP {exc.code})") from exc
+        raise ValueError(
+            f"{url.orig}: aoe4guides {reason} (HTTP {exc.code})") from exc
     except URLError as exc:
-        raise ValueError(f"{url}: unable to reach aoe4guides: {exc.reason}") from exc
+        raise ValueError(
+            f"{url.orig}: unable to reach aoe4guides: {exc.reason}") from exc
     except UnicodeDecodeError as exc:
-        raise ValueError(f"{url}: aoe4guides returned non-UTF-8 data: {exc}") from exc
+        raise ValueError(
+            f"{url.orig}: aoe4guides returned non-UTF-8 data: {exc}") from exc
     except (HTTPException, IncompleteRead) as exc:
-        raise ValueError(f"{url}: aoe4guides response was interrupted: {exc}") from exc
+        raise ValueError(
+            f"{url.orig}: aoe4guides response was interrupted: {exc}") from exc
 
     try:
         overlay = parse_json(body)
@@ -102,7 +119,8 @@ def _fetch_url(url: str) -> Dict[str, Any]:
         overlay["source"] = request.full_url
         return overlay
     except ValueError as exc:
-        raise ValueError(f"{url}: aoe4guides returned invalid Json: {exc}") from exc
+        raise ValueError(
+            f"{url.orig}: aoe4guides returned invalid Json: {exc}") from exc
 
 
 ###
@@ -114,44 +132,45 @@ OVERLAY_FLAG_ICON = re.compile(r"civilization_flag/(?P<civ>[a-z][a-z][a-z])")
 OVERLAY_RESOURCE_ICON = re.compile(r"resource/(?P<resource>\w)")
 OVERLAY_TECH_ICON = re.compile(r"technology[^/]*/(?P<tech>\w)")
 
+# TODO: Need to find more examples (and for `resource_icons` and `tech_icons`)
+_KNOWN_CIV_ICONS_TEXT_MAP = {
+    "ayy": "Ayyubids",
+    "eng": "English",
+    "hos": "House of Lancaster",
+    "mon": "Mongols"
+}
 def _try_civ_flag_icon_to_text(token: str) -> str | None:
     m = OVERLAY_FLAG_ICON.match(token)
     if not m:
         return None
 
-    # TODO: Need to find more examples (also move to private global)
     civ = m.group("civ")
-    return {
-        "ayy": "Ayyubids",
-        "eng": "English",
-        "hos": "House of Lancaster",
-        "mon": "Mongols"
-    }.get(civ, civ.capitalize())
+    return _KNOWN_CIV_ICONS_TEXT_MAP.get(civ, civ.capitalize())
 
 
+_KNOWN_RESOURCE_ICONS_TEXT_MAP = {
+    "berrybush": "Berry Bush",
+    "gaiatreeprototypetree": "Tree"
+}
 def _try_resource_icon_to_text(token: str) -> str | None:
     m = OVERLAY_RESOURCE_ICON.match(token)
     if not m:
         return None
 
     res = m.group("resource")
-    # TODO: Need to find more examples (also move to private global)
-    return {
-        "berrybush": "Berry Bush",
-        "gaiatreeprototypetree": "Tree"
-    }.get(res, res.capitalize())
+    return _KNOWN_RESOURCE_ICONS_TEXT_MAP.get(res, res.capitalize())
 
 
+_KNOWN_TECH_ICONS_TEXT_MAP = {
+    "safepassage": "Safe Passage"
+}
 def _try_tech_icon_to_text(token: str) -> str | None:
     m = OVERLAY_TECH_ICON.match(token)
     if not m:
         return None
 
     tech = m.group("tech")
-    # TODO: Need to find more examples (also move to private global)
-    return {
-        "safepassage": "Safe Passage"
-    }.get(tech, tech.capitalize())
+    return _KNOWN_TECH_ICONS_TEXT_MAP.get(tech, tech.capitalize())
 
 
 def _convert_overlay_icon_to_text(token: str, name: str) -> str:
@@ -194,14 +213,16 @@ def _internal_civ_id(civ: str):
     return CIVILIZATION_NAME_TO_ID_MAP.get(civ, civ)
 
 
+_OVERLAY_TIME = re.compile(r"^(?P<min>\d+):(?P<sec>[0-5]\d)$")
 def _compile_step(step: Dict[str, Any]) -> BuildOrderStep:
     resources = step.get("resources", {})
     if not isinstance(resources, dict):
         raise ValueError("Overlay.step.resources must be a dict")
 
-    # TODO: villager_count and population_count and vils -> num building
-
-    ideal_timing = step.get("time")  # TODO: check M:SS format
+    ideal_timing = None
+    m = _OVERLAY_TIME.fullmatch(step.get("time", ""))
+    if m:
+        ideal_timing = int(m.group("min")) * 60 + int(m.group("sec"))
 
     vils = {}
     for res in ("food", "gold", "wood", "stone"):
@@ -219,13 +240,15 @@ def _compile_step(step: Dict[str, Any]) -> BuildOrderStep:
     )
 
 
-def _compile_overlay(o: Dict[str, Any]) -> BuildOrder:
-    bos = o.get("build_order", [])
-    if not isinstance(bos, list):
-        raise ValueError("Overlay.build_order must be a list")
+def _collect_metadata(o: Dict[str, Any]) -> Dict[str, Any]:
+    _META_FIELDS = ("author", "video", "description", "season", "map", "strategy")
+    return {k: o[k] for k in _META_FIELDS if k in o}
 
-    # TODO: Collect metadata (description, author, video, season, map, strategy)
-    metadata: Dict[str, Any] = {}
+
+def _compile_overlay(o: Dict[str, Any]) -> BuildOrder:
+    bo = o.get("build_order", [])
+    if not isinstance(bo, list):
+        raise ValueError("Overlay.build_order must be a list")
 
     title = o["name"]
     civ = _internal_civ_id(o["civilization"])
@@ -233,15 +256,15 @@ def _compile_overlay(o: Dict[str, Any]) -> BuildOrder:
         id=f"{civ}.{title}",
         civ=civ,
         title=title,
-        steps=[_compile_step(s) for s in bos],
+        steps=[_compile_step(step) for step in bo],
         link=o.get("source"),
-        metadata=metadata
+        metadata=_collect_metadata(o)
     )
 
 
 # Technically, this only works on the "overlay" format from the RTSOverlay
 # TODO: Crashes if any errors, should probably report failures and do partial success
-def import_build_orders(files: List[Path], urls: List[str]) -> List[BuildOrder]:
+def import_build_orders(files: List[Path], urls: List[AoE4Url]) -> List[BuildOrder]:
     overlays = [
         (f, read_json(f)) for f in files if f.suffix.lower() in (".bo", ".json")
     ] + [

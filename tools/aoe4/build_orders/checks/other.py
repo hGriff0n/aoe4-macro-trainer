@@ -72,7 +72,6 @@ class RallypointCheck(BuildOrderCheckBase):
     @staticmethod
     def from_datastore(data: ScarRepr, civ: str) -> RallypointCheck:
         payload = data.get('payload', {})
-        # TODO: Validate resource but this allows silver/olive
         return RallypointCheck(
             id=data.get('id'),
             optional=data.get('optional', False),

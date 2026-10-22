@@ -1,8 +1,8 @@
 import argparse
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import List, Optional
 
-import aoe4.build_orders.checks.register_all  # this is required to register the checks
+import aoe4.build_orders.checks.register_all as _  # checks registered to singleton
 from aoe4.build_orders import datastore, importer, json, yaml
 from aoe4.build_orders.datastore import Datastore
 from aoe4.build_orders.types import BuildOrder
@@ -99,6 +99,9 @@ def import_build_order(args, ds: Datastore):
         print(f'Must specify either `--files` or `--urls` when importing')
         return
 
+    if args.save_yaml:
+        args.output_dir.mkdir(parents=True, exist_ok=True)
+
     for bo in importer.import_build_orders(args.files, args.urls):
         if args.save_yaml:
             yaml.save_build_order(bo, args.output_dir / f'{bo.id}.yaml')
@@ -132,10 +135,8 @@ def _parser() -> argparse.ArgumentParser:
 
     importbo = commands.add_parser("import", help="import build order from RtsOverlay/aoe4guides/etc")
     importbo.set_defaults(func=import_build_order)
-    # TODO: maybe unify these. At least require that one of them is set
     importbo.add_argument("--files", nargs="*", type=Path)
-    # TODO: Require urls
-    importbo.add_argument("--urls", nargs="*", type=str)
+    importbo.add_argument("--urls", nargs="*", type=importer.AoE4Url.parse_arg)
     importbo.add_argument("--save_yaml", action="store_true")
     importbo.add_argument("--dry_run", action="store_true")
     importbo.add_argument("--output-dir", type=Path, default=Path.cwd())

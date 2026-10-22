@@ -193,7 +193,6 @@ function BuildOrder_Check_Produce_OnBuildItemComplete(event)
     print("[ProduceCheck] No matching listener found for event")
 end
 
--- TODO: Need to test what the event provides?
 -- Only used for checking the number of queued elements
 -- Don't need to check built because a unit has to be queued first
 function BuildOrder_Check_Produce_OnEntityCommandIssued(event)
