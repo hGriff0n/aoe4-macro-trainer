@@ -1,0 +1,2 @@
+E:\Docs\My Games\Age of Empires IV\LogFiles\<session>\warnings.<date>.text
+E:\Docs\My Games\Age of Empires IV\LogFiles\<session>\scarlog.<date>.text

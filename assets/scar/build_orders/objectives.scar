@@ -1,0 +1,315 @@
+-----------------------------------------------------------------------
+-- Imports
+-----------------------------------------------------------------------
+import("utils/debug.scar")
+import("utils/dynimport.scar")
+
+DynImport("utils/localization.scar")
+
+-----------------------------------------------------------------------
+-- Data
+-----------------------------------------------------------------------
+
+_bo_objective_data = {
+    build_order = nil,
+    current_step = 0,
+    -- unsure if needed
+    local_player = nil,
+    civ = nil,
+    -- For objective_tracking
+    current_objective = nil,
+    sub_objectives = {},
+    check_obj_id_map = {},
+    -- Check handler
+    registered_checks = {}
+}
+
+local _STEP_FORMAT_ID = 144
+local _OPTIONAL_CHECK_FORMAT_ID = 146
+
+-----------------------------------------------------------------------
+-- Helper Functions
+-----------------------------------------------------------------------
+
+local function SetObjectiveComplete(id, complete)
+    if complete then
+        Obj_SetState(id, OS_Complete)
+    else
+        Obj_SetState(id, OS_Incomplete)
+    end
+end
+
+-- `completed` is optional as nil is falsy and unpassed args default to nil
+local function CreateObjective(title, faction, parent_id, kind, completed)
+    local obj_id = Obj_Create(
+        _bo_objective_data.local_player,
+        title,
+        Loc_Empty(),
+        "",
+        parent_id == 0 and DT_PRIMARY_DEFAULT or DT_SECONDARY_DEFAULT,
+        faction,
+        parent_id == 0 and OT_Primary or OT_Secondary,
+        parent_id,
+        kind
+    )
+    SetObjectiveComplete(obj_id, completed)
+    Obj_SetVisible(obj_id, true)
+    return obj_id
+end
+
+local function LogMissingHandler(check)
+    print("[Objectives] BuildOrder: no registered handler for " ..
+        tostring(check.kind) .. " (check " .. tostring(check.id) .. ")")
+end
+
+local function InitializeState(bo, player)
+    _bo_objective_data.local_player = player
+    _bo_objective_data.civ = string.lower(bo.civ)
+    _bo_objective_data.build_order = bo
+    _bo_objective_data.current_objective = nil
+end
+
+local function GetCheckHandle(check)
+    if _bo_objective_data.registered_checks[check.kind] == nil then
+        LogMissingHandler(check)
+        return nil
+    end
+
+    return _bo_objective_data.registered_checks[check.kind]
+end
+
+local function AddCheckSubObjective(check, faction)
+    local handles = GetCheckHandle(check)
+    if handles == nil then
+        return
+    end
+
+    local child_obj = {
+        parent_id = _bo_objective_data.current_objective,
+        check = check,
+        completed = false,
+        poll_handle = handles ~= nil and handles.poll or nil
+    }
+    -- Store it immediately so activate can mark `completed` if prefinishing is allowed
+    _bo_objective_data.sub_objectives[check.id] = child_obj
+
+    -- If the activation doesn't work, don't add the child objective
+    if not handles.activate(child_obj, _bo_objective_data.local_player) then
+        _bo_objective_data.sub_objectives[check.id] = nil
+        print("[Objectives] Skipping objective for check " ..
+            tostring(child_obj.check.id) .. " because activation failed")
+        return
+    end
+
+    -- Now get the text to create the child objective for the check
+    local text = handles.get_objective_text(child_obj)
+    if child_obj.check.optional then
+        text = Loc_FormatText(BoLoc_ModStringId(_OPTIONAL_CHECK_FORMAT_ID), text)
+    end
+    local obj_id = CreateObjective(
+        text,
+        faction,
+        _bo_objective_data.current_objective,
+        "buildOrderCheck",
+        _bo_objective_data.sub_objectives[check.id].completed
+    )
+    _bo_objective_data.check_obj_id_map[child_obj.check.id] = obj_id
+
+    print("[Objectives] Created sub-objective " .. tostring(obj_id) .. " for check " .. tostring(child_obj.check.id))
+end
+
+local function GetStepTitleText(step, step_idx)
+    if step.title ~= nil then
+        return BoLoc_String(step.title)
+    end
+    return Loc_FormatText(BoLoc_ModStringId(_STEP_FORMAT_ID), Loc_FormatInteger(step_idx))
+end
+
+local function SetCurrentObjective(step, step_idx)
+    local faction = Player_GetRaceName(_bo_objective_data.local_player)
+    _bo_objective_data.current_objective = CreateObjective(
+        GetStepTitleText(step, step_idx),
+        faction,
+        0,
+        "buildOrderStep"
+    )
+    print("[Objectives] Created objective " ..
+        tostring(_bo_objective_data.current_objective) .. " for step " .. tostring(step_idx))
+
+    for _, check in ipairs(step.checks) do
+        AddCheckSubObjective(check, faction)
+    end
+end
+
+local function CleanupCurrentObjective()
+    for check_id, child in pairs(_bo_objective_data.sub_objectives) do
+        print("[Objectives] Cleaning up check " .. tostring(check_id))
+        local handle = GetCheckHandle(child.check)
+        if handle ~= nil then
+            handle.deactivate(child)
+        end
+
+        local obj_id = _bo_objective_data.check_obj_id_map[check_id]
+        if obj_id ~= nil then
+            -- Maybe defer deleting?
+            Obj_Delete(obj_id)
+        end
+    end
+    _bo_objective_data.check_obj_id_map = {}
+    _bo_objective_data.sub_objectives = {}
+
+    print("[Objectives] Deleting current objective " .. tostring(_bo_objective_data.current_objective))
+    Obj_Delete(_bo_objective_data.current_objective)
+    _bo_objective_data.current_objective = nil
+end
+
+-----------------------------------------------------------------------
+-- Mod Interface
+-----------------------------------------------------------------------
+
+function BuildOrder_Objectives_MarkComplete(check_id, status)
+    _bo_objective_data.sub_objectives[check_id].completed = status
+    if _bo_objective_data.check_obj_id_map[check_id] ~= nil then
+        SetObjectiveComplete(_bo_objective_data.check_obj_id_map[check_id], status)
+    end
+end
+
+function BuildOrder_Objectives_OnInit()
+    BuildOrder_Check_AgeUp_Register()
+    -- BuildOrder_Check_Buildings_Register() -- currently unimplemented
+    BuildOrder_Check_Built_Register()
+    BuildOrder_Check_Hints_Register()
+    BuildOrder_Check_Produce_Register()
+    BuildOrder_Check_Rallypoint_Register()
+    BuildOrder_Check_Resources_Register()
+    BuildOrder_Check_Units_Register()
+    BuildOrder_Check_Upgrades_Register()
+    BuildOrder_Check_Vils_Register()
+    print("[Objectives] Registered handlers: " .. Mod_Debug_PrintKeys(_bo_objective_data.registered_checks))
+end
+
+function BuildOrder_Objectives_ValidateCheck(check)
+    local handles = GetCheckHandle(check)
+    if handles == nil then
+        return false
+    end
+
+    return handles.validate(check)
+end
+
+function BuildOrder_Objectives_Start(bo, player)
+    if bo == nil or player == nil then
+        print("[Objectives] BuildOrder: no build order provided, skipping")
+        return
+    end
+
+    InitializeState(bo, player)
+    BuildOrder_Objectives_NextStep()
+    Rule_AddInterval(BuildOrder_Objectives_CheckCompletion, 1)
+end
+
+function BuildOrder_Objectives_Stop()
+    if _bo_objective_data.current_objective ~= nil then
+        CleanupCurrentObjective()
+    end
+
+    Rule_Remove(BuildOrder_Objectives_CheckCompletion)
+    _bo_objective_data.build_order = nil
+    _bo_objective_data.current_step = 0
+    _bo_objective_data.local_player = nil
+    _bo_objective_data.civ = nil
+end
+
+function BuildOrder_Objectives_NextStep()
+    print("[Objectives] Progressing to next step in build order")
+    if _bo_objective_data.build_order == nil then
+        return
+    end
+
+    -- Cleanup the current objective data first
+    if _bo_objective_data.current_objective ~= nil then
+        CleanupCurrentObjective()
+    end
+
+    -- Try to get the next step's data
+    local step_idx = _bo_objective_data.current_step + 1
+    _bo_objective_data.current_step = step_idx
+
+    local step = _bo_objective_data.build_order.steps[step_idx]
+    if step == nil then
+        print("[Objectives] Build order completed - no more steps.")
+        BuildOrder_Objectives_Stop()
+        return
+    end
+
+    SetCurrentObjective(step, step_idx)
+end
+
+function BuildOrder_Objectives_CheckCompletion()
+    local step_completed = true
+
+    for check_id, child in pairs(_bo_objective_data.sub_objectives) do
+        -- Although most checks are done via event responders
+        -- a few have to be done through polling
+        if child.poll_handle ~= nil then
+            local completed = child:poll_handle()
+            if completed ~= child.completed then
+                local obj_id = _bo_objective_data.check_obj_id_map[check_id]
+                if obj_id ~= nil then
+                    SetObjectiveComplete(obj_id, completed)
+                end
+            end
+            child.completed = completed
+        else
+            local obj_id = _bo_objective_data.check_obj_id_map[check_id]
+            if obj_id ~= nil then
+                local state = Obj_GetState(obj_id)
+                child.completed = (state == OS_Complete)
+            end
+        end
+
+        -- A check is only completed if all non-optional sub_objectives are completed
+        if not child.completed and not child.check.optional then
+            step_completed = false
+        end
+    end
+
+    -- If no required sub_objectives are incomplete, then we try to move to the next step
+    if step_completed then
+        print("[Objectives] All sub-objectives for step " ..
+            _bo_objective_data.current_objective ..
+            " have completed. Marking objective as complete and loading next step")
+        Obj_SetState(_bo_objective_data.current_objective, OS_Complete)
+        BuildOrder_Objectives_NextStep()
+    end
+end
+
+function BuildOrder_Objectives_RegisterCheckHandlers(kind, start_handle, stop_handle, text_handle, validate_handle,
+                                                     poll_completion_handle)
+    -- Since the mod is the one registering the checks
+    -- I'll assume that we don't need to log duplicate keys
+    if _bo_objective_data.registered_checks[kind] ~= nil then
+        return
+    end
+
+    _bo_objective_data.registered_checks[kind] = {
+        -- Called when adding the check as a sub-objective
+        -- Registers any event listeners and per-tick hooks
+        activate = start_handle,
+        -- Called when cleaning up the objective
+        -- Deregisters any event listeners and tick hooks
+        deactivate = stop_handle,
+        -- Called when needing to populate the check's
+        -- objective text
+        get_objective_text = text_handle,
+        -- Called to validate the check's payload
+        validate = validate_handle,
+        -- Required if a check is not implemented via event subscription
+        -- nil otherwise
+        poll = poll_completion_handle,
+    }
+end
+
+-----------------------------------------------------------------------
+-- Mod Implementation
+-----------------------------------------------------------------------

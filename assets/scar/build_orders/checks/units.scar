@@ -1,85 +1,111 @@
-UNITS_STATE = {}
-UNITS_POLLING = false
-UNITS_SCAN_STATE = nil
-UNITS_POLL_INTERVAL_SECONDS = 1
+-----------------------------------------------------------------------
+-- Imports
+-----------------------------------------------------------------------
+import("utils/dynimport.scar")
 
-function Units_FormatTitle(check, context)
-	return Loc_FormatText(
-		BUILD_ORDER_LOC_KEYS.activeUnits,
-		Loc_FormatInteger(check.payload.count),
-		BuildOrder_FirstSquadName(check.payload, context)
-	)
+DynImport("utils/localization.scar")
+DynImport("build_orders/checks/utils/pbg.scar")
+DynImport("utils/debug.scar")
+
+
+-----------------------------------------------------------------------
+-- Data
+-----------------------------------------------------------------------
+
+_bo_units_data = {
+}
+
+local _ACTIVE_UNITS_FORMAT_ID = 167
+
+-----------------------------------------------------------------------
+-- Local Helper Functions
+-----------------------------------------------------------------------
+
+-----------------------------------------------------------------------
+-- Mod Interface
+-----------------------------------------------------------------------
+
+function BuildOrder_Check_Units_Register()
+    BuildOrder_Objectives_RegisterCheckHandlers(
+        "units",
+        BuildOrder_Check_Units_Activate,
+        BuildOrder_Check_Units_Deactivate,
+        BuildOrder_Check_Units_GetText,
+        BuildOrder_Check_Units_Validate,
+        BuildOrder_Check_Units_PollCompletion
+    )
 end
 
-function Units_ScanSquad(groupID, squadIndex, squad)
-	local state = UNITS_SCAN_STATE
-	if state == nil then
-		return true
-	end
-	-- Player_GetSquads is player-scoped, but retain the owner guard for converted squads.
-	if Squad_GetPlayerOwner(squad) ~= state.player then
-		return false
-	end
-	if BuildOrder_MatchesAnyBlueprint(state.pbgs, Squad_GetBlueprint(squad)) == false then
-		return false
-	end
-	if Squad_IsAlive(squad) == false then
-		return false
-	end
-	state.count = state.count + 1
-	return false
+function BuildOrder_Check_Units_Validate(check)
+    local t = check.payload
+    return t.ids ~= nil
 end
 
-function Units_Poll()
-	BuildOrder_BeginCheckUpdates()
-	for _, state in pairs(UNITS_STATE) do
-		state.count = 0
-		if state.pbgs ~= nil then
-			UNITS_SCAN_STATE = state
-			SGroup_ForEach(Player_GetSquads(state.player), Units_ScanSquad)
-		end
-		UNITS_SCAN_STATE = nil
-		BuildOrder_SetCheckComplete(state.checkID, state.count >= state.payload.count)
-	end
-	BuildOrder_EndCheckUpdates()
+function BuildOrder_Check_Units_Activate(obj, player)
+    if _bo_units_data[obj.check.id] ~= nil then
+        return false
+    end
+
+    local payload = obj.check.payload
+    local state = {
+        player = player,
+        pbgs = Mod_Pbg_ResolveAll(payload.ids, BP_GetSquadBlueprint),
+        minimum = payload.count or 1,
+    }
+
+    if #state.pbgs == 0 then
+        print("[UnitCheck] Failed to resolve pbgs for check=" ..
+            tostring(obj.check.id) .. " pbg=" .. tostring(payload.ids[1]))
+        return false
+    end
+
+    print("[UnitCheck] Registered check=" .. tostring(obj.check.id))
+    _bo_units_data[obj.check.id] = state
+    return true
 end
 
-function Units_Activate(check, objectiveID, context)
-	local player = context.localPlayer
-	if player == nil then
-		return
-	end
-
-	UNITS_STATE[check.id] = {
-		checkID = check.id,
-		player = player,
-		objectiveID = objectiveID,
-		payload = check.payload,
-		pbgs = BuildOrder_ResolveBlueprints(check.payload.ids, BP_GetSquadBlueprint),
-		count = 0,
-	}
-	if UNITS_POLLING == false then
-		UNITS_POLLING = true
-		Rule_AddInterval(Units_Poll, UNITS_POLL_INTERVAL_SECONDS)
-	end
-	Units_Poll()
+function BuildOrder_Check_Units_Deactivate(obj)
+    if _bo_units_data[obj.check.id] ~= nil then
+        _bo_units_data[obj.check.id] = nil
+    end
 end
 
-function Units_Deactivate(check, objectiveID, context)
-	local state = UNITS_STATE[check.id]
-	if state == nil then
-		return
-	end
-
-	UNITS_STATE[check.id] = nil
-	if next(UNITS_STATE) == nil and UNITS_POLLING then
-		Rule_Remove(Units_Poll)
-		UNITS_POLLING = false
-	end
+function BuildOrder_Check_Units_GetText(obj)
+    local check = _bo_units_data[obj.check.id]
+    local unit = check ~= nil and check.pbgs[1] or nil
+    local unit_text = Mod_Pbg_ScreenName(
+        check.payload.ids[1], unit, BP_GetSquadUIInfo, check ~= nil and check.player or nil)
+    return Loc_FormatText(
+        BoLoc_ModStringId(_ACTIVE_UNITS_FORMAT_ID),
+        Loc_FormatInteger(check.minimum or 1),
+        unit_text
+    )
 end
 
-BuildOrder_RegisterHandler("units", {
-	formatTitle = Units_FormatTitle,
-	activate = Units_Activate,
-	deactivate = Units_Deactivate,
-})
+-- TODO: Would be ideal if we could do all checks for a step in one go
+function BuildOrder_Check_Units_PollCompletion(obj)
+    local state = _bo_units_data[obj.check.id]
+    if state == nil then
+        return false
+    end
+
+    local count = 0
+    SGroup_ForEach(
+        Player_GetSquads(state.player),
+        function(groupId, squadIndex, squad)
+            if Squad_GetPlayerOwner(squad) == state.player
+                and Mod_Pbg_MatchesAny(
+                    state.pbgs, Squad_GetBlueprint(squad)) ~= nil
+                and Squad_IsAlive(squad)
+            then
+                count = count + 1
+            end
+        end
+    )
+
+    return count >= state.minimum
+end
+
+-----------------------------------------------------------------------
+-- Mod Implementation
+-----------------------------------------------------------------------
