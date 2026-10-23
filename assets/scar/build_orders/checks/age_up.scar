@@ -67,8 +67,7 @@ local function CheckUpgradeResearched(check_id)
 
     for _, pbg in ipairs(_bo_ageup_data.pbgs) do
         if IsUpgradeStarted(_bo_ageup_data.player, pbg, check_id) then
-            print("[AgeUpCheck] Player already started aging up via " ..
-                Loc_ToAnsi(pbg.screenName) .. ": check=" .. tostring(check_id))
+            print("[AgeUpCheck] Player already started aging up: check=" .. tostring(check_id))
             return true
         end
     end
@@ -88,8 +87,7 @@ local function CheckConstructionStarted(check_id)
                 and Entity_IsBuilding(entity)
                 and Mod_Pbg_MatchesAny(state.pbgs, Entity_GetBlueprint(entity)) ~= nil
             then
-                print("[AgeUpCheck] Player already built landmark " ..
-                    Loc_ToAnsi(entity.screenName) .. ": check=" .. tostring(check_id))
+                print("[AgeUpCheck] Player already built landmark: check=" .. tostring(check_id))
                 found_landmark = true
             end
         end

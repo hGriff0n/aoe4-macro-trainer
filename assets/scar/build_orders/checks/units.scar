@@ -74,7 +74,8 @@ function BuildOrder_Check_Units_GetText(obj)
     local check = _bo_units_data[obj.check.id]
     local unit = check ~= nil and check.pbgs[1] or nil
     local unit_text = Mod_Pbg_ScreenName(
-        check.payload.ids[1], unit, BP_GetSquadUIInfo, check ~= nil and check.player or nil)
+        obj.check.payload.ids[1], unit,
+        BP_GetSquadUIInfo, check ~= nil and check.player or nil)
     return Loc_FormatText(
         BoLoc_ModStringId(_ACTIVE_UNITS_FORMAT_ID),
         Loc_FormatInteger(check.minimum or 1),

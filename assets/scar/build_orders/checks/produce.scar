@@ -165,6 +165,15 @@ function BuildOrder_Check_Produce_GetText(obj)
     end
 end
 
+local function _check_if_minimum_met(check_id, num_counting, minium)
+    if num_counting >= minimum then
+        print("[ProduceCheck] Expected num events seen. Marking " .. tostring(check_id) .. " complete")
+        BuildOrder_Objectives_MarkComplete(check_id, true)
+        BuildOrder_Check_Produce_Deactivate({check={ id=check_id }})
+        return
+    end
+end
+
 function BuildOrder_Check_Produce_OnBuildItemComplete(event)
     print("[ProduceCheck] Received unit build event: " .. tostring(event))
     if IsInvalidEvent(event) then
@@ -174,17 +183,11 @@ function BuildOrder_Check_Produce_OnBuildItemComplete(event)
     for check_id, state in pairs(_bo_produce_data.units) do
         -- TODO: Might be worth skipping the `state.queued` filter
         if event.player == state.player and not state.queued then
-            if Mod_Pbg_MatchesAny(state.pbgs, event.pbg) ~= nil then
-                state.num_built = state.num_built + 1
-                return
-            end
-
             -- TODO: We'll want to redo this for constant
             -- if we ever get to adding telemetry
-            if state.num_built >= state.minimum then
-                print("[ProduceCheck] Expected num events seen. Marking " .. tostring(check_id) .. " complete")
-                BuildOrder_Objectives_MarkComplete(check_id, true)
-                DeactivateCheck(check_id)
+            if Mod_Pbg_MatchesAny(state.pbgs, event.pbg) ~= nil then
+                state.num_built = state.num_built + 1
+                _check_if_minimum_met(state.num_built, state.minimum, check_id)
                 return
             end
         end
@@ -231,11 +234,7 @@ function BuildOrder_Check_Produce_OnEntityCommandIssued(event)
             end
         )
 
-        if num_queued >= state.minimum then
-            print("[ProduceCheck] Expected num events seen. Marking " .. tostring(check_id) .. " complete")
-            BuildOrder_Objectives_MarkComplete(check_id, true)
-            DeactivateCheck(check_id)
-        end
+        _check_if_minimum_met(check_id, num_queued, state.minimum)
         ::continue::
     end
 end

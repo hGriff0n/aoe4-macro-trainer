@@ -168,6 +168,10 @@ end
 -----------------------------------------------------------------------
 
 function BuildOrder_Objectives_MarkComplete(check_id, status)
+    if _bo_objective_data.sub_objectives[check_id] == nil then
+        return
+    end
+
     _bo_objective_data.sub_objectives[check_id].completed = status
     if _bo_objective_data.check_obj_id_map[check_id] ~= nil then
         SetObjectiveComplete(_bo_objective_data.check_obj_id_map[check_id], status)
