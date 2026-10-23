@@ -25,6 +25,7 @@ def read_yaml(yaml_file: Path) -> Dict[str, Any]:
 #
 # Identities just looks to be a mapping from human ids to game ids
 # I'm not sure how it goes from `spearman2` to `spearman though`
+    # Seems to be `generate_identity_document` > `if category == "squad"`
 # TODO: add error handling if not expected types?
 def build_order_from_yaml_dict(
         yaml_repr: Dict[str, Any], default_id: str | None = None) -> BuildOrder:
@@ -51,8 +52,8 @@ def build_order_from_yaml_dict(
 
 
 def load_build_order(bo_yaml: Path) -> BuildOrder:
-    data = read_yaml(bo_yaml, default_id=bo_yaml.stem)
-    return build_order_from_yaml_dict(data)
+    data = read_yaml(bo_yaml)
+    return build_order_from_yaml_dict(data, default_id=bo_yaml.stem)
 
 
 def _step_to_yaml_dict(step: BuildOrderStep) -> Dict[str, Any]:

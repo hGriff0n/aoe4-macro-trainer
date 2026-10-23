@@ -114,9 +114,10 @@ def _fetch_url(url: AoE4Url) -> Dict[str, Any] | None:
 
     try:
         overlay = parse_json(body)
-        if "source" in overlay:
-            overlay["original_source"] = overlay["source"]
-        overlay["source"] = request.full_url
+        if overlay:
+            if "source" in overlay:
+                overlay["original_source"] = overlay["source"]
+            overlay["source"] = request.full_url
         return overlay
     except ValueError as exc:
         print(f"{url.orig}: aoe4guides returned invalid Json: {exc!r}")
@@ -201,7 +202,7 @@ def _internal_civ_id(civ: str):
 
 
 _OVERLAY_TIME = re.compile(r"^(?P<min>\d+):(?P<sec>[0-5]\d)$")
-def _compile_step(step: Dict[str, Any]) -> BuildOrderStep:
+def _compile_step(step: Dict[str, Any]) -> BuildOrderStep | None:
     resources = step.get("resources", {})
     if not isinstance(resources, dict):
         raise ValueError("Overlay.step.resources must be a dict")
@@ -220,6 +221,8 @@ def _compile_step(step: Dict[str, Any]) -> BuildOrderStep:
             vils[res] = count
 
     notes = list(filter(lambda n: n, (_render_note(n) for n in step.get("notes", []))))
+    if not (notes or vils):
+        return None
     return BuildOrderStep(
         checks=(notes and [HintCheck(hints=notes)] or []) + (
             vils and [VilCheck(resources=vils)] or []),
@@ -235,21 +238,32 @@ def _collect_metadata(o: Dict[str, Any]) -> Dict[str, Any]:
     return {k: o[k] for k in _META_FIELDS if k in o and o[k]}
 
 
-def _compile_overlay(o: Dict[str, Any], link: str | None = None) -> BuildOrder:
+def _compile_overlay(o: Dict[str, Any], link: str | None = None) -> BuildOrder | None:
     bo = o.get("build_order", [])
     if not isinstance(bo, list):
-        raise ValueError("Overlay.build_order must be a list")
+        print("(!) Overlay.build_order must be a list")
+        return None
 
     title = o["name"]
     civ = _internal_civ_id(o["civilization"])
     meta = _collect_metadata(o)
     return BuildOrder(
-        id=f"{civ}.{title}",
+        id=f"{civ}.{title}".replace("/", "-").replace(":", "-"),
         civ=civ,
         title=title,
-        steps=[_compile_step(step) for step in bo],
+        steps=list(filter(lambda x: x, (_compile_step(step) for step in bo))),
         metadata=meta
     )
+
+
+def _has_required_overlay_keys(o) -> bool:
+    if "civilization" not in o:
+        print(f"(!) Invalid overlay object: missing `civilization` field")
+        return False
+    if "name" not in o:
+        print(f"(!) Invalid overlay object: missing `name` field")
+        return False
+    return True
 
 
 # Technically, this only works on the "overlay" format from the RTSOverlay
@@ -266,13 +280,13 @@ def import_build_orders(files: List[Path], urls: List[AoE4Url]) -> List[BuildOrd
         if o is None:
             print(f"(!) Failed to fetch build order from {src}")
             continue
+        if not _has_required_overlay_keys(o):
+            continue
         if isinstance(src, AoE4Url):
             o["link"] = src.orig
 
         bo = _compile_overlay(o)
-        if bo is None:
-            print(f"(!) Failed to load build order from {src}")
-        else:
+        if bo is not None:
             bos.append(bo)
 
     return bos

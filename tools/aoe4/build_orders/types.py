@@ -52,7 +52,7 @@ BuildOrderCheck = TypeVar("BuildOrderCheck", bound=BuildOrderCheckBase)
 @dataclass
 class BuildOrderStep:
     title: Optional[str] = None
-    checks: List[BuildOrderCheckBase] = field(default_factory=list),
+    checks: List[BuildOrderCheckBase] = field(default_factory=list)
     ideal_timing: Optional[int] = None
 
 

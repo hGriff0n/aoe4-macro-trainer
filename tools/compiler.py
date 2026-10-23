@@ -20,7 +20,7 @@ def _file_ext(p: Path) -> str:
 def _build_order(f: Path) -> Optional[BuildOrder]:
     try:
         ext = _file_ext(f)
-        if ext in (".yaml", "yml"):
+        if ext in (".yaml", ".yml"):
             return yaml.load_build_order(f)
         if ext in (".json"):
             data = json.read_json(f)
@@ -89,7 +89,7 @@ def remove_from_datastore(args, ds: Datastore):
 def decomp_datastore(args, ds: Datastore):
     args.output_dir.mkdir(parents=True, exist_ok=True)
     for id in args.ids:
-        if id in ds.build_orders[id]:
+        if id in ds.build_orders:
             # TODO: ai used `identities` in `order_to_yaml`
             yaml.save_build_order(ds.build_orders[id], args.output_dir / f'{id}.yaml')
         else:
