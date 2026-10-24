@@ -1,6 +1,6 @@
 # SCAR Style Guide
 
-This guide builds on `styleguide-general.md`. The Lua sections apply to any Lua codebase. The SCAR section adds rules for Age of Empires IV scripting.
+This guide builds on `docs/styleguide/general.md`.
 
 ## Age of Empires IV Idioms
 

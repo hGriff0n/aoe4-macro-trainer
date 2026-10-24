@@ -1,6 +1,6 @@
 # Python Style Guide
 
-This guide builds on `styleguide-general.md`.
+This guide builds on `docs/styleguide/general.md`.
 
 ## Layout
 
