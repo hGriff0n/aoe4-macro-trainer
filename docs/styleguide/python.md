@@ -17,8 +17,7 @@ This guide builds on `styleguide-general.md`.
   # URL Validation
   ###
   ```
-TODO: Claude rewrite the title
-- **Use `import x` by default.** Prefer using `import x`, especially when `x` helps with self-documenting code. Use `from x import y` if the package only uses 1-3 elements. Only use `from x import *` for constants-only modules
+- **Use `import x` for imports by default.** Prefer using `import x`, especially when `x` helps with self-documenting code. Use `from x import y` if the package only uses 1-3 elements. Use `import x as y` when x is either very long, clashes with other imports, or y is an understood shorthand. Only use `from x import *` for constants-only modules
 
 ## Types and data
 
