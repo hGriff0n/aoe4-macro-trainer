@@ -1,0 +1,1 @@
+Always read `docs/styleguide/general.md` for guidelines on how I code to be structured and written. When editing/writing in a given language, read `docs/styleguide/<lang>.md` for context of language-specific idioms and style guidelines.
