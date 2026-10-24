@@ -104,15 +104,15 @@ def check_factory(cls: type[BuildOrderCheck]) -> type[BuildOrderCheck]:
             payloads = check.datastore_payload()
             # Every datastore check needs a unique id
             return [{
-                'id': check.id if len(payloads) == 1 else f'{check.id}:{i}',
+                'id': check.id if len(payloads) == 1 else f"{check.id}:{i}",
                 'kind': check.key(),
                 'optional': check.optional,
                 'payload': payload
             } for i, payload in enumerate(payloads, 1)]
 
         def from_datastore(self, data: ScarRepr, civ: str) -> BuildOrderCheck:
-            if data.get('kind', '') != cls.key():
-                raise ValueError(f'{cls} must have kind={cls.key()}, got {data.get("kind")}')
+            if data.get('kind', "") != cls.key():
+                raise ValueError(f"{cls} must have kind={cls.key()}, got {data.get("kind")}")
             return cls.from_datastore(data, civ)
 
     cls.make_factory = staticmethod(lambda: BoCheckFactory())

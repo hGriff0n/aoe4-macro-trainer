@@ -5,7 +5,7 @@ from typing import Any, Dict
 
 
 def read_json(json_file: Path) -> Dict[str, Any]:
-    with json_file.open('r', encoding='utf-8') as f:
+    with json_file.open("r", encoding="utf-8") as f:
         return json.load(f)
 
 def parse_json(data) -> dict | None:

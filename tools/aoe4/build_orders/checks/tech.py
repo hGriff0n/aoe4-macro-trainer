@@ -10,7 +10,7 @@ from aoe4.constants import *
 @check_factory
 @dataclass
 class UpgradeCheck(BuildOrderCheckBase):
-    tech_id: str = ''
+    tech_id: str = ""
     queued: bool = False
 
     def yaml_payload(self) -> YamlRepr:
@@ -49,7 +49,7 @@ class UpgradeCheck(BuildOrderCheckBase):
     @staticmethod
     def from_yaml(data: YamlRepr, civ: str) -> List[UpgradeCheck]:
         if not isinstance(data, list):
-            raise ValueError('upgrades must be a list in yaml')
+            raise ValueError("upgrades must be a list in yaml")
         return [
             UpgradeCheck._instance_from_yaml(tech, civ)
             for tech in data

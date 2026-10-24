@@ -11,7 +11,7 @@ _registered_checks = CheckRegistry()
 
 # TODO: Do I need to add error handling?
 def read_yaml(yaml_file: Path) -> Dict[str, Any]:
-    with yaml_file.open('r', encoding='utf-8') as f:
+    with yaml_file.open("r", encoding="utf-8") as f:
         return yaml.safe_load(f)
 
 
@@ -45,7 +45,7 @@ def build_order_from_yaml_dict(
                     _registered_checks[check].from_yaml(
                         check_data, bo.civ))
             else:
-                print(f'Unexpected check in yaml: {check}. Ignoring')
+                print(f"Unexpected check in yaml: {check}. Ignoring")
 
         bo.steps.append(step)
     return bo
@@ -86,5 +86,5 @@ def save_build_order(bo: BuildOrder, path: Path):
     for step in bo.steps:
         data['steps'].append(_step_to_yaml_dict(step))
 
-    with path.open('w', encoding='utf-8') as f:
+    with path.open("w", encoding="utf-8") as f:
         yaml.dump(data, f, default_flow_style=False, sort_keys=False)

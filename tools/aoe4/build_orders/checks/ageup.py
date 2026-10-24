@@ -26,7 +26,7 @@ class AgeUpCheck(BuildOrderCheckBase):
 
     def datastore_payload(self) -> List[ScarRepr]:
         data = {
-            'trigger': self.is_upgrade and 'upgrade' or 'construction'
+            'trigger': self.is_upgrade and "upgrade" or "construction"
         }
         if self.vils is not None:
             data['vils'] = self.vils

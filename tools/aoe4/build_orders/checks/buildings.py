@@ -51,7 +51,7 @@ class BuiltCheck(BuildOrderCheckBase):
     @staticmethod
     def from_yaml(data: YamlRepr, civ: str) -> List[BuiltCheck]:
         if not isinstance(data, list):
-            raise ValueError('built must be a list in yaml')
+            raise ValueError("built must be a list in yaml")
         return [
             BuiltCheck._instance_from_yaml(building, civ)
             for building in data

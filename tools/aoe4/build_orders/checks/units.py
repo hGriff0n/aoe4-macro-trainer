@@ -44,7 +44,7 @@ class UnitCheck(BuildOrderCheckBase):
     @staticmethod
     def from_yaml(data: YamlRepr, civ: str) -> List[UnitCheck]:
         if not isinstance(data, list):
-            raise ValueError('units must be a list in yaml')
+            raise ValueError("units must be a list in yaml")
         UnitCheck.validate_civ_id_access(
             [unit['id'] for unit in data], civ)
         return [

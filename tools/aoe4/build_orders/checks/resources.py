@@ -28,7 +28,7 @@ class ResourceCheck(BuildOrderCheckBase):
     @staticmethod
     def from_yaml(data: YamlRepr, civ: str) -> ResourceCheck:
         if not isinstance(data, dict):
-            raise ValueError('resources must be a dict in yaml')
+            raise ValueError("resources must be a dict in yaml")
         return ResourceCheck(
             resources={
                 res: data[res] for res in [

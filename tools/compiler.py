@@ -22,7 +22,7 @@ def _build_order(f: Path) -> Optional[BuildOrder]:
         ext = _file_ext(f)
         if ext in (".yaml", ".yml"):
             return yaml.load_build_order(f)
-        if ext in (".json"):
+        if ext in (".json",):
             data = json.read_json(f)
             # TODO: ai used `identities` in `_compile_order`
             return yaml.build_order_from_yaml_dict(data, default_id=f.stem)
