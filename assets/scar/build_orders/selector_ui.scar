@@ -5,11 +5,9 @@ import("utils/dynimport.scar")
 
 DynImport("utils/localization.scar")
 
-
 -----------------------------------------------------------------------
 -- Data
 -----------------------------------------------------------------------
-
 _selector_data = {
 	created_ui = false,
 	model = nil,
@@ -169,9 +167,8 @@ BO_UI_XAML = [[
 ]]
 
 -----------------------------------------------------------------------
--- Helper Functions
+-- Private Implementation
 -----------------------------------------------------------------------
-
 local function BuildOrderSelectorUI_InvokeCallback(key, parameter)
 	print("[SelectorUI] Running requested ui callback `" .. key .. "`")
 	local callbackName = _selector_data.callbacks[key]
@@ -200,9 +197,8 @@ function BuildOrderSelectorUI_DispatchContinueWithout(parameter)
 end
 
 -----------------------------------------------------------------------
--- Mod Interface
+-- Public Interface
 -----------------------------------------------------------------------
-
 function BuildOrderSelectorUI_Show(model)
 	if not type(model) == "table" then
 		print("[SelectorUI] Skipping because `model` is not a table")
@@ -245,9 +241,8 @@ function BuildOrderSelectorUI_Stop()
 end
 
 -----------------------------------------------------------------------
--- Mod Implementation
+-- Public Implementation
 -----------------------------------------------------------------------
-
 local function BuildOrderSelectorUI_CreatePresenter()
 	_selector_data.commands = {
 		start_game = UI_CreateCommand("BuildOrderSelectorUI_DispatchStartGame"),

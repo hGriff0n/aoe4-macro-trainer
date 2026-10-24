@@ -7,24 +7,22 @@ DynImport("utils/localization.scar")
 DynImport("build_orders/checks/utils/pbg.scar")
 DynImport("utils/debug.scar")
 
-
 -----------------------------------------------------------------------
 -- Data
 -----------------------------------------------------------------------
-
 _bo_units_data = {
 }
 
 local _ACTIVE_UNITS_FORMAT_ID = 167
 
 -----------------------------------------------------------------------
--- Local Helper Functions
+-- Private Implementation
 -----------------------------------------------------------------------
 
------------------------------------------------------------------------
--- Mod Interface
------------------------------------------------------------------------
 
+-----------------------------------------------------------------------
+-- Public Interface
+-----------------------------------------------------------------------
 function BuildOrder_Check_Units_Register()
     BuildOrder_Objectives_RegisterCheckHandlers(
         "units",
@@ -108,5 +106,5 @@ function BuildOrder_Check_Units_PollCompletion(obj)
 end
 
 -----------------------------------------------------------------------
--- Mod Implementation
+-- Public Implementation
 -----------------------------------------------------------------------

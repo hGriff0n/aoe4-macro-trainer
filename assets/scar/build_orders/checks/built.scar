@@ -9,7 +9,6 @@ DynImport("build_orders/checks/utils/pbg.scar")
 -----------------------------------------------------------------------
 -- Data
 -----------------------------------------------------------------------
-
 _bo_built_data = {
     buildings = {},
     event_registered = false
@@ -17,9 +16,8 @@ _bo_built_data = {
 BUILD_MANY_FORMAT_ID = 160
 
 -----------------------------------------------------------------------
--- Local Helper Functions
+-- Private Implementation
 -----------------------------------------------------------------------
-
 local function IsInvalidEvent(event)
     return event == nil or event.player == nil or event.pbg == nil
         or event.entity == nil or event.entity.EntityID == nil
@@ -43,9 +41,8 @@ local function DeactivateCheck(check_id)
 end
 
 -----------------------------------------------------------------------
--- Mod Interface
+-- Public Interface
 -----------------------------------------------------------------------
-
 function BuildOrder_Check_Built_Register()
     BuildOrder_Objectives_RegisterCheckHandlers(
         "built",
@@ -134,5 +131,5 @@ function BuildOrder_Check_Built_OnConstructionComplete(event)
 end
 
 -----------------------------------------------------------------------
--- Mod Implementation
+-- Public Implementation
 -----------------------------------------------------------------------

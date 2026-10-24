@@ -5,19 +5,16 @@ import("utils/dynimport.scar")
 
 DynImport("utils/localization.scar")
 
-
 -----------------------------------------------------------------------
 -- Data
 -----------------------------------------------------------------------
-
 _bo_vils_data = {}
 
 local _VIL_RES_PAIR_ID = 152
 
 -----------------------------------------------------------------------
--- Local Helper Functions
+-- Private Implementation
 -----------------------------------------------------------------------
-
 local function num_or_zero(val)
     if type(val) ~= "number" then
         return 0
@@ -54,9 +51,8 @@ local function _resource_pair_formatter(res, count)
 end
 
 -----------------------------------------------------------------------
--- Mod Interface
+-- Public Interface
 -----------------------------------------------------------------------
-
 function BuildOrder_Check_Vils_Register()
     BuildOrder_Objectives_RegisterCheckHandlers(
         "vils",
@@ -114,5 +110,5 @@ function BuildOrder_Check_Vils_PollCompletion(obj)
 end
 
 -----------------------------------------------------------------------
--- Mod Implementation
+-- Public Implementation
 -----------------------------------------------------------------------

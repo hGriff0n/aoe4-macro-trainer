@@ -23,8 +23,6 @@ DynImport("build_orders/checks/vils.scar")
 -----------------------------------------------------------------------
 -- Data
 -----------------------------------------------------------------------
-
-
 _buildorder_data = {
 	selectedBuildOrderID = nil,
 	startupStarted = false,
@@ -67,15 +65,13 @@ BUILD_ORDER_DATASTORE_SCHEMA_VERSION = 2
 BUILD_ORDER_DATASTORE_ID = "macroTrainerBuildOrders"
 
 -----------------------------------------------------------------------
--- Local helper Functions
+-- Private Implementation
 -----------------------------------------------------------------------
-
 local function LoadDatastore(id)
 	Game_LoadTextDataStore(id, "")
 	return Game_RetrieveTableData(id, false)
 end
 
--- This is unused for the moment but we plan to have a in-game ui to build/edit build orders
 local function SaveDatastore(id, bo_list)
 	Game_StoreTableData(id, {
 		schema_version = BUILD_ORDER_DATASTORE_SCHEMA_VERSION,
@@ -206,9 +202,8 @@ local function IsValidBuildOrder(bo)
 end
 
 -----------------------------------------------------------------------
--- Mod Interface
+-- Public Interface
 -----------------------------------------------------------------------
-
 function BuildOrder_OnInit()
 	BuildOrder_Objectives_OnInit()
 end
@@ -289,9 +284,8 @@ function BuildOrder_StartGame(parameter)
 end
 
 -----------------------------------------------------------------------
--- Mod Implementation
+-- Public Implementation
 -----------------------------------------------------------------------
-
 function BuildOrder_FilterCompatibleBuildOrders(bos_by_civ, player)
 	local playerciv = CanonicalCivID(player)
 

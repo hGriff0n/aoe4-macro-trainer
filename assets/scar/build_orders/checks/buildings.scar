@@ -10,7 +10,6 @@ DynImport("build_orders/checks/utils/pbg.scar")
 -----------------------------------------------------------------------
 -- Data
 -----------------------------------------------------------------------
-
 _bo_buildings_data = {
     buildings = {}
 }
@@ -18,14 +17,13 @@ _bo_buildings_data = {
 local _BUILDINGS_FORMAT_ID = 168
 
 -----------------------------------------------------------------------
--- Local Helper Functions
+-- Private Implementation
 -----------------------------------------------------------------------
 
 
 -----------------------------------------------------------------------
--- Mod Interface
+-- Public Interface
 -----------------------------------------------------------------------
-
 function BuildOrder_Check_Buildings_Register()
     BuildOrder_Objectives_RegisterCheckHandlers(
         "buildings",
@@ -115,5 +113,5 @@ function BuildOrder_Check_Buildings_PollCompletion(obj)
 end
 
 -----------------------------------------------------------------------
--- Mod Implementation
+-- Public Implementation
 -----------------------------------------------------------------------

@@ -7,19 +7,16 @@ DynImport("build_orders/checks/utils/events.scar")
 DynImport("build_orders/checks/utils/pbg.scar")
 DynImport("utils/localization.scar")
 
-
 -----------------------------------------------------------------------
 -- Data
 -----------------------------------------------------------------------
-
 _bo_ageup_data = nil
 
 local _AGE_FORMAT_ID = 161
 
 -----------------------------------------------------------------------
--- Local Helper Functions
+-- Private Implementation
 -----------------------------------------------------------------------
-
 -- TODO: same as upgrades.scar
 local function IsUpgradeCompleted(player, pbg, check_id)
     print("[AgeUpCheck] Checking if player already researched: check=" .. tostring(check_id))
@@ -124,9 +121,8 @@ end
 
 
 -----------------------------------------------------------------------
--- Mod Interface
+-- Public Interface
 -----------------------------------------------------------------------
-
 function BuildOrder_Check_AgeUp_Register()
     BuildOrder_Objectives_RegisterCheckHandlers(
         "age_up",
@@ -263,9 +259,8 @@ function BuildOrder_Check_AgeUp_OnUpgradeStart(event)
 end
 
 -----------------------------------------------------------------------
--- Mod Implementation
+-- Public Implementation
 -----------------------------------------------------------------------
-
 function BuildOrder_TargetNames(payload, kind, context)
     local ui_resolver = switch_trigger(kind, BP_GetUpgradeUIInfo, BP_GetEntityUIInfo)
     if payload.id ~= nil then

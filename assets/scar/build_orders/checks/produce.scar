@@ -7,11 +7,9 @@ import("utils/debug.scar")
 DynImport("utils/localization.scar")
 DynImport("build_orders/checks/utils/pbg.scar")
 
-
 -----------------------------------------------------------------------
 -- Data
 -----------------------------------------------------------------------
-
 _bo_produce_data = {
     units = {},
     num_build_listeners = 0,
@@ -23,9 +21,8 @@ local _QUEUE_UNIT_FORMAT_ID = 165
 local _PROD_UNIT_FORMAT_ID = 164
 
 -----------------------------------------------------------------------
--- Local Helper Functions
+-- Private Implementation
 -----------------------------------------------------------------------
-
 local function IsInvalidEvent(event)
     return event == nil or event.player == nil or event.pbg == nil
 end
@@ -37,9 +34,8 @@ local function QueuedItemIsCheckMatch(entity, index, pbgs)
 end
 
 -----------------------------------------------------------------------
--- Mod Interface
+-- Public Interface
 -----------------------------------------------------------------------
-
 function BuildOrder_Check_Produce_Register()
     BuildOrder_Objectives_RegisterCheckHandlers(
         "produce",
@@ -240,5 +236,5 @@ function BuildOrder_Check_Produce_OnEntityCommandIssued(event)
 end
 
 -----------------------------------------------------------------------
--- Mod Implementation
+-- Public Implementation
 -----------------------------------------------------------------------

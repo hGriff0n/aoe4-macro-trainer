@@ -42,7 +42,7 @@ _slowdown_data = {
 }
 
 -----------------------------------------------------------------------
--- Helper Functions
+-- Private Implementation
 -----------------------------------------------------------------------
 
 -- Called during load as part of the game setup sequence
@@ -93,7 +93,7 @@ local function StartPhase(title, phaseDuration, simRate, nextRule)
 end
 
 -----------------------------------------------------------------------
--- Mod Interface
+-- Public Interface
 -----------------------------------------------------------------------
 
 -- TODO: This does not configure the pre-game settings screen
@@ -153,7 +153,7 @@ function Slowdown_Stop()
 end
 
 -----------------------------------------------------------------------
--- Mod Implementation
+-- Public Implementation
 -----------------------------------------------------------------------
 
 function Slowdown_EnterSlowPeriod()

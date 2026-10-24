@@ -9,7 +9,6 @@ DynImport("utils/localization.scar")
 -----------------------------------------------------------------------
 -- Data
 -----------------------------------------------------------------------
-
 _bo_objective_data = {
     build_order = nil,
     current_step = 0,
@@ -28,9 +27,8 @@ local _STEP_FORMAT_ID = 144
 local _OPTIONAL_CHECK_FORMAT_ID = 146
 
 -----------------------------------------------------------------------
--- Helper Functions
+-- Private Implementation
 -----------------------------------------------------------------------
-
 local function SetObjectiveComplete(id, complete)
     if complete then
         Obj_SetState(id, OS_Complete)
@@ -164,9 +162,8 @@ local function CleanupCurrentObjective()
 end
 
 -----------------------------------------------------------------------
--- Mod Interface
+-- Public Interface
 -----------------------------------------------------------------------
-
 function BuildOrder_Objectives_MarkComplete(check_id, status)
     if _bo_objective_data.sub_objectives[check_id] == nil then
         return
@@ -315,5 +312,5 @@ function BuildOrder_Objectives_RegisterCheckHandlers(kind, start_handle, stop_ha
 end
 
 -----------------------------------------------------------------------
--- Mod Implementation
+-- Public Implementation
 -----------------------------------------------------------------------

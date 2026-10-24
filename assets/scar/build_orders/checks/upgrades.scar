@@ -8,11 +8,9 @@ DynImport("utils/debug.scar")
 DynImport("build_orders/checks/utils/events.scar")
 DynImport("build_orders/checks/utils/pbg.scar")
 
-
 -----------------------------------------------------------------------
 -- Data
 -----------------------------------------------------------------------
-
 _bo_upgrades_data = {
     techs = {},
     num_queued_listeners = 0,
@@ -24,9 +22,8 @@ local _QUEUE_RESEARCH_FORMAT_ID = 163
 local _RESEARCH_FORMAT_ID = 162
 
 -----------------------------------------------------------------------
--- Local Helper Functions
+-- Private Implementation
 -----------------------------------------------------------------------
-
 local function IsInvalidEvent(event)
     return event == nil or event.upgrade == nil or event.executer == nil
 end
@@ -147,9 +144,8 @@ local function _has_events_registered()
 end
 
 -----------------------------------------------------------------------
--- Mod Interface
+-- Public Interface
 -----------------------------------------------------------------------
-
 function BuildOrder_Check_Upgrades_Register()
     BuildOrder_Objectives_RegisterCheckHandlers(
         "upgrades",
@@ -314,5 +310,5 @@ function BuildOrder_Check_Upgrades_OnUpgradeComplete(event)
 end
 
 -----------------------------------------------------------------------
--- Mod Implementation
+-- Public Implementation
 -----------------------------------------------------------------------
