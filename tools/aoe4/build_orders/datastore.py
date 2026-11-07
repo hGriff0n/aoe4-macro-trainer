@@ -8,7 +8,7 @@ from aoe4.build_orders.types import BuildOrder, BuildOrderStep, CheckRegistry
 
 
 SCHEMA_VERSION = 2
-_PREFIX = 'LuaDataStore = '
+_PREFIX = "LuaDataStore = "
 
 _registered_checks = CheckRegistry()
 
@@ -31,7 +31,7 @@ def load_datastore(rt_file: Path) -> Datastore:
         return d
 
     # Skip `LuaDataStore = ` because luadata expects a `{` at the start
-    with rt_file.open('r', encoding='utf-8') as f:
+    with rt_file.open("r", encoding="utf-8") as f:
         data = luadata.unserialize(f.read()[len(_PREFIX):])[rt_file.stem]
 
     d.schema_version = data['schema_version']
@@ -44,15 +44,15 @@ def load_datastore(rt_file: Path) -> Datastore:
 
         for raw_step in raw_bo.get('steps', []):
             step = BuildOrderStep(
-                title=raw_step.get('title'), ideal_timing=raw_step.get('ideal_timing'))
-            for check in raw_step.get('checks', []):
+                title=raw_step.get('title'), ideal_timing=raw_step.get('igt'))
+            for check in raw_step.get("checks", []):
                 if check['kind'] in _registered_checks:
                     step.checks.append(
                         _registered_checks[check['kind']].from_datastore(
                             check, bo.civ)
                     )
                 else:
-                    print(f'Unexpected check in datastore: {check}. Ignoring')
+                    print(f"Unexpected check in datastore: {check}. Ignoring")
 
             bo.steps.append(step)
         d.build_orders[id] = bo
@@ -65,6 +65,8 @@ def _build_step_to_datastore(step: BuildOrderStep) -> Dict[str, Any]:
     }
     if step.title:
         data['title'] = step.title
+    if step.ideal_timing:
+        data['igt'] = step.ideal_timing
     for check in step.checks:
         data['checks'].extend(
             _registered_checks[check.key()].to_datastore(check))
@@ -92,8 +94,8 @@ def save_datastore(ds: Datastore):
         data['build_orders'][id] = _build_order_to_datastore(bo)
 
     ds.filepath.parent.mkdir(parents=True, exist_ok=True)
-    with ds.filepath.open('w', encoding='utf-8') as f:
+    with ds.filepath.open("w", encoding="utf-8") as f:
         f.write(_PREFIX)
-        f.write(luadata.serialize({ds.filepath.stem: data}, indent='    '))
+        f.write(luadata.serialize({ds.filepath.stem: data}, indent="    "))
 
-    print(f'Saved {len(ds.build_orders)} build orders to {ds.filepath}')
+    print(f"Saved {len(ds.build_orders)} build orders to {ds.filepath}")

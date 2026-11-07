@@ -1,7 +1,14 @@
-FOOD_RES = 'food'
-GOLD_RES = 'gold'
-STONE_RES = 'stone'
-WOOD_RES = 'wood'
+FOOD_RES = "food"
+GOLD_RES = "gold"
+STONE_RES = "stone"
+WOOD_RES = "wood"
+
+# aoe4world data categories, used to resolve build order ids
+BUILDINGS = "buildings"
+TECHNOLOGIES = "technologies"
+UNITS = "units"
+# Unit upgrades (`veteran_spearmen`) are kept apart from technologies upstream
+UPGRADES = "upgrades"
 
 UPGRADE_CIVS = [
     "abbasid",

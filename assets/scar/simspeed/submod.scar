@@ -42,7 +42,7 @@ _slowdown_data = {
 }
 
 -----------------------------------------------------------------------
--- Helper Functions
+-- Private Implementation
 -----------------------------------------------------------------------
 
 -- Called during load as part of the game setup sequence
@@ -62,6 +62,14 @@ local function GetOptionEnumKey(option)
 	end
 
 	return nil
+end
+
+local function ClearPhaseObjective()
+	if _slowdown_data.objective ~= nil then
+		Objective_StopTimer(_slowdown_data.objective)
+		Objective_Expire(_slowdown_data.objective, false, false)
+		_slowdown_data.objective = nil
+	end
 end
 
 -- Used when switching between slow/fast periods
@@ -84,16 +92,8 @@ local function StartPhase(title, phaseDuration, simRate, nextRule)
 	Rule_AddOneShot(nextRule, phaseDuration)
 end
 
-local function ClearPhaseObjective()
-	if _slowdown_data.objective ~= nil then
-		Objective_StopTimer(_slowdown_data.objective)
-		Objective_Expire(_slowdown_data.objective, false, false)
-		_slowdown_data.objective = nil
-	end
-end
-
 -----------------------------------------------------------------------
--- Mod Interface
+-- Public Interface
 -----------------------------------------------------------------------
 
 -- TODO: This does not configure the pre-game settings screen
@@ -139,7 +139,7 @@ function Slowdown_InitFromSettings(options)
 	-- equates to normal speed). Ticks must always be an integer, so we
 	-- should round up to ensure players get enough time.
 	_slowdown_data.slow_duration = math.ceil(
-		slow_duration * _slowdown_data.slowSimRate / NORMAL_SIM_RATE)
+		slow_duration * _slowdown_data.slowed_sim_rate / NORMAL_SIM_RATE)
 end
 
 function Slowdown_Start()
@@ -153,7 +153,7 @@ function Slowdown_Stop()
 end
 
 -----------------------------------------------------------------------
--- Mod Implementation
+-- Public Implementation
 -----------------------------------------------------------------------
 
 function Slowdown_EnterSlowPeriod()
@@ -190,7 +190,7 @@ function Slowdown_StartCycle()
 	end
 
 	_slowdown_data.in_slow_phase = true
-	SlowdownEnterNormalPeriod()
+	Slowdown_EnterNormalPeriod()
 end
 
 function Slowdown_StopCycle()

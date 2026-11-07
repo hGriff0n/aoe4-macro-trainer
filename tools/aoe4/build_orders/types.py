@@ -36,7 +36,7 @@ class BuildOrderCheckBase(ABC):
         pass
 
     @abstractmethod
-    def yaml_payload(self) -> YamlRepr:
+    def yaml_payload(self, civ: str) -> YamlRepr:
         """Return the yaml representation"""
         pass
 
@@ -52,7 +52,7 @@ BuildOrderCheck = TypeVar("BuildOrderCheck", bound=BuildOrderCheckBase)
 @dataclass
 class BuildOrderStep:
     title: Optional[str] = None
-    checks: List[BuildOrderCheckBase] = field(default_factory=list),
+    checks: List[BuildOrderCheckBase] = field(default_factory=list)
     ideal_timing: Optional[int] = None
 
 
@@ -80,7 +80,7 @@ class _CheckFactory(ABC):
         pass
 
     @abstractmethod
-    def to_yaml(self, check: BuildOrderCheckBase) -> YamlRepr:
+    def to_yaml(self, check: BuildOrderCheckBase, civ: str) -> YamlRepr:
         """Serialize the check to the yaml dictionary representation"""
         pass
 
@@ -93,8 +93,8 @@ class _CheckFactory(ABC):
 # TODO: Would be nice to set `key` here too (ie. `@check_factory('vils')`)
 def check_factory(cls: type[BuildOrderCheck]) -> type[BuildOrderCheck]:
     class BoCheckFactory(_CheckFactory):
-        def to_yaml(self, check: BuildOrderCheck) -> YamlRepr:
-            return check.yaml_payload()
+        def to_yaml(self, check: BuildOrderCheck, civ: str) -> YamlRepr:
+            return check.yaml_payload(civ)
 
         def from_yaml(self, data: YamlRepr, civ: str) -> List[BuildOrderCheck]:
             checks = cls.from_yaml(data, civ)
@@ -104,15 +104,15 @@ def check_factory(cls: type[BuildOrderCheck]) -> type[BuildOrderCheck]:
             payloads = check.datastore_payload()
             # Every datastore check needs a unique id
             return [{
-                'id': check.id if len(payloads) == 1 else f'{check.id}:{i}',
+                'id': check.id if len(payloads) == 1 else f"{check.id}:{i}",
                 'kind': check.key(),
                 'optional': check.optional,
                 'payload': payload
             } for i, payload in enumerate(payloads, 1)]
 
         def from_datastore(self, data: ScarRepr, civ: str) -> BuildOrderCheck:
-            if data.get('kind', '') != cls.key():
-                raise ValueError(f'{cls} must have kind={cls.key()}, got {data.get("kind")}')
+            if data.get('kind', "") != cls.key():
+                raise ValueError(f"{cls} must have kind={cls.key()}, got {data.get("kind")}")
             return cls.from_datastore(data, civ)
 
     cls.make_factory = staticmethod(lambda: BoCheckFactory())

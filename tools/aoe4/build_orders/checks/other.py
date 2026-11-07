@@ -16,7 +16,7 @@ class HintCheck(BuildOrderCheckBase):
     def key() -> str:
         return "hints"
 
-    def yaml_payload(self) -> YamlRepr:
+    def yaml_payload(self, civ: str) -> YamlRepr:
         return self.hints
 
     def datastore_payload(self) -> List[ScarRepr]:
@@ -27,7 +27,7 @@ class HintCheck(BuildOrderCheckBase):
     @staticmethod
     def from_yaml(data: YamlRepr, civ: str) -> HintCheck:
         if not isinstance(data, list):
-            raise ValueError('hints must be a list in yaml')
+            raise ValueError("hints must be a list in yaml")
         return HintCheck(
             hints=data
         )
@@ -36,7 +36,7 @@ class HintCheck(BuildOrderCheckBase):
     def from_datastore(data: ScarRepr, civ: str) -> HintCheck:
         payload = data.get('payload', {})
         if 'text' not in payload:
-            raise ValueError('hints must have text payload in datastore')
+            raise ValueError("hints must have text payload in datastore")
         return HintCheck(
             id=data.get('id'),
             optional=data.get('optional', False),
@@ -49,7 +49,7 @@ class HintCheck(BuildOrderCheckBase):
 class RallypointCheck(BuildOrderCheckBase):
     resources: List[str] = field(default_factory=list)
 
-    def yaml_payload(self) -> YamlRepr:
+    def yaml_payload(self, civ: str) -> YamlRepr:
         return self.resources
 
     def datastore_payload(self) -> List[ScarRepr]:
@@ -64,7 +64,7 @@ class RallypointCheck(BuildOrderCheckBase):
     @staticmethod
     def from_yaml(data: YamlRepr, civ: str) -> RallypointCheck:
         if not isinstance(data, list):
-            raise ValueError('rallypoint must be a list in yaml')
+            raise ValueError("rallypoint must be a list in yaml")
         return RallypointCheck(
             resources=data
         )

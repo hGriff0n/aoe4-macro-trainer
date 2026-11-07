@@ -20,9 +20,9 @@ def _file_ext(p: Path) -> str:
 def _build_order(f: Path) -> Optional[BuildOrder]:
     try:
         ext = _file_ext(f)
-        if ext in (".yaml", "yml"):
+        if ext in (".yaml", ".yml"):
             return yaml.load_build_order(f)
-        if ext in (".json"):
+        if ext in (".json",):
             data = json.read_json(f)
             return yaml.build_order_from_yaml_dict(data, default_id=f.stem)
         return None
@@ -88,7 +88,7 @@ def remove_from_datastore(args, ds: Datastore):
 def decomp_datastore(args, ds: Datastore):
     args.output_dir.mkdir(parents=True, exist_ok=True)
     for id in args.ids:
-        if id in ds.build_orders[id]:
+        if id in ds.build_orders:
             yaml.save_build_order(ds.build_orders[id], args.output_dir / f'{id}.yaml')
         else:
             print(f'No build order found with id={id}')
@@ -141,7 +141,7 @@ def _parser() -> argparse.ArgumentParser:
     importbo.add_argument("--dry_run", action="store_true")
     importbo.add_argument("--output-dir", type=Path, default=Path.cwd())
 
-    for command in (build, listbo, delete, extract):
+    for command in (build, listbo, delete, extract, importbo):
         command.add_argument("--profile", type=str, help="User id in case multipler users are signed in on the same machine")
 
     return parser

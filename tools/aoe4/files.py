@@ -43,7 +43,7 @@ def list_profiles(
     if users_dir is None:
         users_dir = profile_dir(documents_dir=documents_dir)
     if not users_dir.is_dir():
-        raise ProfileResolutionError(f'{users_dir} is not a directory')
+        raise ProfileResolutionError(f"{users_dir} is not a directory")
 
     return sorted(item.name for item in users_dir.iterdir() if item.is_dir())
 
@@ -61,6 +61,6 @@ def datastore_dir(
     profiles = list_profiles(users_dir=users_dir)
     if len(profiles) != 1:
         raise ProfileResolutionError(
-            f"expected one AoE4 profile at {users_dir}, found: {', '.join(profiles) or 'none'}; provide --profile <id>"
+            f"expected one AoE4 profile at {users_dir}, found: {", ".join(profiles) or "none"}; provide --profile <id>"
         )
     return users_dir / profiles[0] / "datastore"

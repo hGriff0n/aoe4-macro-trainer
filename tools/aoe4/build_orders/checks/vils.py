@@ -16,7 +16,7 @@ class VilCheck(BuildOrderCheckBase):
     def key() -> str:
         return "vils"
 
-    def yaml_payload(self) -> YamlRepr:
+    def yaml_payload(self, civ: str) -> YamlRepr:
         return self.resources
 
     def datastore_payload(self) -> List[ScarRepr]:
@@ -27,7 +27,8 @@ class VilCheck(BuildOrderCheckBase):
         _VALID_KEYS = [FOOD_RES, GOLD_RES, WOOD_RES, STONE_RES]
         bad_keys = [k for k in payload.keys() if k not in _VALID_KEYS]
         if bad_keys:
-            raise ValueError(f'Received unexpected key in VilCheck: {",".join(bad_keys)}')
+            raise ValueError(
+                f"Received unexpected key in VilCheck: {",".join(bad_keys)}")
 
     @staticmethod
     def from_yaml(data: YamlRepr, civ: str) -> VilCheck:

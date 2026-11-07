@@ -1,3 +1,7 @@
+
+-----------------------------------------------------------------------
+-- Private Implementation
+-----------------------------------------------------------------------
 local function _ModStringIdImpl(db_id)
 	return "$dfb5645698a84afb91cf7a2dfb0f4a4e:" .. tostring(db_id)
 end
@@ -37,6 +41,9 @@ local function _JoinStringsImpl(strs, join_id, formatter)
 	return text
 end
 
+-----------------------------------------------------------------------
+-- Public Interface
+-----------------------------------------------------------------------
 function BoLoc_DelimId(delim)
 	if delim == nil then
 		return _JOIN_IDS.concat

@@ -5,19 +5,16 @@ import("utils/dynimport.scar")
 
 DynImport("utils/localization.scar")
 
-
 -----------------------------------------------------------------------
 -- Data
 -----------------------------------------------------------------------
-
 _bo_resources_data = {}
 
 local _COLLECT_RES_FORMAT_ID = 155
 
 -----------------------------------------------------------------------
--- Local Helper Functions
+-- Private Implementation
 -----------------------------------------------------------------------
-
 local function GetResourceType(resource)
     if resource == "food" then
         return RT_Food
@@ -34,11 +31,9 @@ local function GetResourceType(resource)
     return nil
 end
 
-
 -----------------------------------------------------------------------
--- Mod Interface
+-- Public Interface
 -----------------------------------------------------------------------
-
 function BuildOrder_Check_Resources_Register()
     BuildOrder_Objectives_RegisterCheckHandlers(
         "resources",
@@ -97,5 +92,5 @@ function BuildOrder_Check_Resources_PollCompletion(obj)
 end
 
 -----------------------------------------------------------------------
--- Mod Implementation
+-- Public Implementation
 -----------------------------------------------------------------------

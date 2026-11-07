@@ -1,3 +1,7 @@
+import("utils/dynimport.scar")
+
+DynImport("utils/localization.scar")
+
 local _pbg_cache = {}
 
 function Mod_Pbg_Resolve(id, blueprint_getter)
@@ -55,4 +59,21 @@ function Mod_Pbg_ScreenName(id, pbg, ui_accessor, player)
 
     print("[PBG] Missing localization string for " .. tostring(id))
     return BoLoc_String(id)
+end
+
+-- Joins the screen names of `ids` with `delim`, dropping duplicates
+-- since every age's version of a building/tech shares one name
+function Mod_Pbg_JoinScreenNames(ids, blueprint_getter, ui_accessor, delim)
+    local names = {}
+    local seen = {}
+    for _, id in ipairs(ids) do
+        local name = Mod_Pbg_ScreenName(id, Mod_Pbg_Resolve(id, blueprint_getter), ui_accessor)
+        -- LocStrings with the same text aren't `==`, so compare the text instead
+        local text = BoLoc_IsLocString(name) and name.LocString or tostring(name)
+        if not seen[text] then
+            seen[text] = true
+            names[#names + 1] = name
+        end
+    end
+    return BoLoc_JoinStrings(names, delim)
 end
