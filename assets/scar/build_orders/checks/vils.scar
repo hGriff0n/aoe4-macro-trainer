@@ -1,120 +1,118 @@
-local VILS_STATE = {}
-local VILS_POLL_REGISTERED = false
+-----------------------------------------------------------------------
+-- Imports
+-----------------------------------------------------------------------
+import("utils/dynimport.scar")
 
-function Vils_FormatTitle(check, context)
-	if check.payload.no_collect == true then
-		return Loc_FormatText(
-			BUILD_ORDER_LOC_KEYS.noCollect,
-			BuildOrder_ResourceName(check.payload.resource)
-		)
-	end
+DynImport("utils/localization.scar")
 
-	local resourceOrder = { "food", "gold", "wood", "stone" }
-	local allocations = {}
-	for _, resource in ipairs(resourceOrder) do
-		local count = check.payload[resource]
-		if count ~= nil then
-			table.insert(allocations, Loc_FormatText(
-				BUILD_ORDER_LOC_KEYS.allocation,
-				Loc_FormatInteger(count),
-				BuildOrder_ResourceName(resource)
-			))
-		end
-	end
 
-	return Loc_FormatText(
-		BUILD_ORDER_LOC_KEYS.assign,
-		BuildOrder_FormattedArgument(
-			BuildOrder_JoinLocalized(allocations, BUILD_ORDER_LOC_KEYS.allocationJoin)
-		)
-	)
+-----------------------------------------------------------------------
+-- Data
+-----------------------------------------------------------------------
+
+_bo_vils_data = {}
+
+local _VIL_RES_PAIR_ID = 152
+
+-----------------------------------------------------------------------
+-- Local Helper Functions
+-----------------------------------------------------------------------
+
+local function num_or_zero(val)
+    if type(val) ~= "number" then
+        return 0
+    end
+    return val
 end
 
-function Vils_CountOrZero(value)
-	if type(value) ~= "number" then
-		return 0
-	end
-	return value
+local function GetVilsOnFood(player)
+    return num_or_zero(Player_GetNumGatheringSquads(player, RT_Food))
 end
 
-function Vils_Poll(checkID)
-	local state = VILS_STATE[checkID]
-	if state == nil then
-		return
-	end
-
-	local food = Player_GetNumGatheringSquads(state.player, RT_Food)
-	local gold = Player_GetNumGatheringSquads(state.player, RT_Gold)
-	local wood = Player_GetNumGatheringSquads(state.player, RT_Wood)
-	local stone = Player_GetNumGatheringSquads(state.player, RT_Stone)
-	food = Vils_CountOrZero(food)
-	gold = Vils_CountOrZero(gold)
-	wood = Vils_CountOrZero(wood)
-	stone = Vils_CountOrZero(stone)
-
-	local completed = true
-	if state.payload.food ~= nil then
-		completed = completed and food >= state.payload.food
-	end
-	if state.payload.gold ~= nil then
-		completed = completed and gold >= state.payload.gold
-	end
-	if state.payload.wood ~= nil then
-		completed = completed and wood >= state.payload.wood
-	end
-	if state.payload.stone ~= nil then
-		completed = completed and stone >= state.payload.stone
-	end
-
-	if completed then
-		BuildOrder_SetCheckComplete(checkID, true)
-	else
-		BuildOrder_SetCheckComplete(checkID, false)
-	end
+local function GetVilsOnGold(player)
+    return num_or_zero(Player_GetNumGatheringSquads(player, RT_Gold))
 end
 
-function Vils_PollAll()
-	BuildOrder_BeginCheckUpdates()
-	for checkID, _ in pairs(VILS_STATE) do
-		Vils_Poll(checkID)
-	end
-	BuildOrder_EndCheckUpdates()
+local function GetVilsOnWood(player)
+    return num_or_zero(Player_GetNumGatheringSquads(player, RT_Wood))
 end
 
-function Vils_Activate(check, objectiveID, context)
-	local player = context.localPlayer
-	if player == nil then
-		return
-	end
-
-	local state = {
-		player = context.localPlayer,
-		objectiveID = objectiveID,
-		payload = check.payload,
-	}
-	VILS_STATE[check.id] = state
-	if VILS_POLL_REGISTERED == false then
-		Rule_Add(Vils_PollAll)
-		VILS_POLL_REGISTERED = true
-	end
-	Vils_Poll(check.id)
+local function GetVilsOnStone(player)
+    return num_or_zero(Player_GetNumGatheringSquads(player, RT_Stone))
 end
 
-function Vils_Deactivate(check, objectiveID, context)
-	local state = VILS_STATE[check.id]
-	if state == nil then
-		return
-	end
+local function _vilcheck(player, req, reader)
+    if req == nil or req == 0 then
+        return true
+    end
 
-	VILS_STATE[check.id] = nil
-	if next(VILS_STATE) == nil then
-		Rule_Remove(Vils_PollAll)
-		VILS_POLL_REGISTERED = false
-	end
+    return reader(player) >= req
 end
 
-BuildOrder_RegisterHandler("vils", {
-	formatTitle = Vils_FormatTitle,
-	activate = Vils_Activate,
-	deactivate = Vils_Deactivate,
-})
+local function _resource_pair_formatter(res, count)
+    return Loc_FormatText(BoLoc_DelimId(" "), Loc_FormatInteger(count), BoLoc_String(res))
+end
+
+-----------------------------------------------------------------------
+-- Mod Interface
+-----------------------------------------------------------------------
+
+function BuildOrder_Check_Vils_Register()
+    BuildOrder_Objectives_RegisterCheckHandlers(
+        "vils",
+        BuildOrder_Check_Vils_Activate,
+        BuildOrder_Check_Vils_Deactivate,
+        BuildOrder_Check_Vils_GetText,
+        BuildOrder_Check_Vils_Validate,
+        BuildOrder_Check_Vils_PollCompletion
+    )
+end
+
+function BuildOrder_Check_Vils_Validate(check)
+    local t = check.payload
+    return t.food ~= nil or t.gold ~= nil or t.wood ~= nil or t.stone ~= nil
+end
+
+function BuildOrder_Check_Vils_Activate(obj, player)
+    if _bo_vils_data[obj.check.id] ~= nil then
+        return false
+    end
+
+    print("[VilCheck] Registered check=" .. tostring(obj.check.id))
+    _bo_vils_data[obj.check.id] = {
+        player = player
+    }
+    return true
+end
+
+function BuildOrder_Check_Vils_Deactivate(obj)
+    if _bo_vils_data[obj.check.id] ~= nil then
+        _bo_vils_data[obj.check.id] = nil
+    end
+end
+
+function BuildOrder_Check_Vils_GetText(obj)
+    return BoLoc_ConcatStrings(
+        "Assign ", BoLoc_JoinStrings(obj.check.payload, "|", _resource_pair_formatter))
+end
+
+function BuildOrder_Check_Vils_PollCompletion(obj)
+    local state = _bo_vils_data[obj.check.id]
+    if state == nil then
+        return false
+    end
+
+    local player = state.player
+    local payload = obj.check.payload
+
+    -- Then check if each resource assignment is being met
+    return
+        _vilcheck(player, payload.food, GetVilsOnFood)
+        and _vilcheck(player, payload.gold, GetVilsOnGold)
+        and _vilcheck(player, payload.wood, GetVilsOnWood)
+        and _vilcheck(player, payload.stone, GetVilsOnStone)
+end
+
+-----------------------------------------------------------------------
+-- Mod Implementation
+-----------------------------------------------------------------------

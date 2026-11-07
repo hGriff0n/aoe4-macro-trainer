@@ -7,7 +7,9 @@
         "-m",
         "aoe4_mcp.server"
       ],
-      "env": {}
+      "env": {
+        "AOE4_MCP_DB_PATH": "E:\\Docs\\github\\aoemod\\aoe4-mcp\\data\\index.sanitized.sqlite3"
+      }
     }
   }
 }

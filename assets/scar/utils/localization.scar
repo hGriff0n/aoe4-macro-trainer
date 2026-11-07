@@ -1,0 +1,84 @@
+local function _ModStringIdImpl(db_id)
+	return "$dfb5645698a84afb91cf7a2dfb0f4a4e:" .. tostring(db_id)
+end
+
+local _JOIN_IDS = {
+	concat = 11252837,
+	kv = 11168874,
+	sentence = 11204790,
+	list = 11226734,
+	fncall = 999426,
+	fraction = 11004775,
+	space = _ModStringIdImpl(152),
+	pipe = _ModStringIdImpl(153)
+}
+
+local function _RawStringImpl(s)
+	if string.sub(s, 1, 1) == "$" then
+		return Loc_GetString(s)
+	end
+
+	-- For some reason, you can't make raw text directly but you can do this...
+	local text = LOC("")
+	text.LocString = s
+	return text
+end
+
+local function _JoinStringsImpl(strs, join_id, formatter)
+	local k, v = next(strs)
+	local text = formatter(k, v)
+
+	k, v = next(strs, k)
+	while k ~= nil do
+		text = Loc_FormatText(join_id, text, formatter(k, v))
+		k, v = next(strs, k)
+	end
+
+	return text
+end
+
+function BoLoc_DelimId(delim)
+	if delim == nil then
+		return _JOIN_IDS.concat
+	elseif delim == "." then
+		return _JOIN_IDS.sentence
+	elseif delim == "/" then
+		return _JOIN_IDS.fraction
+	elseif delim == "|" then
+		return _JOIN_IDS.pipe
+	elseif delim == " " then
+		return _JOIN_IDS.space
+	else
+		return _JOIN_IDS.list
+	end
+end
+
+function BoLoc_ModStringId(db_id)
+	return _ModStringIdImpl(db_id)
+end
+
+function BoLoc_IsLocString(s)
+	return scartype_tostring(s) == "LOCSTRING"
+end
+
+function BoLoc_CheckStr(s)
+	return _RawStringImpl(s ~= nil and s or "missing value")
+end
+
+function BoLoc_String(elem)
+	if BoLoc_IsLocString(elem) then
+		return elem
+	end
+	if type(elem) ~= "string" then
+		return _RawStringImpl(tostring(elem))
+	end
+	return _RawStringImpl(elem)
+end
+
+function BoLoc_ConcatStrings(s1, s2)
+	return Loc_FormatText(_JOIN_IDS.concat, BoLoc_String(s1), BoLoc_String(s2))
+end
+
+function BoLoc_JoinStrings(strs, delim, formatter)
+	return _JoinStringsImpl(strs, BoLoc_DelimId(delim), formatter or function(k, v) return v end)
+end

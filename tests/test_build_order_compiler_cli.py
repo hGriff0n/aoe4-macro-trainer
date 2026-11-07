@@ -216,7 +216,8 @@ class CompilerCommandTests(unittest.TestCase):
         source.write_text(
             "civ: english\n"
             "title: Complete\n"
-            "link: https://example.com/order\n"
+            "meta:\n"
+            "  link: https://example.com/order\n"
             "steps:\n"
             "  - title: Opening\n"
             "    vils: {food: 7, no_collect: [stone]}\n"

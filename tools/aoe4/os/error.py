@@ -1,0 +1,3 @@
+
+class OsError(ValueError):
+    pass
