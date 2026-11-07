@@ -8,13 +8,14 @@ import re
 from typing import Any, Dict, List
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
-from urllib.request import HTTPRedirectHandler, Request, build_opener
+from urllib.request import Request
 
 from aoe4.build_orders.json import parse_json, read_json
 from aoe4.build_orders.types import BuildOrder, BuildOrderStep
 from aoe4.build_orders.checks.other import HintCheck
 from aoe4.build_orders.checks.vils import VilCheck
 from aoe4.constants import CIVILIZATION_NAME_TO_ID_MAP
+from aoe4 import web
 
 
 ###
@@ -67,21 +68,6 @@ class AoE4Url:
 ###
 # Pull/Read Overlay files
 ###
-class RejectRedirectHandler(HTTPRedirectHandler):
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        return None
-
-
-def _make_aoe4_request(request: Request, url: str):
-    MAX_OVERLAY_RESPONSE_BYTES = 2 * 1024 * 1024
-    with build_opener(
-            RejectRedirectHandler()).open(request, timeout=30) as response:
-        body_bytes = response.read(MAX_OVERLAY_RESPONSE_BYTES + 1)
-        if len(body_bytes) > MAX_OVERLAY_RESPONSE_BYTES:
-            raise ValueError(f"{url}: aoe4guides response exceeds {MAX_OVERLAY_RESPONSE_BYTES} bytes")
-        return body_bytes.decode("utf-8")
-
-
 def _extract_http_error_reason(exc: HTTPError) -> str:
     if exc.code == 404:
         return "build not found"
@@ -92,12 +78,13 @@ def _extract_http_error_reason(exc: HTTPError) -> str:
 
 
 def _fetch_url(url: AoE4Url) -> Dict[str, Any] | None:
+    MAX_OVERLAY_RESPONSE_BYTES = 2 * 1024 * 1024
     request = Request(
         f"https://aoe4guides.com/api/builds/{url.build_id}?overlay=true",
         headers={"Accept": "application/json", "User-Agent": "aoe4-macro-trainer"}
     )
     try:
-        body = _make_aoe4_request(request, url.orig)
+        body, _ = web.fetch(request, MAX_OVERLAY_RESPONSE_BYTES)
     except HTTPError as exc:
         reason = _extract_http_error_reason(exc)
         print(f"{url.orig}: aoe4guides {reason} (HTTP {exc.code})")
