@@ -100,14 +100,19 @@ local function DeactivateListeners(check_id)
 end
 
 -- TODO: same as ageup.scar
-local function IsUpgradeCompleted(player, pbg)
-    return Player_HasUpgrade(player, pbg)
+local function IsUpgradeCompleted(player, pbgs)
+    for _, pbg in ipairs(pbgs) do
+        if Player_HasUpgrade(player, pbg) then
+            return true
+        end
+    end
+    return false
 end
 
 -- TODO: same as ageup.scar
 -- TODO: ageup.scar needs this function
 -- technically, needs `IsUpgradeCompleted | IsUpgradeCurrentlyQueued`
-local function IsUpgradeCurrentlyQueued(player, pbg, check_id)
+local function IsUpgradeCurrentlyQueued(player, pbgs, check_id)
     local queued_upgrade = false
     EGroup_ForEach(
         Player_GetEntities(player),
@@ -124,7 +129,7 @@ local function IsUpgradeCurrentlyQueued(player, pbg, check_id)
                     local type = Entity_GetProductionQueueItemType(
                         entity, index)
                     if (type == PITEM_Upgrade or type == PITEM_PlayerUpgrade)
-                        and Mod_Pbg_Equals(item, pbg)
+                        and Mod_Pbg_MatchesAny(pbgs, item) ~= nil
                     then
                         print("[UpgradeCheck] Found upgrade in queue: check=" .. tostring(check_id))
                         queued_upgrade = true
@@ -159,7 +164,7 @@ end
 
 function BuildOrder_Check_Upgrades_Validate(check)
     local t = check.payload
-    return t.id ~= nil
+    return t.id ~= nil or t.oneof ~= nil
 end
 
 function BuildOrder_Check_Upgrades_Activate(obj, player)
@@ -168,15 +173,16 @@ function BuildOrder_Check_Upgrades_Activate(obj, player)
     end
 
     local payload = obj.check.payload
-    local pbg = Mod_Pbg_Resolve(payload.id, BP_GetUpgradeBlueprint)
-    if pbg == nil then
-        print("[UpgradeCheck] Failed to resolve pbg: check=" .. tostring(obj.check.id) .. " pbg=" .. tostring(payload.id))
+    local ids = payload.oneof or { payload.id }
+    local pbgs = Mod_Pbg_ResolveAll(ids, BP_GetUpgradeBlueprint)
+    if #pbgs == 0 then
+        print("[UpgradeCheck] Failed to resolve pbg: check=" .. tostring(obj.check.id) .. " pbg=" .. table.concat(ids, ","))
         return false
     end
 
     -- In case the player researched the upgrade before we got to this point
     -- If so, we don't need to do anything more as you can't unresearch techs
-    if IsUpgradeCompleted(player, pbg, obj.check.id) then
+    if IsUpgradeCompleted(player, pbgs) then
         print("[UpgradeCheck] Already completed check=" .. tostring(obj.check.id))
         BuildOrder_Objectives_MarkComplete(obj.check.id, true)
         return true
@@ -184,7 +190,7 @@ function BuildOrder_Check_Upgrades_Activate(obj, player)
 
     print("[UpgradeCheck] Registered check=" .. tostring(obj.check.id))
     local state = {
-        pbg = pbg,
+        pbgs = pbgs,
         queued = payload.queued,
         player = player,
         listening_cancel = false
@@ -193,7 +199,7 @@ function BuildOrder_Check_Upgrades_Activate(obj, player)
     -- TODO: Potentially unsure on the logic here
     -- Don't need to check upgrade completed because that's done earlier
     if payload.queued then
-        if IsUpgradeCurrentlyQueued(player, pbg, obj.check.id) then
+        if IsUpgradeCurrentlyQueued(player, pbgs, obj.check.id) then
             AddCancelListener(obj.check.id)
             state.listening_cancel = true
 
@@ -217,9 +223,8 @@ end
 function BuildOrder_Check_Upgrades_GetText(obj)
     print("[UpgradeCheck] Assembling objective text")
     local payload = obj.check.payload
-    local state = _bo_upgrades_data.techs[obj.check.id]
-    local tech_name = Mod_Pbg_ScreenName(
-        payload.id, state and state.pbg or nil, BP_GetUpgradeUIInfo)
+    local tech_name = Mod_Pbg_JoinScreenNames(
+        payload.oneof or { payload.id }, BP_GetUpgradeBlueprint, BP_GetUpgradeUIInfo, "/")
 
     if payload.queued then
         return Loc_FormatText(BoLoc_ModStringId(_QUEUE_RESEARCH_FORMAT_ID), tech_name)
@@ -241,7 +246,7 @@ function BuildOrder_Check_Upgrades_OnUpgradeStart(event)
         end
 
         if state.queued
-            and Mod_Pbg_Equals(event.upgrade, state.pbg)
+            and Mod_Pbg_MatchesAny(state.pbgs, event.upgrade) ~= nil
         then
             print("[UpgradeCheck][UpgradeStart] Found expected upgrade in event. Marking check=" ..
                 tostring(check_id) .. " complete")
@@ -270,7 +275,7 @@ function BuildOrder_Check_Upgrades_OnUpgradeCancelled(event)
         end
 
         if state.queued
-            and Mod_Pbg_Equals(event.upgrade, state.pbg)
+            and Mod_Pbg_MatchesAny(state.pbgs, event.upgrade) ~= nil
         then
             print("[UpgradeCheck][UpgradeCancelled] Received upgrade cancelation in event. Marking check=" ..
                 tostring(check_id) .. " uncomplete")
@@ -298,7 +303,7 @@ function BuildOrder_Check_Upgrades_OnUpgradeComplete(event)
             return
         end
 
-        if Mod_Pbg_Equals(event.upgrade, state.pbg) then
+        if Mod_Pbg_MatchesAny(state.pbgs, event.upgrade) ~= nil then
             print("[UpgradeCheck][UpgradeComplete] Found expected completion event. Marking check= " ..
                 tostring(check_id) .. " complete")
             BuildOrder_Objectives_MarkComplete(check_id, true)

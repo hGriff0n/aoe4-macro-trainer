@@ -47,7 +47,8 @@ LuaDataStore = {
                             resource = string,
 
                             -- upgrades
-                            id = string,
+                            id = string, -- only one of `id` or `oneof`
+                            oneof = [string],
                             queued = bool,
 
                             -- units

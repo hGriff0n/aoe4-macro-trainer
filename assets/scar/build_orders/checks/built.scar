@@ -56,7 +56,7 @@ end
 
 function BuildOrder_Check_Built_Validate(check)
     local t = check.payload
-    return t.id ~= nil
+    return t.id ~= nil or t.oneof ~= nil
 end
 
 function BuildOrder_Check_Built_Activate(obj, player)
@@ -65,16 +65,17 @@ function BuildOrder_Check_Built_Activate(obj, player)
     end
 
     local payload = obj.check.payload
-    local pbg = Mod_Pbg_Resolve(payload.id, BP_GetEntityBlueprint)
-    if pbg == nil then
+    local ids = payload.oneof or { payload.id }
+    local pbgs = Mod_Pbg_ResolveAll(ids, BP_GetEntityBlueprint)
+    if #pbgs == 0 then
         print("[BuiltCheck] Failed to resolve pbg: check=" ..
-            tostring(obj.check.id) .. " pbg=" .. tostring(payload.id))
+            tostring(obj.check.id) .. " pbg=" .. table.concat(ids, ","))
         return false
     end
 
     print("[BuiltCheck] Registered check=" .. tostring(obj.check.id))
     _bo_built_data.buildings[obj.check.id] = {
-        pbg = pbg,
+        pbgs = pbgs,
         count = payload.count or 1,
         player = player,
     }
@@ -96,12 +97,8 @@ end
 
 function BuildOrder_Check_Built_GetText(obj)
     local payload = obj.check.payload
-    local building = _bo_built_data.buildings[obj.check.id]
-    local building_name = Mod_Pbg_ScreenName(
-        payload.id,
-        building ~= nil and building.pbg or nil,
-        BP_GetEntityUIInfo
-    )
+    local building_name = Mod_Pbg_JoinScreenNames(
+        payload.oneof or { payload.id }, BP_GetEntityBlueprint, BP_GetEntityUIInfo, "/")
 
     return Loc_FormatText(
         BoLoc_ModStringId(BUILD_MANY_FORMAT_ID), Loc_FormatInteger(payload.count or 1), building_name)
@@ -117,7 +114,7 @@ function BuildOrder_Check_Built_OnConstructionComplete(event)
 
     for check_id, state in pairs(_bo_built_data.buildings) do
         if event.player == state.player
-            and Mod_Pbg_Equals(state.pbg, event.pbg)
+            and Mod_Pbg_MatchesAny(state.pbgs, event.pbg) ~= nil
         then
             state.count = state.count - 1
         end

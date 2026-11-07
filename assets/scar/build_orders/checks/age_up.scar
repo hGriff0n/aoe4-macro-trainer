@@ -212,10 +212,15 @@ end
 -- TODO: Needs to support vilager hints (can we reuse upgrades and built respectively?)
 function BuildOrder_Check_AgeUp_GetText(obj)
     print("[AgeUpCheck] Assembling objective text")
+    local payload = obj.check.payload
     return Loc_FormatText(
         BoLoc_ModStringId(_AGE_FORMAT_ID),
-        BuildOrder_TargetNames(
-            obj.check.payload, obj.check.payload.trigger, _bo_ageup_data)
+        Mod_Pbg_JoinScreenNames(
+            payload.oneof or { payload.id },
+            switch_trigger(payload.trigger, BP_GetUpgradeBlueprint, BP_GetEntityBlueprint),
+            switch_trigger(payload.trigger, BP_GetUpgradeUIInfo, BP_GetEntityUIInfo),
+            "/"
+        )
     )
 end
 
@@ -261,17 +266,3 @@ end
 -----------------------------------------------------------------------
 -- Public Implementation
 -----------------------------------------------------------------------
-function BuildOrder_TargetNames(payload, kind, context)
-    local ui_resolver = switch_trigger(kind, BP_GetUpgradeUIInfo, BP_GetEntityUIInfo)
-    if payload.id ~= nil then
-        return Mod_Pbg_ScreenName(payload.id, context.pbgs[1], ui_resolver)
-    elseif payload.oneof ~= nil then
-        local names = {}
-        for i, id in ipairs(payload.oneof) do
-            names[#names + 1] = Mod_Pbg_ScreenName(id, context.pbgs[i], ui_resolver)
-        end
-        return BoLoc_JoinStrings(names, "/")
-    end
-
-    return BoLoc_String("Unknown target")
-end
