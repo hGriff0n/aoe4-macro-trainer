@@ -12,7 +12,7 @@ from aoe4.constants import *
 class ResourceCheck(BuildOrderCheckBase):
     resources: Dict[str, int] = field(default_factory=dict)
 
-    def yaml_payload(self) -> YamlRepr:
+    def yaml_payload(self, civ: str) -> YamlRepr:
         return self.resources
 
     def datastore_payload(self) -> List[ScarRepr]:

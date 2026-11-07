@@ -15,17 +15,6 @@ def read_yaml(yaml_file: Path) -> Dict[str, Any]:
         return yaml.safe_load(f)
 
 
-# TODO: ai used `identities` in `_compile_order`
-# - units -> _resolve_counted_squad
-# - buildings -> _resolve_identity_payload
-# - produce -> _resolve_counted_squad -> _resolve_squad_family_payload -> IdentityCatalog:resolve_squad_family
-# - upgrades -> _resolve_identity_payload
-# - age_up -> _structure_checks -> _resolve_identity_payload -> IdentityCatalog:resolve
-# - built -> _structure_checks -> _resolve_identity_payload
-#
-# Identities just looks to be a mapping from human ids to game ids
-# I'm not sure how it goes from `spearman2` to `spearman though`
-    # Seems to be `generate_identity_document` > `if category == "squad"`
 # TODO: add error handling if not expected types?
 def build_order_from_yaml_dict(
         yaml_repr: Dict[str, Any], default_id: str | None = None) -> BuildOrder:
@@ -56,14 +45,14 @@ def load_build_order(bo_yaml: Path) -> BuildOrder:
     return build_order_from_yaml_dict(data, default_id=bo_yaml.stem)
 
 
-def _step_to_yaml_dict(step: BuildOrderStep) -> Dict[str, Any]:
+def _step_to_yaml_dict(step: BuildOrderStep, civ: str) -> Dict[str, Any]:
     data = {}
     if step.title:
         data['title'] = step.title
     if step.ideal_timing:
         data['igt'] = step.ideal_timing
     for check in step.checks:
-        payload = _registered_checks[check.key()].to_yaml(check)
+        payload = _registered_checks[check.key()].to_yaml(check, civ)
         # Datastore splits checks up, so merge them back under one key
         if check.key() not in data:
             data[check.key()] = payload.copy()
@@ -74,7 +63,6 @@ def _step_to_yaml_dict(step: BuildOrderStep) -> Dict[str, Any]:
     return data
 
 
-# TODO: ai used `identities` in `order_to_yaml`
 def save_build_order(bo: BuildOrder, path: Path):
     data = {
         'id': bo.id,
@@ -84,7 +72,7 @@ def save_build_order(bo: BuildOrder, path: Path):
         'meta': bo.metadata
     }
     for step in bo.steps:
-        data['steps'].append(_step_to_yaml_dict(step))
+        data['steps'].append(_step_to_yaml_dict(step, bo.civ))
 
     with path.open("w", encoding="utf-8") as f:
         yaml.dump(data, f, default_flow_style=False, sort_keys=False)

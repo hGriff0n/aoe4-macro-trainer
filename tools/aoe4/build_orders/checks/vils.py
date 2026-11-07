@@ -16,7 +16,7 @@ class VilCheck(BuildOrderCheckBase):
     def key() -> str:
         return "vils"
 
-    def yaml_payload(self) -> YamlRepr:
+    def yaml_payload(self, civ: str) -> YamlRepr:
         return self.resources
 
     def datastore_payload(self) -> List[ScarRepr]:

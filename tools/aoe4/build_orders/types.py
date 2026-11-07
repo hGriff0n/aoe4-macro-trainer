@@ -36,7 +36,7 @@ class BuildOrderCheckBase(ABC):
         pass
 
     @abstractmethod
-    def yaml_payload(self) -> YamlRepr:
+    def yaml_payload(self, civ: str) -> YamlRepr:
         """Return the yaml representation"""
         pass
 
@@ -80,7 +80,7 @@ class _CheckFactory(ABC):
         pass
 
     @abstractmethod
-    def to_yaml(self, check: BuildOrderCheckBase) -> YamlRepr:
+    def to_yaml(self, check: BuildOrderCheckBase, civ: str) -> YamlRepr:
         """Serialize the check to the yaml dictionary representation"""
         pass
 
@@ -93,8 +93,8 @@ class _CheckFactory(ABC):
 # TODO: Would be nice to set `key` here too (ie. `@check_factory('vils')`)
 def check_factory(cls: type[BuildOrderCheck]) -> type[BuildOrderCheck]:
     class BoCheckFactory(_CheckFactory):
-        def to_yaml(self, check: BuildOrderCheck) -> YamlRepr:
-            return check.yaml_payload()
+        def to_yaml(self, check: BuildOrderCheck, civ: str) -> YamlRepr:
+            return check.yaml_payload(civ)
 
         def from_yaml(self, data: YamlRepr, civ: str) -> List[BuildOrderCheck]:
             checks = cls.from_yaml(data, civ)

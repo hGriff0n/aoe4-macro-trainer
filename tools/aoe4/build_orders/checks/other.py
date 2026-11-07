@@ -16,7 +16,7 @@ class HintCheck(BuildOrderCheckBase):
     def key() -> str:
         return "hints"
 
-    def yaml_payload(self) -> YamlRepr:
+    def yaml_payload(self, civ: str) -> YamlRepr:
         return self.hints
 
     def datastore_payload(self) -> List[ScarRepr]:
@@ -49,7 +49,7 @@ class HintCheck(BuildOrderCheckBase):
 class RallypointCheck(BuildOrderCheckBase):
     resources: List[str] = field(default_factory=list)
 
-    def yaml_payload(self) -> YamlRepr:
+    def yaml_payload(self, civ: str) -> YamlRepr:
         return self.resources
 
     def datastore_payload(self) -> List[ScarRepr]:
