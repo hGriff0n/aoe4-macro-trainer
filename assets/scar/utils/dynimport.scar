@@ -1,6 +1,5 @@
-local absoluteDir = "D:/github/aoemod/aoe4-macro-trainer/assets/scar/"
-
-Import_UseAbsoluteDir = true
+local absoluteDir = ""
+Import_UseAbsoluteDir = false
 
 function DynImport(file)
 	if Import_UseAbsoluteDir then
