@@ -13,6 +13,7 @@ DynImport("utils/localization.scar")
 _bo_ageup_data = nil
 
 local _AGE_FORMAT_ID = 161
+local _AGE_LOCATION_FORMAT_ID = 183
 
 -----------------------------------------------------------------------
 -- Private Implementation
@@ -213,14 +214,19 @@ end
 function BuildOrder_Check_AgeUp_GetText(obj)
     print("[AgeUpCheck] Assembling objective text")
     local payload = obj.check.payload
+    local target = Mod_Pbg_JoinScreenNames(
+        payload.oneof or { payload.id },
+        switch_trigger(payload.trigger, BP_GetUpgradeBlueprint, BP_GetEntityBlueprint),
+        switch_trigger(payload.trigger, BP_GetUpgradeUIInfo, BP_GetEntityUIInfo),
+        "/"
+    )
+    if payload.location == nil then
+        return Loc_FormatText(BoLoc_ModStringId(_AGE_FORMAT_ID), target)
+    end
     return Loc_FormatText(
-        BoLoc_ModStringId(_AGE_FORMAT_ID),
-        Mod_Pbg_JoinScreenNames(
-            payload.oneof or { payload.id },
-            switch_trigger(payload.trigger, BP_GetUpgradeBlueprint, BP_GetEntityBlueprint),
-            switch_trigger(payload.trigger, BP_GetUpgradeUIInfo, BP_GetEntityUIInfo),
-            "/"
-        )
+        BoLoc_ModStringId(_AGE_LOCATION_FORMAT_ID),
+        target,
+        BoLoc_String(payload.location)
     )
 end
 

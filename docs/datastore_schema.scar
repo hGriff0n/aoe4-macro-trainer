@@ -36,7 +36,7 @@ LuaDataStore = {
                             oneof = list[string]
                             id = string
                             vils = int
-                            -- more?
+                            location = string
 
                             -- rallypoint
                             resource = string
