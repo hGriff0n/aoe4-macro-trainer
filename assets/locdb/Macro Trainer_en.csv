@@ -1,6 +1,6 @@
 ﻿ID,Pipeline,PipelineStage,Notes,TranslationNotes,Tags,Text
-1,,,Mod name.,,,Macro Trainer
-2,,,Mod description.,,,Provides multiple modes/settings for adjusting gameplay to help new players develop RTS skills
+1,,,Mod name.,,,Macro Training Tools
+2,,,Mod description.,,,"Provides a combination of tools that aim to help players with developing their macro skills. Current toolset consists of:\n\t1) Build Order Objectives: Display Build Orders as in-game objectives (must configure build orders externally, see github for more)\n\t2) Slowdown Breathers: Configure the game to periodically drop the simrate so you have time to think about other things"
 3,,,,,,Macro Trainer
 4,,,Normal phase objective title.,,,NORMAL
 5,,,Slowed phase objective title.,,,SLOW
@@ -48,3 +48,17 @@
 166,,,Constant production check.,,,Constantly produce %1UNIT%
 167,,,Active-unit count check.,,,Have %1COUNT% active %2UNIT%
 168,,,Total built buildings check.,,,Have %1COUNT% %2BUILDING% built
+169,,,,,,"Provides a combination of tools that aim to help players with developing their macro skills. Current toolset consists of:\n\t1) Build Order Objectives: Display Build Orders as in-game objectives (must configure build orders externally, see github for more)\n\t2) Slowdown Breathers: Configure the game to periodically drop the simrate so you have time to think about other things"
+170,,,,,,Victory Conditions
+171,,,,,,Conquest
+172,,,,,,Conquest
+173,,,,,,Conquest
+174,,,,,,Religious
+175,,,,,,Religious
+176,,,,,,Religious
+177,,,,,,Wonder
+178,,,,,,Wonder
+179,,,,,,Wonder
+180,,,,,,Regicide
+181,,,,,,Regicide
+182,,,,,,Regicide

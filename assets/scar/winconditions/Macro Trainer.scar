@@ -10,19 +10,8 @@
 import("cardinal.scar")							-- Contains sfx references, UI templates, and Civ/Age helper functions
 import("ScarUtil.scar")							-- Contains game helper functions
 
--- Gameplay Systems
-import("gameplay/score.scar")					-- Tracks player score
-import("gameplay/diplomacy.scar")				-- Manages Tribute
-
 -- Import Win Conditions
-import("winconditions/annihilation.scar")		-- Support for eliminating a player when they can no longer fight or produce units
-import("winconditions/elimination.scar")		-- Support for player quitting or dropping (through pause menu or disconnection)
-import("winconditions/surrender.scar")			-- Support for player surrender (through pause menu)
-
--- Import UI Support
-import("gameplay/chi/current_dynasty_ui.scar")	-- Displays Chinese Dynasty UI
-import("gameplay/event_cues.scar")
-import("gameplay/currentageui.scar")
+import("gamemodes/standard_mode.scar")			-- Support for "standard" game mode functionality
 
 -----------------------------------------------------------------------
 -- Mod-Specific Imports
@@ -50,7 +39,7 @@ end
 
 -- Called before initialization (ie. before `OnInit`)
 function Mod_PreInit()
-	-- Tribute UI is worthless in single-player
+	
 end
 
 -- Called on match initialization before handing control to the player
