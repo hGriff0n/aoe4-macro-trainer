@@ -13,8 +13,13 @@ YamlRepr = Union[Dict[str, Any], List[Any]]
 def parse_ids(data: Dict[str, Any]) -> List[str]:
     """Read the `id`/`oneof` pair used by yaml and datastore payloads"""
     if 'id' in data:
+        if 'oneof' in data:
+            print(f"[BuildOrder] Both `id` and `oneof` set, ignoring `oneof` id={data['id']}")
         return [data['id']]
-    return list(data.get('oneof', []))
+    ids = list(data.get('oneof', []))
+    if not ids:
+        raise ValueError("one of `id` or a non-empty `oneof` must be set")
+    return ids
 
 
 def ids_dict(ids: List[str]) -> Dict[str, Any]:

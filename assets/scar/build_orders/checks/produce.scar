@@ -6,6 +6,7 @@ import("utils/debug.scar")
 
 DynImport("utils/localization.scar")
 DynImport("build_orders/checks/utils/pbg.scar")
+DynImport("build_orders/checks/utils/queue.scar")
 
 -----------------------------------------------------------------------
 -- Data
@@ -19,18 +20,13 @@ _bo_produce_data = {
 local _CONSTANT_PROD_FORMAT_ID = 166
 local _QUEUE_UNIT_FORMAT_ID = 165
 local _PROD_UNIT_FORMAT_ID = 164
+local _SPAWN_ITEM_TYPES = { PITEM_Spawn }
 
 -----------------------------------------------------------------------
 -- Private Implementation
 -----------------------------------------------------------------------
 local function IsInvalidEvent(event)
     return event == nil or event.player == nil or event.pbg == nil
-end
-
-local function QueuedItemIsCheckMatch(entity, index, pbgs)
-    return Entity_GetProductionQueueItemType(entity, index) == PITEM_Spawn
-        and Mod_Pbg_MatchesAny(
-            pbgs, Entity_GetProductionQueueItem(entity, index)) ~= nil
 end
 
 -----------------------------------------------------------------------
@@ -161,7 +157,7 @@ function BuildOrder_Check_Produce_GetText(obj)
     end
 end
 
-local function _check_if_minimum_met(check_id, num_counting, minium)
+local function _check_if_minimum_met(check_id, num_counting, minimum)
     if num_counting >= minimum then
         print("[ProduceCheck] Expected num events seen. Marking " .. tostring(check_id) .. " complete")
         BuildOrder_Objectives_MarkComplete(check_id, true)
@@ -183,7 +179,7 @@ function BuildOrder_Check_Produce_OnBuildItemComplete(event)
             -- if we ever get to adding telemetry
             if Mod_Pbg_MatchesAny(state.pbgs, event.pbg) ~= nil then
                 state.num_built = state.num_built + 1
-                _check_if_minimum_met(state.num_built, state.minimum, check_id)
+                _check_if_minimum_met(check_id, state.num_built, state.minimum)
                 return
             end
         end
@@ -218,14 +214,12 @@ function BuildOrder_Check_Produce_OnEntityCommandIssued(event)
         -- the num built and add it to num queued
         -- Or just increment everytime we get a new queue?
         local num_queued = 0
-        EGroup_ForEach(
-            Player_GetEntities(state.player),
-            function(groupID, entityIndex, entity)
-                local queue_size = Entity_GetProductionQueueSize(entity)
-                for index = 0, queue_size - 1 do
-                    if QueuedItemIsCheckMatch(entity, index, state.pbgs) then
-                        num_queued = num_queued + 1
-                    end
+        BoQueue_ForEachItem(
+            state.player,
+            _SPAWN_ITEM_TYPES,
+            function(item)
+                if Mod_Pbg_MatchesAny(state.pbgs, item) ~= nil then
+                    num_queued = num_queued + 1
                 end
             end
         )

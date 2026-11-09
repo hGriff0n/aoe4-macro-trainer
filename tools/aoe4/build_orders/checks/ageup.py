@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from aoe4.build_orders import identities
 from aoe4.build_orders.types import BuildOrderCheckBase, check_factory, ids_dict, parse_ids, ScarRepr, YamlRepr
@@ -17,25 +17,29 @@ def _category(civ: str) -> str:
 class AgeUpCheck(BuildOrderCheckBase):
     age_ids: List[str] = field(default_factory=list)
     vils: Optional[int] = None
+    location: Optional[str] = None
     is_upgrade: bool = False
 
     @staticmethod
     def key() -> str:
         return "age_up"
 
-    def yaml_payload(self, civ: str) -> YamlRepr:
+    def _hints(self) -> Dict[str, Any]:
         data = {}
         if self.vils is not None:
             data['vils'] = self.vils
-        return data | ids_dict(identities.reverse(civ, _category(civ), self.age_ids))
+        if self.location:
+            data['location'] = self.location
+        return data
+
+    def yaml_payload(self, civ: str) -> YamlRepr:
+        return self._hints() | ids_dict(identities.reverse(civ, _category(civ), self.age_ids))
 
     def datastore_payload(self) -> List[ScarRepr]:
         data = {
             'trigger': self.is_upgrade and "upgrade" or "construction"
         }
-        if self.vils is not None:
-            data['vils'] = self.vils
-        return [data | ids_dict(self.age_ids)]
+        return [data | self._hints() | ids_dict(self.age_ids)]
 
     @staticmethod
     def from_yaml(data: YamlRepr, civ: str) -> AgeUpCheck:
@@ -44,6 +48,7 @@ class AgeUpCheck(BuildOrderCheckBase):
         return AgeUpCheck(
             age_ids=identities.resolve(civ, _category(civ), parse_ids(data)),
             vils=data.get('vils'),
+            location=data.get('location'),
             is_upgrade=civ in UPGRADE_CIVS
         )
 
@@ -55,5 +60,6 @@ class AgeUpCheck(BuildOrderCheckBase):
             optional=data.get('optional', False),
             age_ids=parse_ids(payload),
             vils=payload.get('vils'),
+            location=payload.get('location'),
             is_upgrade=civ in UPGRADE_CIVS
         )

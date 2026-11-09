@@ -16,8 +16,9 @@ steps: # a list of build order steps, the intention is for each build order to d
       food: integer 
       gold: integer
       stone: integer 
-      wood: integer 
-      no_collect: [ food, gold, stone, wood ]   # Experimental: A list of resources that the player should not be collecting during this step. Probably more useful to have as a hint
+      wood: integer
+      # TODO: `no_collect: [ food, gold, stone, wood ]` (resources the player should not be collecting during this step) was dropped
+      # because neither the compiler nor the runtime supported it. Re-add it if a build order needs it, though a hint may be enough
 
     rallypoint: # TEMPORARY runtime behavior: descriptors auto-complete after confirming the engine supplied a human player. Target/resource detection is not yet implemented. The array shape remains reserved for TC construction order.
       - food/gold/stone/wood
