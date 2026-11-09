@@ -1,7 +1,7 @@
 from aoe4.build_orders.types import CheckRegistry
 
 from aoe4.build_orders.checks.ageup import AgeUpCheck
-from aoe4.build_orders.checks.buildings import BuiltCheck
+from aoe4.build_orders.checks.buildings import BuildingCheck, BuiltCheck
 from aoe4.build_orders.checks.other import HintCheck, RallypointCheck
 from aoe4.build_orders.checks.resources import ResourceCheck
 from aoe4.build_orders.checks.tech import UpgradeCheck
@@ -12,6 +12,8 @@ _registry = CheckRegistry()
 
 if AgeUpCheck not in _registry:
     _registry.register(AgeUpCheck)
+if BuildingCheck not in _registry:
+    _registry.register(BuildingCheck)
 if BuiltCheck not in _registry:
     _registry.register(BuiltCheck)
 if HintCheck not in _registry:

@@ -63,3 +63,51 @@ class BuiltCheck(BuildOrderCheckBase):
             vils=payload.get('vils'),
             location=payload.get('location')
         )
+
+
+@check_factory
+@dataclass
+class BuildingCheck(BuildOrderCheckBase):
+    building_ids: List[str] = field(default_factory=list)
+    count: int = 1
+
+    @staticmethod
+    def key() -> str:
+        return "buildings"
+
+    def yaml_payload(self, civ: str) -> YamlRepr:
+        return [{
+            'id': identities.reverse(civ, BUILDINGS, self.building_ids)[0],
+            'count': self.count
+        }]
+
+    # TODO: Family ids (`house`) resolve to several game ids and so emit `oneof`,
+    # but `buildings.scar` only reads `payload.id`. Fix when the runtime check is finished.
+    def datastore_payload(self) -> List[ScarRepr]:
+        return [ids_dict(self.building_ids) | {'count': self.count}]
+
+    @staticmethod
+    def _instance_from_yaml(data: Dict[str, Any], civ: str) -> BuildingCheck:
+        return BuildingCheck(
+            building_ids=identities.resolve(civ, BUILDINGS, [data['id']]),
+            count=data.get('count', 1)
+        )
+
+    @staticmethod
+    def from_yaml(data: YamlRepr, civ: str) -> List[BuildingCheck]:
+        if not isinstance(data, list):
+            raise ValueError("buildings must be a list in yaml")
+        return [
+            BuildingCheck._instance_from_yaml(building, civ)
+            for building in data
+        ]
+
+    @staticmethod
+    def from_datastore(data: ScarRepr, civ: str) -> BuildingCheck:
+        payload = data.get('payload', {})
+        return BuildingCheck(
+            id=data.get('id'),
+            optional=data.get('optional', False),
+            building_ids=parse_ids(payload),
+            count=payload.get('count', 1)
+        )
