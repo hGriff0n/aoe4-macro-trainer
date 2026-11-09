@@ -157,7 +157,7 @@ function BuildOrder_Check_Produce_GetText(obj)
     end
 end
 
-local function _check_if_minimum_met(check_id, num_counting, minium)
+local function _check_if_minimum_met(check_id, num_counting, minimum)
     if num_counting >= minimum then
         print("[ProduceCheck] Expected num events seen. Marking " .. tostring(check_id) .. " complete")
         BuildOrder_Objectives_MarkComplete(check_id, true)
@@ -179,7 +179,7 @@ function BuildOrder_Check_Produce_OnBuildItemComplete(event)
             -- if we ever get to adding telemetry
             if Mod_Pbg_MatchesAny(state.pbgs, event.pbg) ~= nil then
                 state.num_built = state.num_built + 1
-                _check_if_minimum_met(state.num_built, state.minimum, check_id)
+                _check_if_minimum_met(check_id, state.num_built, state.minimum)
                 return
             end
         end
