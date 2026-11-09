@@ -5,6 +5,7 @@ import("utils/dynimport.scar")
 
 DynImport("build_orders/checks/utils/events.scar")
 DynImport("build_orders/checks/utils/pbg.scar")
+DynImport("build_orders/checks/utils/queue.scar")
 DynImport("utils/localization.scar")
 
 -----------------------------------------------------------------------
@@ -14,63 +15,35 @@ _bo_ageup_data = nil
 
 local _AGE_FORMAT_ID = 161
 local _AGE_LOCATION_FORMAT_ID = 183
+local _UPGRADE_ITEM_TYPES = { PITEM_Upgrade, PITEM_PlayerUpgrade }
 
 -----------------------------------------------------------------------
 -- Private Implementation
 -----------------------------------------------------------------------
--- TODO: same as upgrades.scar
-local function IsUpgradeCompleted(player, pbg, check_id)
-    print("[AgeUpCheck] Checking if player already researched: check=" .. tostring(check_id))
-    return Player_HasUpgrade(player, pbg)
-end
+local function CheckUpgradeStarted(check_id)
+    print("[AgeUpCheck] Checking if player already aged up: check=" .. tostring(check_id))
 
--- TODO: Same as upgrades.scar
-local function IsUpgradeCurrentlyQueued(player, pbg, check_id)
-    print("[AgeUpCheck] Checking if upgrade currently queued: check=" .. tostring(check_id))
-    local queued_upgrade = false
-    EGroup_ForEach(
-        Player_GetEntities(player),
-        function(group, index, entity)
-            if queued_upgrade then
-                return
-            end
-
-            if Entity_GetPlayerOwner(entity) == player then
-                local queue_size = Entity_GetProductionQueueSize(entity)
-                for index = 0, queue_size - 1 do
-                    local item = Entity_GetProductionQueueItem(
-                        entity, index)
-                    local type = Entity_GetProductionQueueItemType(
-                        entity, index)
-                    if (type == PITEM_Upgrade or type == PITEM_PlayerUpgrade)
-                        and Mod_Pbg_Equals(item, pbg)
-                    then
-                        print("[UpgradeCheck] Found upgrade in queue: check=" .. tostring(check_id))
-                        queued_upgrade = true
-                        return
-                    end
-                end
+    local state = _bo_ageup_data
+    local started = false
+    for _, pbg in ipairs(state.pbgs) do
+        if Player_HasUpgrade(state.player, pbg) then
+            started = true
+        end
+    end
+    BoQueue_ForEachItem(
+        state.player,
+        _UPGRADE_ITEM_TYPES,
+        function(item)
+            if Mod_Pbg_MatchesAny(state.pbgs, item) ~= nil then
+                started = true
             end
         end
     )
-    return queued_upgrade
-end
 
-local function IsUpgradeStarted(player, pbg, check_id)
-    return IsUpgradeCompleted(player, pbg, check_id) or IsUpgradeCurrentlyQueued(player, pbg, check_id)
-end
-
-local function CheckUpgradeResearched(check_id)
-    print("[AgeUpCheck] Checking if player already aged up: check=" .. tostring(check_id))
-
-    for _, pbg in ipairs(_bo_ageup_data.pbgs) do
-        if IsUpgradeStarted(_bo_ageup_data.player, pbg, check_id) then
-            print("[AgeUpCheck] Player already started aging up: check=" .. tostring(check_id))
-            return true
-        end
+    if started then
+        print("[AgeUpCheck] Player already started aging up: check=" .. tostring(check_id))
     end
-
-    return false
+    return started
 end
 
 local function CheckConstructionStarted(check_id)
@@ -81,8 +54,7 @@ local function CheckConstructionStarted(check_id)
     EGroup_ForEach(
         Player_GetEntities(state.player),
         function(group, index, entity)
-            if Entity_GetPlayerOwner(entity) == state.player
-                and Entity_IsBuilding(entity)
+            if Entity_IsBuilding(entity)
                 and Mod_Pbg_MatchesAny(state.pbgs, Entity_GetBlueprint(entity)) ~= nil
             then
                 print("[AgeUpCheck] Player already built landmark: check=" .. tostring(check_id))
@@ -103,7 +75,7 @@ local function switch_trigger(trigger, for_tech, for_build)
 end
 
 local function CheckAlreadyCompleted(check_id)
-    return switch_trigger(_bo_ageup_data.trigger, CheckUpgradeResearched, CheckConstructionStarted)(check_id)
+    return switch_trigger(_bo_ageup_data.trigger, CheckUpgradeStarted, CheckConstructionStarted)(check_id)
 end
 
 local function IsInvalidConstructionEvent(event)

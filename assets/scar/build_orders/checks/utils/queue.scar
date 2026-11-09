@@ -1,0 +1,44 @@
+-----------------------------------------------------------------------
+-- Imports
+-----------------------------------------------------------------------
+
+-----------------------------------------------------------------------
+-- Data
+-----------------------------------------------------------------------
+
+-----------------------------------------------------------------------
+-- Private Implementation
+-----------------------------------------------------------------------
+local function _IsAnyType(item_type, item_types)
+    for _, t in ipairs(item_types) do
+        if t == item_type then
+            return true
+        end
+    end
+    return false
+end
+
+-----------------------------------------------------------------------
+-- Public Interface
+-----------------------------------------------------------------------
+-- Calls `fn(item)` for every item of one of `item_types` (PITEM_*) in the player's production queues
+function BoQueue_ForEachItem(player, item_types, fn)
+    EGroup_ForEach(
+        Player_GetEntities(player),
+        function(group, index, entity)
+            if not Entity_HasProductionQueue(entity) then
+                return
+            end
+
+            for i = 0, Entity_GetProductionQueueSize(entity) - 1 do
+                if _IsAnyType(Entity_GetProductionQueueItemType(entity, i), item_types) then
+                    fn(Entity_GetProductionQueueItem(entity, i))
+                end
+            end
+        end
+    )
+end
+
+-----------------------------------------------------------------------
+-- Public Implementation
+-----------------------------------------------------------------------
