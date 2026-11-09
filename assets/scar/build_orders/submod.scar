@@ -214,9 +214,10 @@ function BuildOrder_OnGameStart(start_hooks)
 	end
 
 	local bo_data = LoadDatastore(BUILD_ORDER_DATASTORE_ID)
-	if bo_data == nil:
+	if bo_data == nil then
 		SaveDatastore(BUILD_ORDER_DATASTORE_ID, {})
 		bo_data = { build_orders = {} }
+	end
 	local bos_by_civ = group_build_orders_by_civ(bo_data.build_orders)
 	log_loaded_build_orders(bos_by_civ)
 

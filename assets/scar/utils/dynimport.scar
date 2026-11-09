@@ -1,8 +1,9 @@
-local absoluteDir = ""
-Import_UseAbsoluteDir = false
+
+local _UseAbsoluteDir = false
 
 function DynImport(file)
-	if Import_UseAbsoluteDir then
+	local absoluteDir = ""
+	if _UseAbsoluteDir then
 		local success, resultOrError = pcall(function()
 			return assert(loadfile(absoluteDir .. file))()
 		end)
@@ -13,5 +14,3 @@ function DynImport(file)
 		import(file)
 	end
 end
-
--- TODO: Replace all `DynImport` calls with `import` and drop this from the mod
