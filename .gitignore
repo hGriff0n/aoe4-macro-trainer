@@ -20,3 +20,4 @@ aoe4-mcp.toml
 .worktrees/
 .superpowers/
 __pycache__/
+.claude/log_location.txt
